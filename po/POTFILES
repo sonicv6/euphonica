@@ -1,0 +1,4 @@
+data/org.slamprust.Slamprust.desktop.in
+data/org.slamprust.Slamprust.metainfo.xml.in
+data/org.slamprust.Slamprust.gschema.xml
+src/window.ui
