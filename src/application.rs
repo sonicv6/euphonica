@@ -17,25 +17,65 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
+use std::{
+    cell::RefCell,
+    fmt::{self, Display, Formatter},
+    rc::Rc,
+};
+use async_channel::{Sender, Receiver};
 
+use crate::client::wrapper::{MpdWrapper, UiMessage, MpdMessage};
 use crate::config::VERSION;
 use crate::SlamprustWindow;
+use crate::player::controller::PlayerController;
 
 mod imp {
     use super::*;
 
-    #[derive(Debug, Default)]
-    pub struct SlamprustApplication {}
+    #[derive(Debug)]
+    pub struct SlamprustApplication {
+        // pub player: Rc<PlayerController>,
+        // pub library: Rc<LibraryController>, // TODO
+    	pub sender: Sender<UiMessage>, // To send to client wrapper
+    	pub client: Rc<MpdWrapper>
+    }
 
     #[glib::object_subclass]
     impl ObjectSubclass for SlamprustApplication {
         const NAME: &'static str = "SlamprustApplication";
         type Type = super::SlamprustApplication;
         type ParentType = adw::Application;
+
+        fn new() -> Self {
+            // Set up channels for communication with client object
+            // Only one message at a time to client
+            let (
+                sender_to_client,
+                receiver_at_client
+            ): (Sender<UiMessage>, Receiver<UiMessage>) = async_channel::bounded(1);
+
+            // Create client instance (not connected yet)
+            let client = MpdWrapper::new(
+                RefCell::new(Some(receiver_at_client))
+            );
+
+            // Create controllers (Rc pointers)
+            // let player = PlayerController::new(
+            //     sender_to_client.clone(),
+            //     receiver_from_client.clone()
+            // );
+
+            Self {
+                // player,
+                client,
+                sender: sender_to_client.clone(),
+                // receiver: RefCell::new(Some(receiver_from_client)),
+
+            }
+        }
     }
 
     impl ObjectImpl for SlamprustApplication {
@@ -85,6 +125,18 @@ impl SlamprustApplication {
             .build()
     }
 
+    pub fn connect(&self) {
+        // TODO: GUI & config file
+        // TODO: move this to a submod for the settings dialogue instead maybe?
+        self.imp().sender.send(
+            UiMessage::Connect(String::from("localhost"), String::from("6600"))
+        );
+    }
+
+    pub fn get_status(&self) {
+
+    }
+
     fn setup_gactions(&self) {
         let quit_action = gio::ActionEntry::builder("quit")
             .activate(move |app: &Self, _, _| app.quit())
@@ -99,7 +151,7 @@ impl SlamprustApplication {
         let window = self.active_window().unwrap();
         let about = adw::AboutWindow::builder()
             .transient_for(&window)
-            .application_name("slamprust")
+            .application_name("Slamprust")
             .application_icon("org.slamprust.Slamprust")
             .developer_name("Work")
             .version(VERSION)

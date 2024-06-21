@@ -17,14 +17,19 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+extern crate mpd;
 
+mod player;
 mod application;
 mod config;
 mod window;
+mod client;
 
 use self::application::SlamprustApplication;
 use self::window::SlamprustWindow;
 
+use std::net::TcpStream;
+use std::sync::Mutex;
 use config::{GETTEXT_PACKAGE, LOCALEDIR, PKGDATADIR};
 use gettextrs::{bind_textdomain_codeset, bindtextdomain, textdomain};
 use gtk::{gio, glib};

@@ -17,7 +17,7 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
+use crate::mpd;
 use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
@@ -64,8 +64,40 @@ glib::wrapper! {
 
 impl SlamprustWindow {
     pub fn new<P: glib::IsA<gtk::Application>>(application: &P) -> Self {
-        glib::Object::builder()
+        let win: Self =  glib::Object::builder()
             .property("application", application)
-            .build()
+            .build();
+
+		win.set_initial_state();
+
+        win
     }
+
+    fn client(&self) -> Option<&mut mpd::Client> {
+        if let Some(app) = self.application() {
+            Some(app
+                .downcast::<crate::application::SlamprustApplication>()
+                .unwrap()
+                .client()
+            );
+        }
+
+        None
+    }
+
+	fn set_initial_state(&self) {
+		let client = self.client().unwrap();
+		let maybe_state = client.status();
+		if let Err(e) = maybe_state {
+			println!("Error reading state: {}", e);
+			self.imp().label.set_label("Error");
+		}
+		else {
+			match maybe_state.unwrap().state {
+					mpd::State::Stop => self.imp().label.set_label("Stopped"),
+					mpd::State::Play => self.imp().label.set_label("Playing"),
+					mpd::State::Pause => self.imp().label.set_label("Paused"),
+			}
+		}
+	}
 }
