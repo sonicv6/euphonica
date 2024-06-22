@@ -20,9 +20,14 @@ pub enum MpdMessage {
 	Status,
 }
 
+// Thin wrapper around the blocking mpd::Client.
+// It manages client creation and reconnections, as well as starting the idling
+// loop to sync Slamprust with external controls such as MPRIS or another
+// client. It will also automatically pause the idling to handle user commands
+// received from the UI and resume idling afterwards.
 #[derive(Debug)]
 pub struct MpdWrapper {
-    pub player_state: Rc<PlayerState>,
+    player_state: PlayerState,
     receiver: RefCell<Option<Receiver<MpdMessage>>>,
     // Every single method of mpd::Client is mutating so we'll just rely on a
     // RefCell for now.
@@ -33,7 +38,7 @@ impl MpdWrapper {
     pub fn new(receiver: RefCell<Option<Receiver<MpdMessage>>>) -> Rc<Self> {
         // Set up state objects (one for each of mpd's subsystems that we use)
         // TODO: init states to current mpd status.
-        let player_state = Rc::new(PlayerState::default());
+        let player_state = PlayerState::default();
 
         let wrapper = Rc::new(Self {
             player_state,
@@ -43,7 +48,6 @@ impl MpdWrapper {
 
         // For future noob self: this is shallow
         wrapper.clone().setup_channel();
-
         wrapper
     }
 
@@ -61,6 +65,11 @@ impl MpdWrapper {
         }));
     }
 
+    pub fn get_player_state(&self) -> &PlayerState {
+        // Only allow references
+        &self.player_state
+    }
+
     fn respond(&self, request: MpdMessage) -> glib::ControlFlow {
         match request {
             MpdMessage::Connect(host, port) => self.connect(&host, &port),
@@ -75,6 +84,7 @@ impl MpdWrapper {
         // Consider making async.
         if let Ok(c) = mpd::Client::connect(format!("{}:{}", host, port)) {
             self.client.replace(Some(c));
+            self.get_status();
         }
         // TODO: return connection error if any
     }
@@ -82,6 +92,7 @@ impl MpdWrapper {
     pub fn get_status(&self) {
         if let Some(mut client) = self.client.borrow_mut().take() {
             if let Ok(status) = client.status() {
+                println!("Playback state is {:?}", status.state);
                 // Let each state update their respective properties
                 self.player_state.update_status(&status);
             }

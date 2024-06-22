@@ -44,7 +44,7 @@ mod imp {
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
-                    ParamSpecBoolean::builder("is_playing").read_only().build(),
+                    ParamSpecBoolean::builder("playing").read_only().build(),
                     ParamSpecUInt64::builder("position").read_only().build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),

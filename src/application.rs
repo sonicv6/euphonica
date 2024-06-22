@@ -27,7 +27,7 @@ use std::{
 };
 use async_channel::{Sender, Receiver};
 
-use crate::client::wrapper::{MpdWrapper, UiMessage, MpdMessage};
+use crate::client::wrapper::{MpdWrapper, MpdMessage};
 use crate::config::VERSION;
 use crate::SlamprustWindow;
 use crate::player::controller::PlayerController;
@@ -39,7 +39,7 @@ mod imp {
     pub struct SlamprustApplication {
         // pub player: Rc<PlayerController>,
         // pub library: Rc<LibraryController>, // TODO
-    	pub sender: Sender<UiMessage>, // To send to client wrapper
+    	pub sender: Sender<MpdMessage>, // To send to client wrapper
     	pub client: Rc<MpdWrapper>
     }
 
@@ -55,12 +55,18 @@ mod imp {
             let (
                 sender_to_client,
                 receiver_at_client
-            ): (Sender<UiMessage>, Receiver<UiMessage>) = async_channel::bounded(1);
+            ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::bounded(1);
 
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(
                 RefCell::new(Some(receiver_at_client))
             );
+
+            // TODO: use gsettings for reading host & port
+            let _ = sender_to_client.send_blocking(MpdMessage::Connect(
+                String::from("localhost"),
+                String::from("6600")
+            ));
 
             // Create controllers (Rc pointers)
             // let player = PlayerController::new(
@@ -73,7 +79,6 @@ mod imp {
                 client,
                 sender: sender_to_client.clone(),
                 // receiver: RefCell::new(Some(receiver_from_client)),
-
             }
         }
     }
@@ -128,9 +133,13 @@ impl SlamprustApplication {
     pub fn connect(&self) {
         // TODO: GUI & config file
         // TODO: move this to a submod for the settings dialogue instead maybe?
-        self.imp().sender.send(
-            UiMessage::Connect(String::from("localhost"), String::from("6600"))
+        self.imp().sender.send_blocking(
+            MpdMessage::Connect(String::from("localhost"), String::from("6600"))
         );
+    }
+
+    pub fn get_client(&self) -> Rc<MpdWrapper> {
+        self.imp().client.clone()
     }
 
     pub fn get_status(&self) {

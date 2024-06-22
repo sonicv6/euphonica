@@ -17,10 +17,16 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-use crate::mpd;
+
+use std::{
+    rc::Rc,
+    cell::RefCell
+};
 use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
+use glib::{clone, closure_local};
+use crate::client::wrapper::MpdWrapper;
 
 mod imp {
     use super::*;
@@ -33,6 +39,9 @@ mod imp {
         pub header_bar: TemplateChild<adw::HeaderBar>,
         #[template_child]
         pub label: TemplateChild<gtk::Label>,
+
+        // RefCells to notify IDs so we can unbind later
+        pub notify_playing_id: RefCell<Option<glib::signal::SignalHandlerId>>
     }
 
     #[glib::object_subclass]
@@ -48,6 +57,15 @@ mod imp {
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
             obj.init_template();
         }
+
+        fn new() -> Self {
+            Self {
+                header_bar: TemplateChild::default(),
+                label: TemplateChild::default(),
+
+                notify_playing_id: RefCell::new(None)
+            }
+        }
     }
 
     impl ObjectImpl for SlamprustWindow {}
@@ -59,7 +77,9 @@ mod imp {
 
 glib::wrapper! {
     pub struct SlamprustWindow(ObjectSubclass<imp::SlamprustWindow>)
-        @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow, adw::ApplicationWindow,        @implements gio::ActionGroup, gio::ActionMap;
+        @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
+        adw::ApplicationWindow,
+        @implements gio::ActionGroup, gio::ActionMap;
 }
 
 impl SlamprustWindow {
@@ -68,36 +88,67 @@ impl SlamprustWindow {
             .property("application", application)
             .build();
 
-		win.set_initial_state();
-
+		win.bind_state();
+        win.setup_signals();
         win
     }
 
-    fn client(&self) -> Option<&mut mpd::Client> {
+    fn client(&self) -> Option<Rc<MpdWrapper>> {
+        println!("Checking if client exists");
         if let Some(app) = self.application() {
-            Some(app
+            println!("Has client!");
+            return Some(app
                 .downcast::<crate::application::SlamprustApplication>()
                 .unwrap()
-                .client()
+                .get_client()
             );
         }
-
         None
     }
 
-	fn set_initial_state(&self) {
-		let client = self.client().unwrap();
-		let maybe_state = client.status();
-		if let Err(e) = maybe_state {
-			println!("Error reading state: {}", e);
-			self.imp().label.set_label("Error");
-		}
-		else {
-			match maybe_state.unwrap().state {
-					mpd::State::Stop => self.imp().label.set_label("Stopped"),
-					mpd::State::Play => self.imp().label.set_label("Playing"),
-					mpd::State::Pause => self.imp().label.set_label("Paused"),
-			}
-		}
+	fn update_label(&self) {
+	    let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
+	    let player_state = client.get_player_state();
+	    if player_state.is_playing() {
+	        self.imp().label.set_label("Playing");
+	    }
+	    else {
+	        self.imp().label.set_label("Paused");
+	    }
+	}
+
+	fn bind_state(&self) {
+	    println!("bind_state: getting client...");
+		let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
+		let player_state = client.get_player_state();
+        // Test: use the PlayerState::playing property
+        // We'll first need to sync with the state initially; afterwards the binding will do it for us.
+        self.update_label();
+        let notify_playing_id = player_state.connect_notify_local(
+            Some("playing"),
+            clone!(@weak self as win => move |_, _| {
+                win.update_label();
+            }),
+        );
+        self.imp().notify_playing_id.replace(Some(notify_playing_id));
+	}
+
+	fn unbind_state(&self) {
+	    let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
+		let player_state = client.get_player_state();
+
+		// Just take directly since we're unbinding anyway
+        if let Some(id) = self.imp().notify_playing_id.take() {
+            player_state.disconnect(id);
+        }
+	}
+
+	fn setup_signals(&self) {
+	    self.connect_close_request(move |window| {
+	        // TODO: save window size?
+	        // TODO: persist other settings at closing?
+            window.unbind_state();
+            glib::Propagation::Proceed
+        });
 	}
 }
