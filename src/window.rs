@@ -94,9 +94,9 @@ impl SlamprustWindow {
     }
 
     fn client(&self) -> Option<Rc<MpdWrapper>> {
-        println!("Checking if client exists");
+        println!("Checking if client wrapper exists");
         if let Some(app) = self.application() {
-            println!("Has client!");
+            println!("Has client wrapper!");
             return Some(app
                 .downcast::<crate::application::SlamprustApplication>()
                 .unwrap()
