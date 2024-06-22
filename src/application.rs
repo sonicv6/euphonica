@@ -30,7 +30,7 @@ use async_channel::{Sender, Receiver};
 use crate::client::wrapper::{MpdWrapper, MpdMessage};
 use crate::config::VERSION;
 use crate::SlamprustWindow;
-use crate::player::controller::PlayerController;
+// use crate::player::controller::PlayerController;
 
 mod imp {
     use super::*;
@@ -53,17 +53,18 @@ mod imp {
             // Set up channels for communication with client object
             // Only one message at a time to client
             let (
-                sender_to_client,
-                receiver_at_client
+                sender,
+                receiver
             ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::bounded(1);
 
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(
-                RefCell::new(Some(receiver_at_client))
+                sender.clone(),
+                RefCell::new(Some(receiver))
             );
 
             // TODO: use gsettings for reading host & port
-            let _ = sender_to_client.send_blocking(MpdMessage::Connect(
+            let _ = sender.send_blocking(MpdMessage::Connect(
                 String::from("localhost"),
                 String::from("6600")
             ));
@@ -77,7 +78,7 @@ mod imp {
             Self {
                 // player,
                 client,
-                sender: sender_to_client.clone(),
+                sender,
                 // receiver: RefCell::new(Some(receiver_from_client)),
             }
         }

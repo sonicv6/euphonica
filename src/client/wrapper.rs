@@ -1,4 +1,5 @@
 use crate::mpd;
+use futures::executor;
 use mpd::{
     client::Client,
     Subsystem,
@@ -25,6 +26,7 @@ pub enum MpdMessage {
 	Play,
 	Toggle, // the "pause" command but renamed since it's a misnomer
 	Status,
+	Idle(Vec<Subsystem>) // Will only be sent from the child thread
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -54,11 +56,10 @@ pub struct MpdWrapper {
     // State objects
     player_state: PlayerState,
 
-    // For receiving user commands from UI
-    ui_receiver: RefCell<Option<Receiver<MpdMessage>>>,
-    // For getting state change notifications from the child thread
-    bg_sender: Sender<Vec<Subsystem>>, // kept here first since the child thread won't be spawned right away
-    bg_receiver: RefCell<Option<Receiver<Vec<Subsystem>>>>,
+    // For receiving user commands from UI or child thread
+    receiver: RefCell<Option<Receiver<MpdMessage>>>,
+    // Corresponding sender, for cloning into child thread.
+    sender: Sender<MpdMessage>,
     // The main client living on the main thread. Every single method of
     // mpd::Client is mutating so we'll just rely on a RefCell for now.
 	main_client: RefCell<Option<Client>>,
@@ -68,25 +69,23 @@ pub struct MpdWrapper {
 }
 
 impl MpdWrapper {
-    pub fn new(receiver: RefCell<Option<Receiver<MpdMessage>>>) -> Rc<Self> {
-        let (bg_sender, bg_r): (Sender<Vec<Subsystem>>, Receiver<Vec<Subsystem>>) = async_channel::bounded(1);
+    pub fn new(sender: Sender<MpdMessage>, receiver: RefCell<Option<Receiver<MpdMessage>>>) -> Rc<Self> {
         let wrapper = Rc::new(Self {
             player_state: PlayerState::default(),
-            ui_receiver: receiver, // from UI. Note: RefCell has runtime reference checking
-            bg_sender,
-            bg_receiver: RefCell::new(Some(bg_r)),
+            receiver, // from UI. Note: RefCell has runtime reference checking
+            sender,
             main_client: RefCell::new(None),  // Must be initialised later
             bg_handle: RefCell::new(None),  // Will be spawned later
             stop_flag: Arc::new(AtomicBool::new(false))
         });
 
         // For future noob self: these are shallow
-        wrapper.clone().setup_ui_channel();
+        wrapper.clone().setup_channel();
         wrapper
     }
 
     fn start_bg_thread(self: Rc<Self>, host: &str, port: &str) {
-        let bg_sender = self.bg_sender.clone();
+        let bg_sender = self.sender.clone();
         let stop_flag = self.stop_flag.clone();
         if let Ok(mut client) =  Client::connect(format!("{}:{}", host, port)) {
             let bg_handle = gio::spawn_blocking(move || {
@@ -94,12 +93,12 @@ impl MpdWrapper {
                 loop {
                     if stop_flag.load(Ordering::Relaxed) {
                         println!("Stop flag is true, terminating background thread...");
-                        client.close();
+                        let _ = client.close();
                         break;
                     }
                     if let Ok(changes) = client.wait(&[]) {
                         println!("Change: {:?}", changes);
-                        bg_sender.send_blocking(changes);
+                        let _ = bg_sender.send_blocking(MpdMessage::Idle(changes));
                     }
                 }
             });
@@ -110,15 +109,12 @@ impl MpdWrapper {
         }
     }
 
-    fn setup_ui_channel(self: Rc<Self>) {
+    fn setup_channel(self: Rc<Self>) {
         // Set up a listener to the receiver we got from Application.
-        // This will be the loop that handles user interaction.
-        // For this to work, we need to interrupt the idle loop to handle the
-        // interaction, then restart it afterwards.
-        let receiver = self.ui_receiver.borrow_mut().take().unwrap();
+        // This will be the loop that handles user interaction and idle updates.
+        let receiver = self.receiver.borrow_mut().take().unwrap();
         glib::MainContext::default().spawn_local(clone!(@strong self as this => async move {
             use futures::prelude::*;
-
             // Allow receiver to be mutated, but keep it at the same memory address.
             // See Receiver::next doc for why this is needed.
             let mut receiver = std::pin::pin!(receiver);
@@ -137,9 +133,23 @@ impl MpdWrapper {
         match request {
             MpdMessage::Connect(host, port) => self.connect(&host, &port).await,
             MpdMessage::Status => self.get_status(),
+            MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             _ => {}
         }
         glib::ControlFlow::Continue
+    }
+
+    async fn handle_idle_changes(self: Rc<Self>, changes: Vec<Subsystem>) {
+        for subsystem in changes {
+            match subsystem {
+                Subsystem::Player => {
+                    self.clone().get_status();
+                    self.clone().get_current_song();
+                }
+                // Else just skip. More features to come.
+                _ => {}
+            }
+        }
     }
 
     async fn connect(self: Rc<Self>, host: &str, port: &str) {
@@ -151,11 +161,11 @@ impl MpdWrapper {
             // Child thread might have stopped by now if there are idle messages,
             // but that's not guaranteed.
             // Now close the main client, which will trigger an idle message.
-            main_client.close();
+            let _ = main_client.close();
             // Now the child thread really should have read the stop_flag.
             // Wait for it to stop.
             if let Some(handle) = self.bg_handle.take() {
-                handle.await;
+                let _ = handle.await;
             }
         }
         println!("Connecting to {}:{}", host, port);
@@ -191,6 +201,25 @@ impl MpdWrapper {
         }
         else {
             // TODO: handle error
+        }
+    }
+}
+
+impl Drop for MpdWrapper {
+    fn drop(&mut self) {
+        if let Some(mut main_client) = self.main_client.borrow_mut().take() {
+            println!("App closed. Closing clients...");
+            // First, set stop_flag to true
+            self.stop_flag.store(true, Ordering::Relaxed);
+            // Child thread might have stopped by now if there are idle messages,
+            // but that's not guaranteed.
+            // Now close the main client, which will trigger an idle message.
+            let _ = main_client.close();
+            // Now the child thread really should have read the stop_flag.
+            // Wait for it to stop.
+            if let Some(handle) = self.bg_handle.take() {
+                let _ = executor::block_on(handle);
+            }
         }
     }
 }
