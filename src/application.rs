@@ -143,8 +143,8 @@ impl SlamprustApplication {
         self.imp().client.clone()
     }
 
-    pub fn get_status(&self) {
-
+    pub fn get_sender(&self) -> Sender<MpdMessage> {
+        self.imp().sender.clone()
     }
 
     fn setup_gactions(&self) {
