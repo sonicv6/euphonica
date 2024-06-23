@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use async_channel::{Sender, Receiver};
 use glib::{clone, SourceId, MainContext};
 use gtk::{glib, gio};
+
 use super::subsystems::player::PlayerState;
 
 use std::{
@@ -25,7 +26,8 @@ pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
 	Toggle, // the "pause" command but renamed since it's a misnomer
-	Status,
+	Status(bool), // if true, will also query current song
+	CurrentSong,
 	Idle(Vec<Subsystem>) // Will only be sent from the child thread
 }
 
@@ -132,7 +134,8 @@ impl MpdWrapper {
     async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
         match request {
             MpdMessage::Connect(host, port) => self.connect(&host, &port).await,
-            MpdMessage::Status => self.get_status(),
+            MpdMessage::Status(update_current_song) => self.get_status(update_current_song),
+            MpdMessage::CurrentSong => self.get_current_song(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             _ => {}
         }
@@ -143,8 +146,9 @@ impl MpdWrapper {
         for subsystem in changes {
             match subsystem {
                 Subsystem::Player => {
-                    self.clone().get_status();
-                    self.clone().get_current_song();
+                    // For now idle signals from Player will also invoke currentsong.
+                    // Might want to keep track of songid to avoid this when possible.
+                    self.clone().get_status(true);
                 }
                 // Else just skip. More features to come.
                 _ => {}
@@ -172,12 +176,12 @@ impl MpdWrapper {
         self.stop_flag.store(false, Ordering::Relaxed);
         if let Ok(c) = mpd::Client::connect(format!("{}:{}", host, port)) {
             self.main_client.replace(Some(c));
-            self.clone().get_status();
+            self.clone().get_status(true);
             self.start_bg_thread(host, port);
         }
     }
 
-    pub fn get_status(self: Rc<Self>) {
+    pub fn get_status(self: Rc<Self>, update_current_song: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
                 println!("Playback state is {:?}", status.state);
@@ -189,13 +193,17 @@ impl MpdWrapper {
         else {
             // TODO: handle error
         }
+
+        if update_current_song {
+            self.get_current_song();
+        }
     }
 
     pub fn get_current_song(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(cs) = client.currentsong() {
+            if let Ok(maybe_song) = client.currentsong() {
                 // Let each state update their respective properties
-                self.player_state.update_current_song(&cs);
+                self.player_state.update_current_song(&maybe_song);
             }
             // TODO: handle error
         }

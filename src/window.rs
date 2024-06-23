@@ -20,11 +20,13 @@
 
 use std::{
     rc::Rc,
-    cell::RefCell
+    cell::RefCell,
+    cmp::min
 };
 use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
+use glib::signal::SignalHandlerId;
 use glib::{clone, closure_local};
 use crate::client::wrapper::MpdWrapper;
 
@@ -39,9 +41,13 @@ mod imp {
         pub header_bar: TemplateChild<adw::HeaderBar>,
         #[template_child]
         pub label: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub seekbar: TemplateChild<gtk::Scale>,
 
         // RefCells to notify IDs so we can unbind later
-        pub notify_playing_id: RefCell<Option<glib::signal::SignalHandlerId>>
+        pub notify_position_id: RefCell<Option<SignalHandlerId>>,
+        pub notify_playing_id: RefCell<Option<SignalHandlerId>>,
+        pub notify_duration_id: RefCell<Option<SignalHandlerId>>
     }
 
     #[glib::object_subclass]
@@ -62,7 +68,9 @@ mod imp {
             Self {
                 header_bar: TemplateChild::default(),
                 label: TemplateChild::default(),
-
+                seekbar: TemplateChild::default(),
+                notify_position_id: RefCell::new(None),
+                notify_duration_id: RefCell::new(None),
                 notify_playing_id: RefCell::new(None)
             }
         }
@@ -117,11 +125,35 @@ impl SlamprustWindow {
 	    }
 	}
 
+	fn update_seekbar(&self, update_duration: bool) {
+	    let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
+	    let player_state = client.get_player_state();
+	    let pos = player_state.position();
+        let pos_upper = pos.ceil() as u64;
+        let duration = player_state.duration();
+	    if update_duration {
+	        // Set value to 0 first since new duration might be 0 (empty playlist).
+	        self.imp().seekbar.set_value(0.0);
+	        self.imp().seekbar.set_range(0.0, duration as f64);
+       }
+        // Now we can restore position. Avoid setting pos higher than max.
+        // We can safely approximate this by comparing the rounded-up version of
+        // position to max.
+
+        if pos_upper > duration {
+            self.imp().seekbar.set_value(duration as f64);
+        }
+        else {
+            self.imp().seekbar.set_value(pos);
+        }
+	    // TODO: sensitivity status (disable when stopped or playlist is empty)
+	}
+
 	fn bind_state(&self) {
 	    println!("bind_state: getting client...");
 		let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
 		let player_state = client.get_player_state();
-        // Test: use the PlayerState::playing property
+
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
         self.update_label();
         let notify_playing_id = player_state.connect_notify_local(
@@ -130,7 +162,23 @@ impl SlamprustWindow {
                 win.update_label();
             }),
         );
+
+        self.update_seekbar(true);
+        let notify_position_id = player_state.connect_notify_local(
+            Some("position"),
+            clone!(@weak self as win => move |_, _| {
+                win.update_seekbar(false);
+            }),
+        );
+        let notify_duration_id = player_state.connect_notify_local(
+            Some("duration"),
+            clone!(@weak self as win => move |_, _| {
+                win.update_seekbar(true);
+            }),
+        );
         self.imp().notify_playing_id.replace(Some(notify_playing_id));
+        self.imp().notify_position_id.replace(Some(notify_position_id));
+        self.imp().notify_duration_id.replace(Some(notify_duration_id));
 	}
 
 	fn unbind_state(&self) {
@@ -138,7 +186,14 @@ impl SlamprustWindow {
 		let player_state = client.get_player_state();
 
 		// Just take directly since we're unbinding anyway
+		// TODO: turn this into a loop perhaps?
         if let Some(id) = self.imp().notify_playing_id.take() {
+            player_state.disconnect(id);
+        }
+        if let Some(id) = self.imp().notify_position_id.take() {
+            player_state.disconnect(id);
+        }
+        if let Some(id) = self.imp().notify_duration_id.take() {
             player_state.disconnect(id);
         }
 	}

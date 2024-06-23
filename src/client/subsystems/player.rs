@@ -1,10 +1,11 @@
 use std::cell::{Cell, RefCell};
 
 use gtk::{gdk, glib, prelude::*, subclass::prelude::*};
-use crate::mpd::{
+use crate::mpd;
+use mpd::{
     status::{Status, State},
-    song::Song
 };
+use super::super::common::song::Song;
 
 mod imp {
     use glib::{
@@ -13,7 +14,9 @@ mod imp {
         // ParamSpecDouble,
         // ParamSpecObject,
         ParamSpecString,
+        ParamSpecUInt,
         ParamSpecUInt64,
+        ParamSpecDouble,
     };
     use once_cell::sync::Lazy;
 
@@ -22,7 +25,13 @@ mod imp {
     #[derive(Debug)]
     pub struct PlayerState {
         pub state: Cell<State>,
-        pub position: Cell<u64>,
+        pub position: Cell<f64>,
+        // TODO: Only call currentsong when detecting song change.
+        // This is used for detecting song changes.
+        // Only when the current song has been changed will we need to call
+        // currentsong.
+        // pub current_song_id: RefCell<Option<u32>>,
+        // As returned by currentsong
         pub current_song: RefCell<Option<Song>>
     }
 
@@ -34,8 +43,8 @@ mod imp {
         fn new() -> Self {
             Self {
                 state: Cell::new(State::Stop),
-                position: Cell::new(0),
-                current_song: RefCell::new(None),
+                position: Cell::new(0.0),
+                current_song: RefCell::new(None)
             }
         }
     }
@@ -45,7 +54,7 @@ mod imp {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
                     ParamSpecBoolean::builder("playing").read_only().build(),
-                    ParamSpecUInt64::builder("position").read_only().build(),
+                    ParamSpecDouble::builder("position").read_only().build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
@@ -63,7 +72,6 @@ mod imp {
             match pspec.name() {
                 "playing" => obj.is_playing().to_value(),
                 "position" => obj.position().to_value(),
-
                 // These are proxies for Song properties
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
@@ -89,29 +97,53 @@ impl PlayerState {
     // Update functions
     // These all have side-effects of notifying listeners of changes to the
     // GObject properties, which in turn are read from this struct's fields.
+    // Signals will be sent for properties whose values have changed, even though
+    // we will be receiving updates for many properties at once.
 
     // Main update function. MPD's protocol has a single "status" commands
     // that returns everything at once. This update function will take what's
     // relevant and update the GObject properties accordingly.
     pub fn update_status(&self, status: &Status) {
+        print!("{:?}", status);
+
         let old_state = self.imp().state.replace(status.state.clone());
         if old_state != status.state {
             // These properties are affected by the "state" field.
-            // TODO: more granular notifications
             self.notify("playing");
-            self.notify("position");
+        }
+
+        if let Some(new_position_dur) = status.elapsed {
+            let new_position = new_position_dur.as_secs_f64();
+            println!("New position: {}", new_position);
+            let old_position = self.imp().position.replace(new_position);
+            if old_position != new_position {
+                self.notify("position");
+            }
+        }
+        else {
+            let old_position = self.imp().position.replace(0.0);
+            if old_position != 0.0 {
+                self.notify("position");
+            }
         }
     }
 
     // Song update function, corresponding to the "currentsong" command.
-    pub fn update_current_song(&self, song: &Option<Song>) {
-        let old_song = self.imp().current_song.replace(song.clone());
-        if old_song != *song {
-            // These properties is affected by the "current_song" field.
-            // TODO: more granular notifications
-            self.notify("title");
-            self.notify("artist");
-            self.notify("duration");
+    pub fn update_current_song(&self, maybe_mpd_song: &Option<mpd::song::Song>) {
+        if let Some(mpd_song) = maybe_mpd_song {
+            let new_song = Song::from_mpd_song(&mpd_song);
+            let old_song = self.imp().current_song.replace(Some(new_song));
+            if
+                old_song.is_none() != self.imp().current_song.borrow().is_none() ||
+                old_song.as_ref().unwrap() != self.imp().current_song.borrow().as_ref().unwrap()
+            {
+                self.notify("title");
+                self.notify("artist");
+                self.notify("duration");
+            }
+        }
+        else if self.imp().current_song.borrow().is_some() {
+            let _ = self.imp().current_song.replace(None);
         }
     }
 
@@ -120,17 +152,17 @@ impl PlayerState {
     // internal fields.
     pub fn title(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return song.title.clone();
+            return Some(song.get_name().clone());
         }
-
         None
     }
 
     pub fn artist(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return song.artist.clone();
+            if let Some(artist) = song.get_artist() {
+                return Some(artist.clone());
+            }
         }
-
         None
     }
 
@@ -144,10 +176,7 @@ impl PlayerState {
 
     pub fn duration(&self) -> u64 {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            if let Some(duration) = song.duration {
-                duration.as_secs();
-            }
-            return 0
+            return song.get_duration().as_secs();  // Can still be 0
         }
         0
     }
@@ -168,7 +197,7 @@ impl PlayerState {
     //     (*self.imp().current_song.borrow()).as_ref().cloned()
     // }
 
-    pub fn position(&self) -> u64 {
+    pub fn position(&self) -> f64 {
         self.imp().position.get()
     }
 
