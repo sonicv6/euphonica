@@ -28,12 +28,24 @@ mod client;
 use self::application::SlamprustApplication;
 use self::window::SlamprustWindow;
 
-use std::net::TcpStream;
-use std::sync::Mutex;
 use config::{GETTEXT_PACKAGE, LOCALEDIR, PKGDATADIR};
 use gettextrs::{bind_textdomain_codeset, bindtextdomain, textdomain};
-use gtk::{gio, glib};
+use gtk::{gio, glib, gdk, CssProvider};
 use gtk::prelude::*;
+use gdk::Display;
+
+fn load_css() {
+    // Load the CSS file and add it to the provider
+    let provider = CssProvider::new();
+    provider.load_from_path("/org/slamprust/Slamprust/style.css");
+
+    // Add the provider to the default screen
+    gtk::style_context_add_provider_for_display(
+        &Display::default().expect("Could not connect to a display."),
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+}
 
 fn main() -> glib::ExitCode {
     // Set up gettext translations
@@ -51,6 +63,7 @@ fn main() -> glib::ExitCode {
     // application windows, integration with the window manager/compositor, and
     // desktop features such as file opening and single-instance applications.
     let app = SlamprustApplication::new("org.slamprust.Slamprust", &gio::ApplicationFlags::empty());
+    app.connect_startup(|_| load_css());
 
     // Run the application. This function will block until the application
     // exits. Upon return, we have our exit code to return to the shell. (This

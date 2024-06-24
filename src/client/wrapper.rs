@@ -14,7 +14,7 @@ use gtk::{glib, gio};
 use super::subsystems::player::PlayerState;
 
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     fmt::{self, Display, Formatter},
     rc::Rc,
     sync::{Arc, Mutex}
@@ -27,8 +27,7 @@ pub enum MpdMessage {
 	Play,
 	Toggle, // the "pause" command but renamed since it's a misnomer
 	Status(bool), // if true, will also query current song
-	PrepareSeekCur(f64), // Set a value to seek to. Note that sending this will not seek yet.
-	SeekCur, // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
+	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	CurrentSong,
 	Idle(Vec<Subsystem>) // Will only be sent from the child thread
 }
@@ -70,7 +69,6 @@ pub struct MpdWrapper {
     // Handle to the child thread.
 	bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
 	stop_flag: Arc<AtomicBool>, // used to tell the child thread to stop looping
-	seek_pos: Cell<f64>
 }
 
 impl MpdWrapper {
@@ -82,7 +80,6 @@ impl MpdWrapper {
             main_client: RefCell::new(None),  // Must be initialised later
             bg_handle: RefCell::new(None),  // Will be spawned later
             stop_flag: Arc::new(AtomicBool::new(false)),
-            seek_pos: Cell::new(0.0)
         });
 
         // For future noob self: these are shallow
@@ -141,8 +138,7 @@ impl MpdWrapper {
             MpdMessage::Status(update_current_song) => self.get_status(update_current_song),
             MpdMessage::CurrentSong => self.get_current_song(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
-            MpdMessage::PrepareSeekCur(new_position) => self.set_seek_pos(new_position),
-            MpdMessage::SeekCur => self.seek_current_song(),
+            MpdMessage::SeekCur(position) => self.seek_current_song(position),
             _ => {}
         }
         glib::ControlFlow::Continue
@@ -217,13 +213,9 @@ impl MpdWrapper {
         }
     }
 
-    pub fn set_seek_pos(&self, position: f64) {
-        let _ = self.seek_pos.replace(position);
-    }
-
-    pub fn seek_current_song(&self) {
+    pub fn seek_current_song(&self, position: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let _ = client.rewind(self.seek_pos.get());
+            let _ = client.rewind(position);
             // If successful, should trigger an idle message for Player
         }
     }
