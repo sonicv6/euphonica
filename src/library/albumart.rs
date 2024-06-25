@@ -12,7 +12,6 @@
 
 use std::{
     path::PathBuf,
-    cell::{Rc},
     fs::create_dir_all,
 };
 use crate::client::wrapper::MpdMessage;
@@ -20,7 +19,7 @@ use async_channel::Sender;
 use fasthash::murmur2;
 
 struct AlbumArtCache {
-    cache_path: Rc<PathBuf>,
+    cache_path: PathBuf,
     sender: Sender<MpdMessage>
 }
 
@@ -28,7 +27,7 @@ impl AlbumArtCache {
     pub fn new(app_cache_path: &PathBuf, sender: Sender<MpdMessage>) -> Self {
         let mut cache_path = app_cache_path.clone();
         cache_path.push("albumart");
-        create_dir_all(&cache_path);
+        create_dir_all(&cache_path).expect("ERROR: cannot create cache folder");
 
         Self {
             cache_path,
@@ -41,7 +40,7 @@ impl AlbumArtCache {
         if let Some(s) = folder_uri.to_str() {
             let mut path = self.cache_path.clone();
             path.push(murmur2::hash64(s).to_string() + ".png");
-            return Some(path.to_str());
+            return Some(String::from(path.to_str().unwrap()));
         }
         None
     }
