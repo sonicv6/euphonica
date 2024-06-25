@@ -51,7 +51,9 @@ mod imp {
         // Handle to seekbar polling task
         pub seekbar_poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
         // Temporary place for seekbar position before sending seekcur
-        pub new_position: Cell<f64>
+        // TODO: move both of these into a custom seekbar widget.
+        pub new_position: Cell<f64>,
+        pub seekbar_clicked: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -77,7 +79,8 @@ mod imp {
                 notify_duration_id: RefCell::new(None),
                 notify_playing_id: RefCell::new(None),
                 seekbar_poller_handle: RefCell::new(None),
-                new_position: Cell::new(0.0)
+                new_position: Cell::new(0.0),
+                seekbar_clicked: Cell::new(false)
             }
         }
     }
@@ -108,61 +111,44 @@ impl SlamprustWindow {
         win
     }
 
-    fn on_seekbar_pressed(&self, gesture: &gtk::GestureClick) {
-        gesture.set_state(gtk::EventSequenceState::Claimed);
-        println!("Dragging seekbar");
-        if let Some(handle) = self.imp().seekbar_poller_handle.take() {
-            handle.abort();
-        }
-    }
-
-    fn on_seekbar_released(&self, gesture: &gtk::GestureClick) {
-        gesture.set_state(gtk::EventSequenceState::Claimed);
-        println!("Released seekbar (unpaired)");
-        let sender = self.application()
-            .unwrap()
-            .downcast::<crate::application::SlamprustApplication>()
-            .unwrap()
-            .get_sender();
-        let _ = sender.send_blocking(MpdMessage::SeekCur(self.imp().new_position.get()));
-        self.maybe_start_polling();
-    }
-
     fn setup_seekbar(&self) {
         // Capture mouse button release action for seekbar
         // Funny story: gtk::Scale has its own GestureClick controller which will eat up mouse button events.
-        // Therefore we'll put the seekbar inside a transparent button, which will be the one capturing
-        // the mouse release/cancel event for us.
-
-        let seekbar_gesture = gtk::GestureClick::new();
-
-        // Assign your handler to an event of the gesture (e.g. the `pressed` event)
-        seekbar_gesture.connect_pressed(clone!(@weak self as this => move |gesture, _, _, _| {
-            gesture.set_state(gtk::EventSequenceState::Claimed);
-            println!("Dragging seekbar");
-            if let Some(handle) = this.imp().seekbar_poller_handle.take() {
-                handle.abort();
-            }
-        }));
-        // Funny story: there is no gtk::Scale::get_value.
-        // We need to connect to the change-value signal to do that.
+        // Workaround: capture mouse button release event at window level in capture phase, using a bool
+        // set by the seekbar's change-value signal to determine whether it is related to the seekbar or not.
         let sender = self.application()
             .unwrap()
             .downcast::<crate::application::SlamprustApplication>()
             .unwrap()
             .get_sender();
-        self.imp().seekbar.connect_change_value(clone!(@strong self as this => move |_, _, new_position| {
-            this.imp().new_position.replace(new_position);
-            glib::signal::Propagation::Proceed
+
+        let seekbar_gesture = gtk::GestureClick::new();
+        seekbar_gesture.set_propagation_phase(gtk::PropagationPhase::Capture);
+        seekbar_gesture.connect_released(clone!(@weak self as this => move |gesture, _, _, _| {
+            gesture.set_state(gtk::EventSequenceState::None); // allow propagating to seekbar
+            if this.imp().seekbar_clicked.get() {
+                println!("Released seekbar");
+                let _ = sender.send_blocking(MpdMessage::SeekCur(this.imp().new_position.get()));
+                this.imp().seekbar_clicked.replace(false);
+                this.maybe_start_polling();
+            }
         }));
 
-        seekbar_gesture.connect_unpaired_release(clone!(@weak self as this => move |gesture, _, _, _, _| {
-            gesture.set_state(gtk::EventSequenceState::Claimed);
-            println!("Released seekbar (unpaired)");
-            let _ = sender.send_blocking(MpdMessage::SeekCur(this.imp().new_position.get()));
-            this.maybe_start_polling();
+        self.add_controller(seekbar_gesture);
+
+        // Funny story: there is no gtk::Scale::get_value.
+        // We need to connect to the change-value signal to do that.
+        // Here is where we (might) stop the polling loop and set the
+        // seekbar_clicked flag to true.
+        self.imp().seekbar.connect_change_value(clone!(@strong self as this => move |_, _, new_position| {
+            this.imp().new_position.replace(new_position);
+            if let Some(handle) = this.imp().seekbar_poller_handle.take() {
+                println!("Dragging seekbar");
+                handle.abort();
+            }
+            this.imp().seekbar_clicked.set(true);
+            glib::signal::Propagation::Proceed
         }));
-        self.imp().seekbar.add_controller(seekbar_gesture);
     }
 
     fn client(&self) -> Option<Rc<MpdWrapper>> {
