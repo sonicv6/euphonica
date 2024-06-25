@@ -24,6 +24,8 @@ use std::{
     cell::RefCell,
     fmt::{self, Display, Formatter},
     rc::Rc,
+    fs::create_dir_all,
+    path::PathBuf
 };
 use async_channel::{Sender, Receiver};
 
@@ -40,7 +42,8 @@ mod imp {
         // pub player: Rc<PlayerController>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
-    	pub client: Rc<MpdWrapper>
+    	pub client: Rc<MpdWrapper>,
+    	pub cache_path: PathBuf // Just clone this to construct more detailed paths
     }
 
     #[glib::object_subclass]
@@ -50,6 +53,11 @@ mod imp {
         type ParentType = adw::Application;
 
         fn new() -> Self {
+            // Create cache folder. This is where the cached album arts go.
+            let mut cache_path: PathBuf = glib::user_cache_dir();
+            cache_path.push("slamprust");
+            create_dir_all(&cache_path);
+
             // Set up channels for communication with client object
             // Only one message at a time to client
             let (
@@ -79,7 +87,7 @@ mod imp {
                 // player,
                 client,
                 sender,
-                // receiver: RefCell::new(Some(receiver_from_client)),
+                cache_path
             }
         }
     }

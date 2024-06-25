@@ -104,8 +104,6 @@ impl PlayerState {
     // that returns everything at once. This update function will take what's
     // relevant and update the GObject properties accordingly.
     pub fn update_status(&self, status: &Status) {
-        print!("{:?}", status);
-
         let old_state = self.imp().state.replace(status.state.clone());
         if old_state != status.state {
             // These properties are affected by the "state" field.

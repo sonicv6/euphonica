@@ -25,21 +25,35 @@ use std::{
 pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
-	Toggle, // the "pause" command but renamed since it's a misnomer
-	Status(bool), // if true, will also query current song
+	Toggle, // The "pause" command but renamed since it's a misnomer
+	Status(bool), // If true, will also query current song
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	CurrentSong,
-	Idle(Vec<Subsystem>) // Will only be sent from the child thread
+	AlbumArt(String), // Contains URI of song WITHOUT filename
+	Idle(Vec<Subsystem>), // Will only be sent from the child thread
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
 // objects connected to the same address. One lives on the main thread along
 // with the GUI and takes care of sending user commands to the daemon, while the
-// other lives on on a child thread and is is always in idle mode in order to
+// other lives on on a child thread and is often in idle mode in order to
 // receive all server-side changes, including those resulting from commands from
 // other clients, such as MPRIS controls in the notification centre or another
 // frontend. Note that this second client will not notify the main thread on
 // seekbar progress. That will have to be polled by the main thread.
+
+// Heavy operations such as streaming lots of album arts from a remote server
+// should be performed by the background child client, which will receive them
+// through an unbounded async_channel serving as a work queue. On each loop,
+// the child client checks whether there's anything to handle in the work queue.
+// If there is, it will take & handle one item. If the queue is instead empty, it
+// will go into idle() mode.
+
+// Once in the idle mode, the child client is blocked and thus cannot check the
+// work queue. As such, after inserting a work item into the queue, the main
+// thread will also post a message to an mpd inter-client channel also listened
+// to by the child client. This will trigger an idle notification for the Message
+// subsystem, allowing the child client to break out of the blocking idle.
 
 // The child thread never modifies the main state directly. It instead sends
 // messages containing a list of subsystems with updated states to the main thread

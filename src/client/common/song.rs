@@ -1,13 +1,14 @@
 use crate::mpd;
 use core::time::Duration;
 use time::Date;
+use std::path::Path;
 
 // We define our own Song struct for more convenient handling, especially with
 // regards to optional fields and tags such as albums.
 
 #[derive(Debug, PartialEq)]
 pub struct Song {
-    filename: String,
+    uri: String,
     title: Option<String>,
     last_mod: Option<String>, // TODO: parse into time::Date
     artist: Option<String>,
@@ -26,7 +27,7 @@ impl Song {
         // We don't want to clone the whole mpd Song object since there might
         // be fields that we won't ever use.
         let mut res = Self {
-            filename: song.file.clone(),
+            uri: song.file.clone(),
             title: song.title.clone(),
             last_mod: song.last_mod.clone(),
             artist: song.artist.clone(),
@@ -47,14 +48,28 @@ impl Song {
         res
     }
 
-    // These getters should return references to eliminate one copy each.
-    // The state objects' getters will be the one cloning.
-    pub fn get_name(&self) -> &String {
+    pub fn get_title(&self) -> &Option<String> {
+        &self.title
+    }
+
+    pub fn get_uri(&self) -> &String {
+        &self.uri
+    }
+
+    pub fn get_name(&self) -> String {
+        // Get title tag or filename without extension in case there's no title tag.
+        // Returns a clone since
+        // 1. Song names are (usually) short
+        // 2. There might be no name tag, in which case we'll have to extract from the path.
         // Prefer song name in tag over filename
         if let Some(title) = self.title.as_ref() {
-            return title;
+            return title.clone();
         }
-        &self.filename
+        // Else extract from URI
+        else if let Some(stem) = Path::new(&self.uri).file_stem() {
+            return String::from(stem.to_str().unwrap());
+        }
+        String::from("Untitled")
     }
 
     pub fn get_duration(&self) -> Duration {

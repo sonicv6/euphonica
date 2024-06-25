@@ -24,6 +24,7 @@ mod application;
 mod config;
 mod window;
 mod client;
+mod library;
 
 use self::application::SlamprustApplication;
 use self::window::SlamprustWindow;
