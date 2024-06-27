@@ -17,8 +17,6 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-extern crate mpd;
-
 mod player;
 mod application;
 mod config;

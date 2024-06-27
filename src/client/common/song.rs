@@ -1,4 +1,4 @@
-use crate::mpd;
+extern crate mpd;
 use core::time::Duration;
 use time::Date;
 use std::path::Path;

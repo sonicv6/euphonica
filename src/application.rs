@@ -29,6 +29,7 @@ use std::{
 };
 use async_channel::{Sender, Receiver};
 
+use crate::player::Player;
 use crate::client::wrapper::{MpdWrapper, MpdMessage};
 use crate::config::VERSION;
 use crate::SlamprustWindow;
@@ -39,7 +40,7 @@ mod imp {
 
     #[derive(Debug)]
     pub struct SlamprustApplication {
-        // pub player: Rc<PlayerController>,
+        pub player: Rc<Player>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
     	pub client: Rc<MpdWrapper>,
@@ -65,8 +66,12 @@ mod imp {
                 receiver
             ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::bounded(1);
 
+            // Create controllers (Rc pointers)
+            let player = Rc::new(Player::default());
+
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(
+                player.clone(),
                 sender.clone(),
                 RefCell::new(Some(receiver))
             );
@@ -77,14 +82,8 @@ mod imp {
                 String::from("6600")
             ));
 
-            // Create controllers (Rc pointers)
-            // let player = PlayerController::new(
-            //     sender_to_client.clone(),
-            //     receiver_from_client.clone()
-            // );
-
             Self {
-                // player,
+                player,
                 client,
                 sender,
                 cache_path
@@ -145,6 +144,10 @@ impl SlamprustApplication {
         self.imp().sender.send_blocking(
             MpdMessage::Connect(String::from("localhost"), String::from("6600"))
         );
+    }
+
+    pub fn get_player(&self) -> Rc<Player> {
+        self.imp().player.clone()
     }
 
     pub fn get_client(&self) -> Rc<MpdWrapper> {

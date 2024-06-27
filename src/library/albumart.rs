@@ -9,7 +9,7 @@
 // issue, also looks horrible) or having to recreate the whole folder tree in
 // the cache (slow & cumbersome).
 // For simplicity cached album arts will be in PNG format regardless or their original ones.
-
+extern crate fasthash;
 use std::{
     path::PathBuf,
     fs::create_dir_all,

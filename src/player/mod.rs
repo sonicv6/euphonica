@@ -1,1 +1,3 @@
-pub mod controller;
+mod controller;
+
+pub use controller::Player;

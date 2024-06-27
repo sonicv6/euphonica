@@ -18,17 +18,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::{
-    rc::Rc,
-    cell::{Cell, RefCell}
-};
+use std::cell::{Cell, RefCell};
 use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
 use glib::signal::SignalHandlerId;
 use glib::clone;
-use crate::client::wrapper::{MpdWrapper, MpdMessage};
-
+use crate::{
+    client::wrapper::MpdMessage,
+    application::SlamprustApplication
+};
 mod imp {
     use super::*;
 
@@ -111,16 +110,19 @@ impl SlamprustWindow {
         win
     }
 
+    fn downcast_application(&self) -> SlamprustApplication {
+        self.application()
+            .unwrap()
+            .downcast::<crate::application::SlamprustApplication>()
+            .unwrap()
+    }
+
     fn setup_seekbar(&self) {
         // Capture mouse button release action for seekbar
         // Funny story: gtk::Scale has its own GestureClick controller which will eat up mouse button events.
         // Workaround: capture mouse button release event at window level in capture phase, using a bool
         // set by the seekbar's change-value signal to determine whether it is related to the seekbar or not.
-        let sender = self.application()
-            .unwrap()
-            .downcast::<crate::application::SlamprustApplication>()
-            .unwrap()
-            .get_sender();
+        let sender = self.downcast_application().get_sender();
 
         let seekbar_gesture = gtk::GestureClick::new();
         seekbar_gesture.set_propagation_phase(gtk::PropagationPhase::Capture);
@@ -151,23 +153,9 @@ impl SlamprustWindow {
         }));
     }
 
-    fn client(&self) -> Option<Rc<MpdWrapper>> {
-        println!("Checking if client wrapper exists");
-        if let Some(app) = self.application() {
-            println!("Has client wrapper!");
-            return Some(app
-                .downcast::<crate::application::SlamprustApplication>()
-                .unwrap()
-                .get_client()
-            );
-        }
-        None
-    }
-
 	fn update_label(&self) {
-	    let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
-	    let player_state = client.get_player_state();
-	    if player_state.is_playing() {
+	    let player = self.downcast_application().get_player();
+	    if player.is_playing() {
 	        self.imp().label.set_label("Playing");
 	    }
 	    else {
@@ -176,11 +164,10 @@ impl SlamprustWindow {
 	}
 
 	fn update_seekbar(&self, update_duration: bool) {
-	    let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
-	    let player_state = client.get_player_state();
-	    let pos = player_state.position();
+	    let player = self.downcast_application().get_player();
+	    let pos = player.position();
         let pos_upper = pos.ceil() as u64;
-        let duration = player_state.duration();
+        let duration = player.duration();
 	    if update_duration {
 	        // Set value to 0 first since new duration might be 0 (empty playlist).
 	        self.imp().seekbar.set_value(0.0);
@@ -202,37 +189,30 @@ impl SlamprustWindow {
     fn maybe_start_polling(&self) {
         // Periodically poll for player progress to update seekbar
         // Won't start a new loop if there is already one
-        if let Some(app) = self.application() {
-            let downcast_app = app
-                .downcast::<crate::application::SlamprustApplication>()
-                .unwrap();
-            let sender = downcast_app.get_sender();
-            let client = downcast_app.get_client().clone();
-            let poller_handle = glib::MainContext::default().spawn_local(async move {
-                loop {
-                    let state = client.get_player_state();
-                    // Don't poll if not playing
-                    if !state.is_playing() {
-                        break;
-                    }
-                    // Skip poll if channel is full
-                    if !sender.is_full() {
-                        let _ = sender.send_blocking(MpdMessage::Status(false));
-                    }
-                    glib::timeout_future_seconds(1).await;
+        let sender = self.downcast_application().get_sender();
+        let player = self.downcast_application().get_player();
+        let poller_handle = glib::MainContext::default().spawn_local(async move {
+            loop {
+                // Don't poll if not playing
+                if !player.is_playing() {
+                    break;
                 }
-            });
-            self.imp().seekbar_poller_handle.replace(Some(poller_handle));
-        }
+                // Skip poll if channel is full
+                if !sender.is_full() {
+                    let _ = sender.send_blocking(MpdMessage::Status(false));
+                }
+                glib::timeout_future_seconds(1).await;
+            }
+        });
+        self.imp().seekbar_poller_handle.replace(Some(poller_handle));
     }
 
 	fn bind_state(&self) {
-		let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
-		let player_state = client.get_player_state();
+		let player = self.downcast_application().get_player();
 
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
         self.update_label();
-        let notify_playing_id = player_state.connect_notify_local(
+        let notify_playing_id = player.connect_notify_local(
             Some("playing"),
             clone!(@weak self as win => move |_, _| {
                 win.update_label();
@@ -241,13 +221,13 @@ impl SlamprustWindow {
         );
 
         self.update_seekbar(true);
-        let notify_position_id = player_state.connect_notify_local(
+        let notify_position_id = player.connect_notify_local(
             Some("position"),
             clone!(@weak self as win => move |_, _| {
                 win.update_seekbar(false);
             }),
         );
-        let notify_duration_id = player_state.connect_notify_local(
+        let notify_duration_id = player.connect_notify_local(
             Some("duration"),
             clone!(@weak self as win => move |_, _| {
                 win.update_seekbar(true);
@@ -259,19 +239,18 @@ impl SlamprustWindow {
 	}
 
 	fn unbind_state(&self) {
-	    let client = self.client().unwrap();  // Panic otherwise since we can't proceed without state
-		let player_state = client.get_player_state();
+	    let player = self.downcast_application().get_player();
 
 		// Just take directly since we're unbinding anyway
 		// TODO: turn this into a loop perhaps?
         if let Some(id) = self.imp().notify_playing_id.take() {
-            player_state.disconnect(id);
+            player.disconnect(id);
         }
         if let Some(id) = self.imp().notify_position_id.take() {
-            player_state.disconnect(id);
+            player.disconnect(id);
         }
         if let Some(id) = self.imp().notify_duration_id.take() {
-            player_state.disconnect(id);
+            player.disconnect(id);
         }
 	}
 

@@ -1,4 +1,5 @@
-use crate::mpd;
+extern crate mpd;
+use crate::player::Player;
 use futures::executor;
 use mpd::{
     client::Client,
@@ -10,8 +11,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use async_channel::{Sender, Receiver};
 use glib::{clone, SourceId, MainContext};
 use gtk::{glib, gio};
-
-use super::subsystems::player::PlayerState;
 
 use std::{
     cell::RefCell,
@@ -70,8 +69,8 @@ pub enum MpdMessage {
 
 #[derive(Debug)]
 pub struct MpdWrapper {
-    // State objects
-    player_state: PlayerState,
+    // References to controllers
+    player: Rc<Player>,
 
     // For receiving user commands from UI or child thread
     receiver: RefCell<Option<Receiver<MpdMessage>>>,
@@ -86,9 +85,13 @@ pub struct MpdWrapper {
 }
 
 impl MpdWrapper {
-    pub fn new(sender: Sender<MpdMessage>, receiver: RefCell<Option<Receiver<MpdMessage>>>) -> Rc<Self> {
+    pub fn new(
+        player: Rc<Player>,
+        sender: Sender<MpdMessage>,
+        receiver: RefCell<Option<Receiver<MpdMessage>>>
+    ) -> Rc<Self> {
         let wrapper = Rc::new(Self {
-            player_state: PlayerState::default(),
+            player,
             receiver, // from UI. Note: RefCell has runtime reference checking
             sender,
             main_client: RefCell::new(None),  // Must be initialised later
@@ -139,11 +142,6 @@ impl MpdWrapper {
                 this.clone().respond(request).await;
             }
         }));
-    }
-
-    pub fn get_player_state(&self) -> &PlayerState {
-        // Only allow references
-        &self.player_state
     }
 
     async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
@@ -201,7 +199,7 @@ impl MpdWrapper {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
                 // Let each state update their respective properties
-                self.player_state.update_status(&status);
+                self.player.update_status(&status);
             }
             // TODO: handle error
         }
@@ -218,7 +216,7 @@ impl MpdWrapper {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(maybe_song) = client.currentsong() {
                 // Let each state update their respective properties
-                self.player_state.update_current_song(&maybe_song);
+                self.player.update_current_song(&maybe_song);
             }
             // TODO: handle error
         }
