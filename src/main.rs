@@ -17,8 +17,9 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-mod player;
 mod application;
+mod common;
+mod player;
 mod config;
 mod window;
 mod client;

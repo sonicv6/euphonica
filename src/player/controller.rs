@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 extern crate mpd;
 use mpd::status::{State, Status};
-use crate::client::common::song::Song;
+use crate::common::Song;
 use gtk::glib;
 use gtk::prelude::*;
 use adw::subclass::prelude::*;
@@ -26,12 +26,6 @@ mod imp {
     pub struct Player {
         pub state: Cell<State>,
         pub position: Cell<f64>,
-        // TODO: Only call currentsong when detecting song change.
-        // This is used for detecting song changes.
-        // Only when the current song has been changed will we need to call
-        // currentsong.
-        // pub current_song_id: RefCell<Option<u32>>,
-        // As returned by currentsong
         pub current_song: RefCell<Option<Song>>
     }
 
@@ -130,6 +124,7 @@ impl Player {
                 old_song.is_none() != self.imp().current_song.borrow().is_none() ||
                 old_song.as_ref().unwrap() != self.imp().current_song.borrow().as_ref().unwrap()
             {
+                println!("New song: {:?}", self.imp().current_song.borrow().as_ref().unwrap());
                 self.notify("title");
                 self.notify("artist");
                 self.notify("duration");
@@ -169,7 +164,7 @@ impl Player {
 
     pub fn duration(&self) -> u64 {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return song.get_duration().as_secs();  // Can still be 0
+            return song.get_duration();  // Can still be 0
         }
         0
     }
