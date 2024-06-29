@@ -14,43 +14,41 @@ use std::{
     path::PathBuf,
     fs::create_dir_all,
 };
-use crate::client::wrapper::MpdMessage;
-use async_channel::Sender;
 use fasthash::murmur2;
 
-struct AlbumArtCache {
-    cache_path: PathBuf,
-    sender: Sender<MpdMessage>
+#[derive(Debug)]
+pub struct AlbumArtCache {
+    cache_path: PathBuf
 }
 
 impl AlbumArtCache {
-    pub fn new(app_cache_path: &PathBuf, sender: Sender<MpdMessage>) -> Self {
+    pub fn new(app_cache_path: &PathBuf) -> Self {
         let mut cache_path = app_cache_path.clone();
         cache_path.push("albumart");
         create_dir_all(&cache_path).expect("ERROR: cannot create cache folder");
 
         Self {
-            cache_path,
-            sender
+            cache_path
         }
     }
 
-    pub fn try_get_path_for(&self, folder_uri: &PathBuf) -> Option<String> {
+    pub fn get_path_for(&self, folder_uri: &PathBuf) -> Option<PathBuf> {
         // Do not include filename in URI.
         if let Some(s) = folder_uri.to_str() {
             let mut path = self.cache_path.clone();
             path.push(murmur2::hash64(s).to_string() + ".png");
-            return Some(String::from(path.to_str().unwrap()));
+            return Some(path);
         }
         None
     }
 
-    pub fn download_for(&self, folder_uri: &PathBuf) {
+    // pub fn download_for(&self, folder_uri: &PathBuf) {
         // Do not include filename in URI.
         // Send download request to wrapper. Wrapper will pass to child client
         // in background thread.
-        if let Some(s) = folder_uri.to_str() {
-            let _ = self.sender.send_blocking(MpdMessage::AlbumArt(String::from(s)));
-        }
-    }
+    //     println!("Fetching album art for path: {:?}", folder_uri);
+    //     if let Some(s) = folder_uri.to_str() {
+    //         let _ = self.sender.send_blocking(MpdMessage::AlbumArt(String::from(s)));
+    //     }
+    // }
 }

@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
-    vec::Vec
+    vec::Vec,
+    path::PathBuf
 };
 extern crate mpd;
 use mpd::status::{State, Status};
@@ -172,15 +173,12 @@ impl Player {
                 if let Some(old_song) = self.imp().current_song.borrow().as_ref() {
                     old_song.set_is_playing(false);
                 }
-                println!("Current song changed to one with ID {}", new_queue_place.id.0);
                 // Either old state did not have a playing song or playing song has changed
                 // Search for new song in current queue
                 for maybe_song in self.queue().iter::<Song>() {
                     let song = maybe_song.unwrap();
                     let queue_id = song.get_queue_id();
-                    println!("Searching queue...found ID {}", queue_id);
                     if song.get_queue_id() == new_queue_place.id.0 {
-                        println!("Found it in queue!");
                         let _ = self.imp().current_song.replace(Some(song.clone()));
                         self.notify("title");
                         self.notify("artist");
@@ -209,7 +207,6 @@ impl Player {
     }
 
     pub fn update_queue(&self, new_queue: &[mpd::song::Song]) {
-        // TODO: Might want to avoid dropping the whole thing
         // TODO: Request album art for each
         // TODO: add asynchronously?
         let queue = self.imp().queue.borrow();

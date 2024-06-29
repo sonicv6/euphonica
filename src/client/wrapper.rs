@@ -1,12 +1,15 @@
 extern crate mpd;
+use uuid::Uuid;
 use crate::player::Player;
 use futures::executor;
 use mpd::{
     client::Client,
     Subsystem,
     Idle,
+    Channel,
     error::Error
 };
+use super::albumart::AlbumArtCache;
 use std::sync::atomic::{AtomicBool, Ordering};
 use async_channel::{Sender, Receiver};
 use glib::{clone, SourceId, MainContext};
@@ -14,9 +17,9 @@ use gtk::{glib, gio};
 
 use std::{
     cell::RefCell,
-    fmt::{self, Display, Formatter},
     rc::Rc,
-    sync::{Arc, Mutex}
+    sync::{Arc, Mutex},
+    path::PathBuf
 };
 
 // One for each command in mpd's protocol plus a few special ones such
@@ -29,9 +32,16 @@ pub enum MpdMessage {
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	// CurrentSong,
-	AlbumArt(String), // Contains URI of song WITHOUT filename
+	AlbumArt(PathBuf), // Contains URI of song WITHOUT filename
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
 	Queue, // Get songs in current queue
+}
+
+// Work requests for sending to the child thread.
+// Completed results will be reported back via MpdMessage.
+#[derive(Debug)]
+enum BackgroundTask {
+    DownloadAlbumArt(PathBuf, PathBuf)  // With folder-level URL for querying and cache path for writing to.
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -78,27 +88,38 @@ pub struct MpdWrapper {
     receiver: RefCell<Option<Receiver<MpdMessage>>>,
     // Corresponding sender, for cloning into child thread.
     sender: Sender<MpdMessage>,
+    albumart: AlbumArtCache,
     // The main client living on the main thread. Every single method of
     // mpd::Client is mutating so we'll just rely on a RefCell for now.
 	main_client: RefCell<Option<Client>>,
     // Handle to the child thread.
 	bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
 	stop_flag: Arc<AtomicBool>, // used to tell the child thread to stop looping
+	bg_channel: Channel, // For waking up the child client
+	bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
 }
 
 impl MpdWrapper {
     pub fn new(
         player: Rc<Player>,
         sender: Sender<MpdMessage>,
-        receiver: RefCell<Option<Receiver<MpdMessage>>>
+        receiver: RefCell<Option<Receiver<MpdMessage>>>,
+        // Cache path (album arts will be written into a subfolder)
+        cache_path: &PathBuf,
     ) -> Rc<Self> {
+        let ch_name = Uuid::new_v4().simple().to_string();
+        println!("Channel name: {}", &ch_name);
+        let albumart = AlbumArtCache::new(cache_path);
         let wrapper = Rc::new(Self {
             player,
             receiver, // from UI. Note: RefCell has runtime reference checking
             sender,
+            albumart,
             main_client: RefCell::new(None),  // Must be initialised later
             bg_handle: RefCell::new(None),  // Will be spawned later
             stop_flag: Arc::new(AtomicBool::new(false)),
+            bg_channel: Channel::new(&ch_name).unwrap(),
+            bg_sender: RefCell::new(None)
         });
 
         // For future noob self: these are shallow
@@ -107,9 +128,12 @@ impl MpdWrapper {
     }
 
     fn start_bg_thread(self: Rc<Self>, host: &str, port: &str) {
-        let bg_sender = self.sender.clone();
+        let sender_to_fg = self.sender.clone();
         let stop_flag = self.stop_flag.clone();
+        let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
+        self.bg_sender.replace(Some(bg_sender));
         if let Ok(mut client) =  Client::connect(format!("{}:{}", host, port)) {
+            client.subscribe(self.bg_channel.clone()).expect("Child thread could not subscribe to inter-client channel!");
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting idle loop...");
                 loop {
@@ -118,9 +142,31 @@ impl MpdWrapper {
                         let _ = client.close();
                         break;
                     }
-                    if let Ok(changes) = client.wait(&[]) {
-                        println!("Change: {:?}", changes);
-                        let _ = bg_sender.send_blocking(MpdMessage::Idle(changes));
+                    // Check if there is work to do
+                    if !bg_receiver.is_empty() {
+                        // TODO: Take one task for each loop
+                        if let Ok(task) = bg_receiver.recv_blocking() {
+                            println!("Got task: {:?}", task);
+                        }
+                    }
+                    else {
+                        // If not, go into idle mode
+                        if let Ok(changes) = client.wait(&[]) {
+                            println!("Change: {:?}", changes);
+                            if changes.contains(&Subsystem::Message) {
+                                if let Ok(msgs) = client.readmessages() {
+                                    for msg in msgs {
+                                        let content = msg.message.as_str();
+                                        println!("Received msg: {}", content);
+                                        match content {
+                                            "STOP" => {break;}
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                            let _ = sender_to_fg.send_blocking(MpdMessage::Idle(changes));
+                        }
                     }
                 }
             });
@@ -147,11 +193,13 @@ impl MpdWrapper {
     }
 
     async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
+        println!("Received MpdMessage {:?}", request);
         match request {
             MpdMessage::Connect(host, port) => self.connect(&host, &port).await,
             MpdMessage::Status => self.get_status(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
+            MpdMessage::AlbumArt(folder_uri) => self.get_album_art(folder_uri),
             _ => {}
         }
         glib::ControlFlow::Continue
@@ -202,6 +250,10 @@ impl MpdWrapper {
         self.stop_flag.store(false, Ordering::Relaxed);
         if let Ok(c) = mpd::Client::connect(format!("{}:{}", host, port)) {
             self.main_client.replace(Some(c));
+            self.main_client
+                .borrow_mut().as_mut().unwrap()
+                .subscribe(self.bg_channel.clone())
+                .expect("Could not connect to an inter-client channel for child thread wakeups!");
             self.clone().init_state();
             self.start_bg_thread(host, port);
         }
@@ -231,6 +283,22 @@ impl MpdWrapper {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(queue) = client.queue() {
                 self.player.update_queue(&queue);
+            }
+        }
+    }
+
+    pub fn get_album_art(&self, folder_uri: PathBuf) {
+        // Check if we have a cached version
+        if let Some(cache_path) = self.albumart.get_path_for(&folder_uri) {
+            // TODO
+            // Else download from server
+            // Download from server
+            println!("Fetching album art for path: {:?}", folder_uri);
+            if let Some(sender) = self.bg_sender.borrow().as_ref() {
+                sender.send_blocking(BackgroundTask::DownloadAlbumArt(folder_uri.clone(), cache_path));
+            }
+            if let Some(client) = self.main_client.borrow_mut().as_mut() {
+                let _ = client.sendmessage(self.bg_channel.clone(), "WAKE");
             }
         }
     }

@@ -20,7 +20,7 @@
 
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc
+    path::PathBuf
 };
 use adw::subclass::prelude::*;
 use gtk::{
@@ -152,7 +152,7 @@ impl SlamprustWindow {
                 .expect("Needs to be ListItem")
                 .set_child(Some(&queue_row));
         });
-
+        let sender = self.downcast_application().get_sender().clone();
         // Tell factory how to bind `QueueRow` to one of our Song GObjects
         factory.connect_bind(move |_, list_item| {
             // Get `Song` from `ListItem` (that is, the data side)
@@ -162,6 +162,11 @@ impl SlamprustWindow {
                 .item()
                 .and_downcast::<Song>()
                 .expect("The item has to be a common::Song.");
+
+            if !item.has_cover() {
+                // Request album art. Will be updated later when ready.
+                let _ = sender.send_blocking(MpdMessage::AlbumArt(PathBuf::from(item.get_uri())));
+            }
 
             // Get `QueueRow` from `ListItem` (the UI widget)
             let child: QueueRow = list_item

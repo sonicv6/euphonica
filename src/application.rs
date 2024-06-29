@@ -29,11 +29,12 @@ use std::{
 };
 use async_channel::{Sender, Receiver};
 
-use crate::player::Player;
-use crate::client::wrapper::{MpdWrapper, MpdMessage};
-use crate::config::VERSION;
-use crate::SlamprustWindow;
-// use crate::player::controller::PlayerController;
+use crate::{
+    player::Player,
+    client::{AlbumArtCache, MpdWrapper, MpdMessage},
+    config::VERSION,
+    SlamprustWindow
+};
 
 mod imp {
     use super::*;
@@ -64,7 +65,7 @@ mod imp {
             let (
                 sender,
                 receiver
-            ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::bounded(1);
+            ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::unbounded();
 
             // Create controllers (Rc pointers)
             let player = Rc::new(Player::default());
@@ -73,7 +74,8 @@ mod imp {
             let client = MpdWrapper::new(
                 player.clone(),
                 sender.clone(),
-                RefCell::new(Some(receiver))
+                RefCell::new(Some(receiver)),
+                &cache_path
             );
 
             // TODO: use gsettings for reading host & port
