@@ -15,6 +15,15 @@ use adw::subclass::prelude::*;
 use async_channel::{Sender};
 use crate::client::wrapper::{MpdMessage};
 
+#[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
+#[enum_type(name = "SlamprustPlaybackState")]
+pub enum PlaybackState {
+    #[default]
+    Stopped,
+    Playing,
+    Paused,
+}
+
 mod imp {
     use glib::{
         ParamSpec,
@@ -25,13 +34,14 @@ mod imp {
         ParamSpecUInt,
         ParamSpecUInt64,
         ParamSpecDouble,
+        ParamSpecEnum
     };
     use once_cell::sync::Lazy;
     use super::*;
 
     #[derive(Debug)]
     pub struct Player {
-        pub state: Cell<State>,
+        pub state: Cell<PlaybackState>,
         pub position: Cell<f64>,
         pub current_song: RefCell<Option<Song>>,
         pub queue: RefCell<gio::ListStore>,
@@ -45,7 +55,7 @@ mod imp {
         fn new() -> Self {
             let queue = RefCell::new(gio::ListStore::new::<Song>());
             Self {
-                state: Cell::new(State::Stop),
+                state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
                 current_song: RefCell::new(None),
                 queue
@@ -57,12 +67,13 @@ mod imp {
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
-                    ParamSpecBoolean::builder("playing").read_only().build(),
+                    ParamSpecEnum::builder::<PlaybackState>("playback-state").read_only().build(),
                     ParamSpecDouble::builder("position").read_only().build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
                     ParamSpecUInt64::builder("duration").read_only().build(),
+                    ParamSpecUInt::builder("queue-id").read_only().build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
                     //     .read_only()
                     //     .build(),
@@ -74,13 +85,14 @@ mod imp {
         fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
             let obj = self.obj();
             match pspec.name() {
-                "playing" => obj.is_playing().to_value(),
+                "playback-state" => obj.playback_state().to_value(),
                 "position" => obj.position().to_value(),
                 // These are proxies for Song properties
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
                 // "album" => obj.album().to_value(),
                 "duration" => obj.duration().to_value(),
+                "queue-id" => obj.queue_id().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -113,10 +125,24 @@ impl Player {
     }
 
     pub fn update_status(&self, status: &Status) {
-        let old_state = self.imp().state.replace(status.state.clone());
-        if old_state != status.state {
+        let new_state = match status.state {
+            State::Play => PlaybackState::Playing,
+            State::Pause => PlaybackState::Paused,
+            State::Stop => PlaybackState::Stopped
+        };
+        let old_state = self.imp().state.replace(new_state);
+        if old_state != new_state {
             // These properties are affected by the "state" field.
-            self.notify("playing");
+            self.notify("playback-state");
+        }
+        // If stopped, remove playing indicator
+        if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            if new_state == PlaybackState::Stopped {
+                song.set_is_playing(false);
+            }
+            else {
+                song.set_is_playing(true);
+            }
         }
 
         if let Some(new_position_dur) = status.elapsed {
@@ -136,10 +162,16 @@ impl Player {
         // Queue always gets updated first before Player by idle.
         // This allows us to be sure that the new current song is already in
         // our local queue.
+        // Note to self: since GObjects are boxed & reference-counted, even clearing
+        // the queue will not remove the current song (yet).
         if let Some(new_queue_place) = status.song {
             // There is now a playing song
             let maybe_old_queue_id = self.get_current_queue_id();
             if (maybe_old_queue_id.is_some() && maybe_old_queue_id.unwrap() != new_queue_place.id.0) || maybe_old_queue_id.is_none() {
+                // Remove playing indicator from old song
+                if let Some(old_song) = self.imp().current_song.borrow().as_ref() {
+                    old_song.set_is_playing(false);
+                }
                 println!("Current song changed to one with ID {}", new_queue_place.id.0);
                 // Either old state did not have a playing song or playing song has changed
                 // Search for new song in current queue
@@ -155,6 +187,12 @@ impl Player {
                         self.notify("album");
                         self.notify("duration");
                         break;
+                    }
+                }
+                // If playing, indicate so at the new song
+                if let Some(new_song) = self.imp().current_song.borrow().as_ref() {
+                    if self.imp().state.get() != PlaybackState::Stopped {
+                        new_song.set_is_playing(true);
                     }
                 }
             }
@@ -219,16 +257,16 @@ impl Player {
         0
     }
 
-    pub fn is_playing(&self) -> bool {
-        let playback_state = self.imp().state.get();
-        matches!(playback_state, State::Play)
+    pub fn queue_id(&self) -> u32 {
+        if let Some(song) = &*self.imp().current_song.borrow() {
+            return song.get_queue_id();
+        }
+        // Should never match a real song.
+        u32::MAX
     }
 
-    pub fn set_playback_state(&self, playback_state: &State) {
-        let old_state = self.imp().state.replace(*playback_state);
-        if old_state != *playback_state {
-            self.notify("playing");
-        }
+    pub fn playback_state(&self) -> PlaybackState {
+        self.imp().state.get()
     }
 
     pub fn position(&self) -> f64 {

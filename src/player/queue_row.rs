@@ -1,4 +1,7 @@
-use std::cell::RefCell;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc
+};
 use gtk::{
     glib,
     prelude::*,
@@ -8,7 +11,10 @@ use gtk::{
 };
 use glib::{Object, Binding};
 
-use crate::common::Song;
+use crate::{
+    common::Song,
+    player::Player
+};
 
 mod imp {
     use super::*;
@@ -18,6 +24,8 @@ mod imp {
     pub struct QueueRow {
         #[template_child]
         pub song_name: TemplateChild<Label>,
+        #[template_child]
+        pub playing_indicator: TemplateChild<Label>,
         // Vector holding the bindings to properties of the Song GObject
         pub bindings: RefCell<Vec<Binding>>,
     }
@@ -70,15 +78,22 @@ impl QueueRow {
     pub fn bind(&self, song: &Song) {
         // Get state
         let song_name_label = self.imp().song_name.get();
+        let playing_label = self.imp().playing_indicator.get();
         let mut bindings = self.imp().bindings.borrow_mut();
 
-        // Bind `task_object.completed` to `task_row.completed_button.active`
-        let completed_button_binding = song
+        let song_name_binding = song
             .bind_property("name", &song_name_label, "label")
             .sync_create()
             .build();
         // Save binding
-        bindings.push(completed_button_binding);
+        bindings.push(song_name_binding);
+
+        let song_is_playing_binding = song
+            .bind_property("is-playing", &playing_label, "visible")
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(song_is_playing_binding);
     }
 
     pub fn unbind(&self) {

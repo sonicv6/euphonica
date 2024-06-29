@@ -63,6 +63,7 @@ mod imp {
         // pub release_date: RefCell<Option<u64>>,
         pub cover_hash: Cell<Option<u64>>,
         // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
+        pub is_playing: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -78,7 +79,8 @@ mod imp {
                 duration: Cell::new(0),
                 queue_id: Cell::new(None),
                 album: RefCell::new(None),
-                cover_hash: Cell::new(None)
+                cover_hash: Cell::new(None),
+                is_playing: Cell::new(false)
             }
         }
     }
@@ -98,7 +100,7 @@ mod imp {
                     // ParamSpecString::builder("release_date").build(),
                     ParamSpecUInt64::builder("cover-hash").build(),
                     ParamSpecBoolean::builder("has-cover").build(),
-
+                    ParamSpecBoolean::builder("is-playing").build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
                     //     .read_only()
                     //     .build(),
@@ -123,6 +125,7 @@ mod imp {
                 // "release_date" => obj.get_release_date.to_value(),
                 "cover-hash" => obj.get_cover_hash().to_value(),
                 "has-cover" => obj.has_cover().to_value(),
+                "is-playing" => obj.is_playing().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -172,6 +175,12 @@ mod imp {
                     }
                     obj.notify("cover-hash");
                     obj.notify("has-cover");
+                },
+                "is-playing" => {
+                    if let Ok(b) = value.get::<bool>() {
+                        let _ = self.is_playing.replace(b);
+                        obj.notify("is-playing");
+                    }
                 }
                 _ => unimplemented!(),
             }
@@ -270,6 +279,17 @@ impl Song {
 
     pub fn has_cover(&self) -> bool {
         self.imp().cover_hash.get().is_some()
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.imp().is_playing.get()
+    }
+
+    pub fn set_is_playing(&self, val: bool) {
+        let old_val = self.imp().is_playing.replace(val);
+        if old_val != val {
+            self.notify("is-playing");
+        }
     }
 }
 

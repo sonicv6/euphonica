@@ -34,9 +34,9 @@ use gtk::{
 use glib::signal::SignalHandlerId;
 use glib::clone;
 use crate::{
-    client::wrapper::MpdMessage,
+    client::MpdMessage,
     application::SlamprustApplication,
-    player::QueueRow,
+    player::{QueueRow, PlaybackState},
     common::Song
 };
 mod imp {
@@ -57,7 +57,7 @@ mod imp {
 
         // RefCells to notify IDs so we can unbind later
         pub notify_position_id: RefCell<Option<SignalHandlerId>>,
-        pub notify_playing_id: RefCell<Option<SignalHandlerId>>,
+        pub notify_playback_state_id: RefCell<Option<SignalHandlerId>>,
         pub notify_duration_id: RefCell<Option<SignalHandlerId>>,
 
         // Handle to seekbar polling task
@@ -90,7 +90,7 @@ mod imp {
                 queue: TemplateChild::default(),
                 notify_position_id: RefCell::new(None),
                 notify_duration_id: RefCell::new(None),
-                notify_playing_id: RefCell::new(None),
+                notify_playback_state_id: RefCell::new(None),
                 seekbar_poller_handle: RefCell::new(None),
                 new_position: Cell::new(0.0),
                 seekbar_clicked: Cell::new(false)
@@ -229,11 +229,10 @@ impl SlamprustWindow {
 
 	fn update_label(&self) {
 	    let player = self.downcast_application().get_player();
-	    if player.is_playing() {
-	        self.imp().label.set_label("Playing");
-	    }
-	    else {
-	        self.imp().label.set_label("Paused");
+	    match player.playback_state() {
+	        PlaybackState::Playing => {self.imp().label.set_label("Playing")},
+	        PlaybackState::Paused => {self.imp().label.set_label("Paused")},
+	        PlaybackState::Stopped => {self.imp().label.set_label("Stopped")}
 	    }
 	}
 
@@ -268,7 +267,7 @@ impl SlamprustWindow {
         let poller_handle = glib::MainContext::default().spawn_local(async move {
             loop {
                 // Don't poll if not playing
-                if !player.is_playing() {
+                if player.playback_state() != PlaybackState::Playing {
                     break;
                 }
                 // Skip poll if channel is full
@@ -286,8 +285,8 @@ impl SlamprustWindow {
 
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
         self.update_label();
-        let notify_playing_id = player.connect_notify_local(
-            Some("playing"),
+        let notify_playback_state_id = player.connect_notify_local(
+            Some("playback-state"),
             clone!(@weak self as win => move |_, _| {
                 win.update_label();
                 win.maybe_start_polling();
@@ -307,7 +306,7 @@ impl SlamprustWindow {
                 win.update_seekbar(true);
             }),
         );
-        self.imp().notify_playing_id.replace(Some(notify_playing_id));
+        self.imp().notify_playback_state_id.replace(Some(notify_playback_state_id));
         self.imp().notify_position_id.replace(Some(notify_position_id));
         self.imp().notify_duration_id.replace(Some(notify_duration_id));
 	}
@@ -317,7 +316,7 @@ impl SlamprustWindow {
 
 		// Just take directly since we're unbinding anyway
 		// TODO: turn this into a loop perhaps?
-        if let Some(id) = self.imp().notify_playing_id.take() {
+        if let Some(id) = self.imp().notify_playback_state_id.take() {
             player.disconnect(id);
         }
         if let Some(id) = self.imp().notify_position_id.take() {
