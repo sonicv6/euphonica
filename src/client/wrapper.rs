@@ -26,9 +26,9 @@ pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
 	Toggle, // The "pause" command but renamed since it's a misnomer
-	Status(bool), // If true, will also query current song
+	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
-	CurrentSong,
+	// CurrentSong,
 	AlbumArt(String), // Contains URI of song WITHOUT filename
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
 	Queue, // Get songs in current queue
@@ -149,8 +149,7 @@ impl MpdWrapper {
     async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
         match request {
             MpdMessage::Connect(host, port) => self.connect(&host, &port).await,
-            MpdMessage::Status(update_current_song) => self.get_status(update_current_song),
-            MpdMessage::CurrentSong => self.get_current_song(),
+            MpdMessage::Status => self.get_status(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             _ => {}
@@ -162,9 +161,14 @@ impl MpdWrapper {
         for subsystem in changes {
             match subsystem {
                 Subsystem::Player => {
-                    // For now idle signals from Player will also invoke currentsong.
-                    // Might want to keep track of songid to avoid this when possible.
-                    self.clone().get_status(true);
+                    // No need to get current song separately as we'll just pull it
+                    // from the queue
+                    self.clone().get_status();
+                }
+                Subsystem::Queue => {
+                    // Retrieve entire queue for now, since there's no way to know
+                    // specifically what changed
+                    self.clone().get_current_queue();
                 }
                 // Else just skip. More features to come.
                 _ => {}
@@ -173,8 +177,9 @@ impl MpdWrapper {
     }
 
     fn init_state(self: Rc<Self>) {
-        self.clone().get_status(true);
+        // Get queue first so we can look for current song in it later
         self.clone().get_current_queue();
+        self.clone().get_status();
     }
 
     async fn connect(self: Rc<Self>, host: &str, port: &str) {
@@ -202,28 +207,11 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_status(self: Rc<Self>, update_current_song: bool) {
+    pub fn get_status(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
                 // Let each state update their respective properties
                 self.player.update_status(&status);
-            }
-            // TODO: handle error
-        }
-        else {
-            // TODO: handle error
-        }
-
-        if update_current_song {
-            self.get_current_song();
-        }
-    }
-
-    pub fn get_current_song(&self) {
-        if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(maybe_song) = client.currentsong() {
-                // Let each state update their respective properties
-                self.player.update_current_song(&maybe_song);
             }
             // TODO: handle error
         }

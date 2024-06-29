@@ -93,7 +93,7 @@ mod imp {
                     ParamSpecString::builder("artist").build(),
                     ParamSpecUInt64::builder("duration").construct_only().build(),
                     ParamSpecUInt::builder("queue-id").build(),
-                    ParamSpecBoolean::builder("is-queued").build(),
+                    ParamSpecBoolean::builder("is-queued").read_only().build(),
                     ParamSpecString::builder("album").build(),
                     // ParamSpecString::builder("release_date").build(),
                     ParamSpecUInt64::builder("cover-hash").build(),
@@ -148,29 +148,25 @@ mod imp {
                     obj.notify("name");
                 }
                 "artist" => {
-                    // Always set to title tag
                     if let Ok(a) = value.get::<&str>() {
                         let _ = self.artist.replace(Some(String::from(a)));
                     }
                     obj.notify("artist");
                 }
-                "queue-id" => {
-                    // Always set to title tag
-                    if let Ok(id) = value.get::<u32>() {
-                        let _ = self.queue_id.replace(Some(id));
-                    }
-                    obj.notify("queue-id");
-                    obj.notify("is-queued");
-                }
+                // "queue-id" => {
+                //     if let Ok(id) = value.get::<u32>() {
+                //         let _ = self.queue_id.replace(Some(id));
+                //     }
+                //     obj.notify("queue-id");
+                //     obj.notify("is-queued");
+                // }
                 "album" => {
-                    // Always set to title tag
                     if let Ok(album) = value.get::<&str>() {
                         let _ = self.album.replace(Some(String::from(album)));
                     }
                     obj.notify("album");
                 }
                 "cover-hash" => {
-                    // Always set to title tag
                     if let Ok(c) = value.get::<u64>() {
                         let _ = self.cover_hash.replace(Some(c));
                     }
@@ -198,15 +194,17 @@ impl Song {
             //.property("last_mod", song.last_mod.clone())
             .property("artist", song.artist.clone())
             .property("duration", song.duration.expect("Song must have duration").as_secs())
-            // .property("place", song.place.clone())
             // .property("album", None)
             // .property("cover_hash", None)
             //.property("release_date", None)
             .build();
 
+        if let Some(place) = song.place {
+            let _ = res.imp().queue_id.replace(Some(place.id.0));
+        }
+
         // Search tags vector for additional fields we can use.
         // Again we're using iter() here to avoid cloning everything.
-        println!("{:?}", &song.tags);
         for (tag, val) in song.tags.iter() {
             match tag.as_str() {
                 "Album" => {let _ = res.imp().album.replace(Some(val.clone()));},

@@ -141,7 +141,7 @@ impl SlamprustApplication {
     pub fn connect(&self) {
         // TODO: GUI & config file
         // TODO: move this to a submod for the settings dialogue instead maybe?
-        self.imp().sender.send_blocking(
+        let _ = self.imp().sender.send_blocking(
             MpdMessage::Connect(String::from("localhost"), String::from("6600"))
         );
     }

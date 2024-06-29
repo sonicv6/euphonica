@@ -102,6 +102,16 @@ impl Player {
     // Main update function. MPD's protocol has a single "status" commands
     // that returns everything at once. This update function will take what's
     // relevant and update the GObject properties accordingly.
+    fn get_current_queue_id(&self) -> Option<u32> {
+        if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            if song.is_queued() {
+                return Some(song.get_queue_id());
+            }
+            return None
+        }
+        None
+    }
+
     pub fn update_status(&self, status: &Status) {
         let old_state = self.imp().state.replace(status.state.clone());
         if old_state != status.state {
@@ -122,25 +132,41 @@ impl Player {
                 self.notify("position");
             }
         }
-    }
 
-    // Song update function, corresponding to the "currentsong" command.
-    pub fn update_current_song(&self, maybe_mpd_song: &Option<mpd::song::Song>) {
-        if let Some(mpd_song) = maybe_mpd_song {
-            let new_song = Song::from_mpd_song(&mpd_song);
-            let old_song = self.imp().current_song.replace(Some(new_song));
-            if
-                old_song.is_none() != self.imp().current_song.borrow().is_none() ||
-                old_song.as_ref().unwrap() != self.imp().current_song.borrow().as_ref().unwrap()
-            {
-                println!("New song: {:?}", self.imp().current_song.borrow().as_ref().unwrap());
-                self.notify("title");
-                self.notify("artist");
-                self.notify("duration");
+        // Queue always gets updated first before Player by idle.
+        // This allows us to be sure that the new current song is already in
+        // our local queue.
+        if let Some(new_queue_place) = status.song {
+            // There is now a playing song
+            let maybe_old_queue_id = self.get_current_queue_id();
+            if (maybe_old_queue_id.is_some() && maybe_old_queue_id.unwrap() != new_queue_place.id.0) || maybe_old_queue_id.is_none() {
+                println!("Current song changed to one with ID {}", new_queue_place.id.0);
+                // Either old state did not have a playing song or playing song has changed
+                // Search for new song in current queue
+                for maybe_song in self.queue().iter::<Song>() {
+                    let song = maybe_song.unwrap();
+                    let queue_id = song.get_queue_id();
+                    println!("Searching queue...found ID {}", queue_id);
+                    if song.get_queue_id() == new_queue_place.id.0 {
+                        println!("Found it in queue!");
+                        let _ = self.imp().current_song.replace(Some(song.clone()));
+                        self.notify("title");
+                        self.notify("artist");
+                        self.notify("album");
+                        self.notify("duration");
+                        break;
+                    }
+                }
             }
         }
-        else if self.imp().current_song.borrow().is_some() {
-            let _ = self.imp().current_song.replace(None);
+        else {
+            // No song is playing. Update state accordingly.
+            if let Some(_) = self.imp().current_song.replace(None) {
+                self.notify("title");
+                self.notify("artist");
+                self.notify("album");
+                self.notify("duration");
+            }
         }
     }
 

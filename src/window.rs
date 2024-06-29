@@ -273,7 +273,7 @@ impl SlamprustWindow {
                 }
                 // Skip poll if channel is full
                 if !sender.is_full() {
-                    let _ = sender.send_blocking(MpdMessage::Status(false));
+                    let _ = sender.send_blocking(MpdMessage::Status);
                 }
                 glib::timeout_future_seconds(1).await;
             }
