@@ -1,9 +1,16 @@
-use std::cell::{Cell, RefCell};
+use std::{
+    cell::{Cell, RefCell},
+    vec::Vec
+};
 extern crate mpd;
 use mpd::status::{State, Status};
 use crate::common::Song;
-use gtk::glib;
-use gtk::prelude::*;
+use gtk::{
+    glib,
+    gio,
+    prelude::*,
+    ListItem
+};
 use adw::subclass::prelude::*;
 use async_channel::{Sender};
 use crate::client::wrapper::{MpdMessage};
@@ -26,7 +33,8 @@ mod imp {
     pub struct Player {
         pub state: Cell<State>,
         pub position: Cell<f64>,
-        pub current_song: RefCell<Option<Song>>
+        pub current_song: RefCell<Option<Song>>,
+        pub queue: RefCell<gio::ListStore>,
     }
 
     #[glib::object_subclass]
@@ -35,10 +43,12 @@ mod imp {
         type Type = super::Player;
 
         fn new() -> Self {
+            let queue = RefCell::new(gio::ListStore::new::<Song>());
             Self {
                 state: Cell::new(State::Stop),
                 position: Cell::new(0.0),
-                current_song: RefCell::new(None)
+                current_song: RefCell::new(None),
+                queue
             }
         }
     }
@@ -101,7 +111,6 @@ impl Player {
 
         if let Some(new_position_dur) = status.elapsed {
             let new_position = new_position_dur.as_secs_f64();
-            println!("New position: {}", new_position);
             let old_position = self.imp().position.replace(new_position);
             if old_position != new_position {
                 self.notify("position");
@@ -133,6 +142,21 @@ impl Player {
         else if self.imp().current_song.borrow().is_some() {
             let _ = self.imp().current_song.replace(None);
         }
+    }
+
+    pub fn update_queue(&self, new_queue: &[mpd::song::Song]) {
+        // TODO: Might want to avoid dropping the whole thing
+        // TODO: Request album art for each
+        // TODO: add asynchronously?
+        let queue = self.imp().queue.borrow();
+        queue.remove_all();
+        // Convert to our internal Song GObjects then add to queue
+        let songs: Vec<Song> = new_queue
+                .iter()
+                .map(|mpd_song| Song::from_mpd_song(mpd_song))
+                .collect();
+        queue.extend_from_slice(&songs);
+        // Downstream widgets should now receive an item-changed signal.
     }
 
     // Here we try to define getters and setters in terms of the GObject
@@ -181,18 +205,13 @@ impl Player {
         }
     }
 
-    // pub fn current_song(&self) -> Option<Song> {
-    //     (*self.imp().current_song.borrow()).as_ref().cloned()
-    // }
-
     pub fn position(&self) -> f64 {
         self.imp().position.get()
     }
 
-    // pub fn set_position(&self, position: u64) {
-    //     self.imp().position.replace(position);
-    //     self.notify("position");
-    // }
+    pub fn queue(&self) -> gio::ListStore {
+        self.imp().queue.borrow().clone()
+    }
 }
 
 impl Default for Player {

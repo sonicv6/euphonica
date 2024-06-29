@@ -21,6 +21,7 @@ use std::{
 
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
+#[derive(Debug)]
 pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
@@ -30,6 +31,7 @@ pub enum MpdMessage {
 	CurrentSong,
 	AlbumArt(String), // Contains URI of song WITHOUT filename
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
+	Queue, // Get songs in current queue
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -170,6 +172,11 @@ impl MpdWrapper {
         }
     }
 
+    fn init_state(self: Rc<Self>) {
+        self.clone().get_status(true);
+        self.clone().get_current_queue();
+    }
+
     async fn connect(self: Rc<Self>, host: &str, port: &str) {
         // Close current clients
         if let Some(mut main_client) = self.main_client.borrow_mut().take() {
@@ -190,7 +197,7 @@ impl MpdWrapper {
         self.stop_flag.store(false, Ordering::Relaxed);
         if let Ok(c) = mpd::Client::connect(format!("{}:{}", host, port)) {
             self.main_client.replace(Some(c));
-            self.clone().get_status(true);
+            self.clone().init_state();
             self.start_bg_thread(host, port);
         }
     }
@@ -229,6 +236,14 @@ impl MpdWrapper {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.rewind(position);
             // If successful, should trigger an idle message for Player
+        }
+    }
+
+    pub fn get_current_queue(&self) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if let Ok(queue) = client.queue() {
+                self.player.update_queue(&queue);
+            }
         }
     }
 }

@@ -46,6 +46,19 @@
 				        </style>
 				      </object>
 						</child>
+						<!-- The playlist -->
+						<child>
+				      <object class="GtkScrolledWindow">
+				        <property name="hscrollbar-policy">never</property>
+				        <property name="min-content-height">360</property>
+				        <property name="vexpand">false</property>
+				        <child>
+				          <object class="GtkListView" id="queue">
+				            <property name="valign">start</property>
+				          </object>
+				        </child>
+				      </object>
+				    </child>
 					</object>
         </property>
       </object>

@@ -11,6 +11,29 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
+// fn parse_date(datestr: &str) -> Option<NaiveDate> {
+//     let mut comps = datestr.split("-");
+//     if let Some(year_str) = comps.next() {
+//         if let Ok(year) = year_str.parse::<i32>() {
+//             if let Some(month_str) = comps.next() {
+//                 if let Ok(month) = month_str.parse::<u32>() {
+//                     if let Some(day_str) = comps.next() {
+//                         if let Ok(day) = day_str.parse::<u32>() {
+//                             return NaiveDate::from_ymd_opt(year, month, day);
+//                         }
+//                         return NaiveDate::from_ymd_opt(year, month, 1);
+//                     }
+//                     return NaiveDate::from_ymd_opt(year, month, 1);
+//                 }
+//                 return NaiveDate::from_ymd_opt(year, 1, 1);
+//             }
+//             return NaiveDate::from_ymd_opt(year, 1, 1);
+//         }
+//         return None;
+//     }
+//     None
+// }
+
 // We define our own Song struct for more convenient handling, especially with
 // regards to optional fields and tags such as albums.
 
@@ -183,9 +206,10 @@ impl Song {
 
         // Search tags vector for additional fields we can use.
         // Again we're using iter() here to avoid cloning everything.
+        println!("{:?}", &song.tags);
         for (tag, val) in song.tags.iter() {
             match tag.as_str() {
-                "album" => {let _ = res.imp().album.replace(Some(val.clone()));},
+                "Album" => {let _ = res.imp().album.replace(Some(val.clone()));},
                 // "date" => res.imp().release_date.replace(Some(val.clone())),
                 _ => {}
             }

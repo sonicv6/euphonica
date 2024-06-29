@@ -18,15 +18,26 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cell::{Cell, RefCell};
-use gtk::prelude::*;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc
+};
 use adw::subclass::prelude::*;
-use gtk::{gio, glib};
+use gtk::{
+    prelude::*,
+    gio,
+    glib,
+    NoSelection,
+    SignalListItemFactory,
+    ListItem
+};
 use glib::signal::SignalHandlerId;
 use glib::clone;
 use crate::{
     client::wrapper::MpdMessage,
-    application::SlamprustApplication
+    application::SlamprustApplication,
+    player::QueueRow,
+    common::Song
 };
 mod imp {
     use super::*;
@@ -41,6 +52,8 @@ mod imp {
         pub label: TemplateChild<gtk::Label>,
         #[template_child]
         pub seekbar: TemplateChild<gtk::Scale>,
+        #[template_child]
+        pub queue: TemplateChild<gtk::ListView>,
 
         // RefCells to notify IDs so we can unbind later
         pub notify_position_id: RefCell<Option<SignalHandlerId>>,
@@ -74,6 +87,7 @@ mod imp {
                 header_bar: TemplateChild::default(),
                 label: TemplateChild::default(),
                 seekbar: TemplateChild::default(),
+                queue: TemplateChild::default(),
                 notify_position_id: RefCell::new(None),
                 notify_duration_id: RefCell::new(None),
                 notify_playing_id: RefCell::new(None),
@@ -104,6 +118,7 @@ impl SlamprustWindow {
             .property("application", application)
             .build();
 
+        win.setup_queue();
         win.setup_seekbar();
 		win.bind_state();
         win.setup_signals();
@@ -115,6 +130,65 @@ impl SlamprustWindow {
             .unwrap()
             .downcast::<crate::application::SlamprustApplication>()
             .unwrap()
+    }
+
+    fn get_queue(&self) -> gio::ListStore {
+        self.downcast_application().get_player().queue()
+    }
+
+    fn setup_queue(&self) {
+        // Set selection mode
+        let sel_model = NoSelection::new(Some(self.get_queue()));
+        self.imp().queue.set_model(Some(&sel_model));
+
+        // Set up factory
+        let factory = SignalListItemFactory::new();
+
+        // Create an empty `QueueRow` during setup
+        factory.connect_setup(move |_, list_item| {
+            let queue_row = QueueRow::new();
+            list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .set_child(Some(&queue_row));
+        });
+
+        // Tell factory how to bind `QueueRow` to one of our Song GObjects
+        factory.connect_bind(move |_, list_item| {
+            // Get `Song` from `ListItem` (that is, the data side)
+            let item: Song = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .item()
+                .and_downcast::<Song>()
+                .expect("The item has to be a common::Song.");
+
+            // Get `QueueRow` from `ListItem` (the UI widget)
+            let child: QueueRow = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .child()
+                .and_downcast::<QueueRow>()
+                .expect("The child has to be a `QueueRow`.");
+
+            child.bind(&item);
+        });
+
+        // When row goes out of sight, unbind from item to allow reuse with another
+        factory.connect_unbind(move |_, list_item| {
+            // Get `QueueRow` from `ListItem` (the UI widget)
+            let child: QueueRow = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .child()
+                .and_downcast::<QueueRow>()
+                .expect("The child has to be a `QueueRow`.");
+            // No need to get item again - child already has bindings to it.
+            child.unbind();
+        });
+
+        // Set the factory of the list view
+        self.imp().queue.set_factory(Some(&factory));
     }
 
     fn setup_seekbar(&self) {
