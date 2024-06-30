@@ -40,11 +40,15 @@ impl AlbumArtCache {
         }
     }
 
-    pub fn get_path_for(&self, folder_uri: &str) -> PathBuf {
+    pub fn get_path_for(&self, folder_uri: &str) -> (PathBuf, PathBuf) {
+        // Returns both a full-resolution path and a thumbnail path.
         // Do not include filename in URI.
+        let hashed = murmur2::hash64(folder_uri).to_string();
         let mut path = self.cache_path.clone();
-        path.push(murmur2::hash64(folder_uri).to_string() + ".png");
-        path
+        let mut thumb_path = path.clone();
+        path.push(hashed.clone() + ".png");
+        thumb_path.push(hashed + "_thumb.png");
+        (path, thumb_path)
     }
 
     // pub fn download_for(&self, folder_uri: &PathBuf) {

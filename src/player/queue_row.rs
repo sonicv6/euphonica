@@ -7,14 +7,17 @@ use gtk::{
     prelude::*,
     subclass::prelude::*,
     CompositeTemplate,
-    Label
+    Label,
+    Image
 };
-use glib::{Object, Binding};
+use glib::{
+    Object,
+    Binding,
+    clone,
+    signal::SignalHandlerId
+};
 
-use crate::{
-    common::Song,
-    player::Player
-};
+use crate::common::Song;
 
 mod imp {
     use super::*;
@@ -23,11 +26,14 @@ mod imp {
     #[template(resource = "/org/slamprust/Slamprust/gtk/queue-row.ui")]
     pub struct QueueRow {
         #[template_child]
+        pub thumbnail: TemplateChild<Image>,
+        #[template_child]
         pub song_name: TemplateChild<Label>,
         #[template_child]
         pub playing_indicator: TemplateChild<Label>,
         // Vector holding the bindings to properties of the Song GObject
         pub bindings: RefCell<Vec<Binding>>,
+        pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
     }
 
     // The central trait for subclassing a GObject
@@ -77,9 +83,25 @@ impl QueueRow {
 
     pub fn bind(&self, song: &Song) {
         // Get state
+        let thumbnail_image = self.imp().thumbnail.get();
         let song_name_label = self.imp().song_name.get();
         let playing_label = self.imp().playing_indicator.get();
         let mut bindings = self.imp().bindings.borrow_mut();
+
+        // let thumbnail_path_binding = song
+        //     .bind_property("thumbnail-path", &thumbnail_image, "file")
+        //     .sync_create()
+        //     .build();
+        // bindings.push(thumbnail_path_binding);
+
+        let thumbnail_path_binding = song
+            .connect_notify_local(
+                Some("thumbnail-path"),
+                move |this_song, _| {
+                    thumbnail_image.set_from_file(this_song.get_cover_path(true));
+                },
+            );
+        self.imp().thumbnail_signal_id.replace(Some(thumbnail_path_binding));
 
         let song_name_binding = song
             .bind_property("name", &song_name_label, "label")
@@ -96,10 +118,13 @@ impl QueueRow {
         bindings.push(song_is_playing_binding);
     }
 
-    pub fn unbind(&self) {
+    pub fn unbind(&self, song: &Song) {
         // Unbind all stored bindings
         for binding in self.imp().bindings.borrow_mut().drain(..) {
             binding.unbind();
+        }
+        if let Some(id) = self.imp().thumbnail_signal_id.take() {
+            song.disconnect(id);
         }
     }
 }

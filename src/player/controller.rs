@@ -177,7 +177,6 @@ impl Player {
                 // Search for new song in current queue
                 for maybe_song in self.queue().iter::<Song>() {
                     let song = maybe_song.unwrap();
-                    let queue_id = song.get_queue_id();
                     if song.get_queue_id() == new_queue_place.id.0 {
                         let _ = self.imp().current_song.replace(Some(song.clone()));
                         self.notify("title");
@@ -207,7 +206,6 @@ impl Player {
     }
 
     pub fn update_queue(&self, new_queue: &[mpd::song::Song]) {
-        // TODO: Request album art for each
         // TODO: add asynchronously?
         let queue = self.imp().queue.borrow();
         queue.remove_all();
@@ -218,6 +216,18 @@ impl Player {
                 .collect();
         queue.extend_from_slice(&songs);
         // Downstream widgets should now receive an item-changed signal.
+    }
+
+    pub fn update_album_art(&self, folder_uri: &str, path: &PathBuf, thumbnail_path: &PathBuf) {
+        // Iterate through the queue to see if we can load album art for any
+        for item in self.imp().queue.borrow().iter::<Song>() {
+            if let Ok(song) = item {
+                if !song.has_cover() && song.get_uri() == folder_uri {
+                    song.set_cover_path(path, false);
+                    song.set_cover_path(thumbnail_path, true);
+                }
+            }
+        }
     }
 
     // Here we try to define getters and setters in terms of the GObject
@@ -232,9 +242,7 @@ impl Player {
 
     pub fn artist(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            if let Some(artist) = song.get_artist() {
-                return Some(artist.clone());
-            }
+            return Some(song.get_artist());
         }
         None
     }

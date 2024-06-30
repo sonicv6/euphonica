@@ -62,17 +62,19 @@ pub enum MpdMessage {
 	Toggle, // The "pause" command but renamed since it's a misnomer
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
-	// CurrentSong,
-	AlbumArt(String), // Contains URI of song WITHOUT filename
-	Idle(Vec<Subsystem>), // Will only be sent from the child thread
+	AlbumArt(String),
 	Queue, // Get songs in current queue
+
+	// Reserved for child thread
+	Idle(Vec<Subsystem>), // Will only be sent from the child thread
+	AlbumArtDownloaded(String, PathBuf, PathBuf) // Notify which album art was downloaded and where it is
 }
 
 // Work requests for sending to the child thread.
 // Completed results will be reported back via MpdMessage.
 #[derive(Debug)]
 enum BackgroundTask {
-    DownloadAlbumArt(String, PathBuf)  // With folder-level URL for querying and cache path for writing to.
+    DownloadAlbumArt(String, PathBuf, PathBuf)  // With folder-level URL for querying and cache paths to write to (full-res & thumb)
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -178,7 +180,7 @@ impl MpdWrapper {
                         if let Ok(task) = bg_receiver.recv_blocking() {
                             println!("Got task: {:?}", task);
                             match task {
-                                BackgroundTask::DownloadAlbumArt(uri, cache_path) => {
+                                BackgroundTask::DownloadAlbumArt(uri, cache_path, thumb_cache_path) => {
                                     // Check if already cached. This usually happens when
                                     // multiple songs using the same un-cached album art
                                     // were placed into the work queue.
@@ -187,8 +189,10 @@ impl MpdWrapper {
                                     }
                                     else if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
                                         if let Some(dyn_img) = read_image_from_bytes(bytes) {
-                                            let _ = dyn_img.save(cache_path);
+                                            let _ = dyn_img.save(&cache_path);
+                                            let  _= dyn_img.thumbnail(128, 128).save(&thumb_cache_path);
                                         }
+                                        let _ = sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri, cache_path, thumb_cache_path));
                                     }
                                 }
                                 _ => unimplemented!()
@@ -246,6 +250,7 @@ impl MpdWrapper {
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::AlbumArt(folder_uri) => self.get_album_art(&folder_uri),
+            MpdMessage::AlbumArtDownloaded(folder_uri, path, thumb_path) => self.notify_album_art(&folder_uri, &path, &thumb_path),
             _ => {}
         }
         glib::ControlFlow::Continue
@@ -335,19 +340,33 @@ impl MpdWrapper {
 
     pub fn get_album_art(&self, uri: &String) {
         let folder_uri = strip_filename_linux(uri);
-        let cache_path = self.albumart.get_path_for(&folder_uri);
+        let (cache_path, thumb_cache_path) = self.albumart.get_path_for(&folder_uri);
         // Check if we have a cached version
-        if !cache_path.exists() {
+        if !cache_path.exists() || !thumb_cache_path.exists() {
             // Else download from server
             // Download from server
             println!("Fetching album art for path: {:?}", folder_uri);
             if let Some(sender) = self.bg_sender.borrow().as_ref() {
-                let _ = sender.send_blocking(BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), cache_path));
+                let _ = sender.send_blocking(
+                    BackgroundTask::DownloadAlbumArt(
+                        folder_uri.to_owned(),
+                        cache_path.clone(),
+                        thumb_cache_path.clone()
+                    )
+                );
             }
             if let Some(client) = self.main_client.borrow_mut().as_mut() {
                 let _ = client.sendmessage(self.bg_channel.clone(), "WAKE");
             }
         }
+        else {
+            // Notify all controllers of path. Whether this album art is still needed is up to the controllers.
+            self.notify_album_art(uri, &cache_path, &thumb_cache_path);
+        }
+    }
+
+    pub fn notify_album_art(&self, folder_uri: &str, path: &PathBuf, thumbnail_path: &PathBuf) {
+        self.player.update_album_art(folder_uri, path, thumbnail_path);
     }
 }
 

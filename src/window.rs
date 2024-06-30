@@ -188,8 +188,13 @@ impl SlamprustWindow {
                 .child()
                 .and_downcast::<QueueRow>()
                 .expect("The child has to be a `QueueRow`.");
-            // No need to get item again - child already has bindings to it.
-            child.unbind();
+            let item: Song = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .item()
+                .and_downcast::<Song>()
+                .expect("The item has to be a common::Song.");
+            child.unbind(&item);
         });
 
         // Set the factory of the list view

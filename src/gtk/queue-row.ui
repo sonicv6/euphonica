@@ -2,6 +2,12 @@
 <interface>
   <template class="SlamprustQueueRow" parent="GtkBox">
 		<child>
+      <object class="GtkImage" id="thumbnail">
+        <property name="icon-size">2</property>
+        <property name="resource">/org/slamprust/Slamprust/albumart-placeholder.png</property>
+      </object>
+    </child>
+		<child>
       <object class="GtkLabel" id="playing_indicator">
 				<property name="label">⏵︎</property>
 				<property name="visible">false</property>

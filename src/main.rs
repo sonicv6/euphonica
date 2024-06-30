@@ -37,7 +37,7 @@ use gdk::Display;
 fn load_css() {
     // Load the CSS file and add it to the provider
     let provider = CssProvider::new();
-    provider.load_from_path("/org/slamprust/Slamprust/gtk/style.css");
+    provider.load_from_resource("/org/slamprust/Slamprust/gtk/style.css");
 
     // Add the provider to the default screen
     gtk::style_context_add_provider_for_display(

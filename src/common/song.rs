@@ -2,7 +2,7 @@ extern crate mpd;
 use core::time::Duration;
 use time::Date;
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     cell::{Cell, RefCell}
 };
 use chrono::NaiveDate;
@@ -61,7 +61,8 @@ mod imp {
         pub album: RefCell<Option<String>>,
         // TODO: add albumartist & albumsort
         // pub release_date: RefCell<Option<u64>>,
-        pub cover_hash: Cell<Option<u64>>,
+        pub thumbnail_path: RefCell<Option<String>>,
+        pub cover_path: RefCell<Option<String>>,
         // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
         pub is_playing: Cell<bool>
     }
@@ -79,7 +80,8 @@ mod imp {
                 duration: Cell::new(0),
                 queue_id: Cell::new(None),
                 album: RefCell::new(None),
-                cover_hash: Cell::new(None),
+                cover_path: RefCell::new(None),
+                thumbnail_path: RefCell::new(None),
                 is_playing: Cell::new(false)
             }
         }
@@ -98,8 +100,8 @@ mod imp {
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
                     ParamSpecString::builder("album").build(),
                     // ParamSpecString::builder("release_date").build(),
-                    ParamSpecUInt64::builder("cover-hash").build(),
-                    ParamSpecBoolean::builder("has-cover").build(),
+                    ParamSpecString::builder("cover-path").build(),
+                    ParamSpecString::builder("thumbnail-path").build(),
                     ParamSpecBoolean::builder("is-playing").build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
                     //     .read_only()
@@ -123,8 +125,8 @@ mod imp {
                 "is-queued" => obj.is_queued().to_value(),
                 "album" => obj.get_album().to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
-                "cover-hash" => obj.get_cover_hash().to_value(),
-                "has-cover" => obj.has_cover().to_value(),
+                "cover-path" => obj.get_cover_path(false).to_value(),
+                "thumbnail-path" => obj.get_cover_path(true).to_value(),
                 "is-playing" => obj.is_playing().to_value(),
                 _ => unimplemented!(),
             }
@@ -135,7 +137,7 @@ mod imp {
             match pspec.name() {
                 "uri" => {
                     if let Ok(uri) = value.get::<&str>() {
-                        let _ = self.uri.replace(String::from(uri));
+                        let _ = self.uri.replace(uri.to_owned());
                     }
                 }
                 "duration" => {
@@ -146,13 +148,13 @@ mod imp {
                 "name" => {
                     // Always set to title tag
                     if let Ok(name) = value.get::<&str>() {
-                        let _ = self.title.replace(Some(String::from(name)));
+                        let _ = self.title.replace(Some(name.to_owned()));
                     }
                     obj.notify("name");
                 }
                 "artist" => {
                     if let Ok(a) = value.get::<&str>() {
-                        let _ = self.artist.replace(Some(String::from(a)));
+                        let _ = self.artist.replace(Some(a.to_owned()));
                     }
                     obj.notify("artist");
                 }
@@ -165,16 +167,21 @@ mod imp {
                 // }
                 "album" => {
                     if let Ok(album) = value.get::<&str>() {
-                        let _ = self.album.replace(Some(String::from(album)));
+                        let _ = self.album.replace(Some(album.to_owned()));
                     }
                     obj.notify("album");
                 }
-                "cover-hash" => {
-                    if let Ok(c) = value.get::<u64>() {
-                        let _ = self.cover_hash.replace(Some(c));
+                "cover-path" => {
+                    if let Ok(c) = value.get::<&str>() {
+                        let _ = self.cover_path.replace(Some(c.to_owned()));
                     }
-                    obj.notify("cover-hash");
-                    obj.notify("has-cover");
+                    obj.notify("cover-path");
+                },
+                "thumbnail-path" => {
+                    if let Ok(c) = value.get::<&str>() {
+                        let _ = self.thumbnail_path.replace(Some(c.to_owned()));
+                    }
+                    obj.notify("thumbnail-path");
                 },
                 "is-playing" => {
                     if let Ok(b) = value.get::<bool>() {
@@ -248,8 +255,11 @@ impl Song {
         self.imp().duration.get()
     }
 
-    pub fn get_artist(&self) -> Option<String> {
-        self.imp().artist.borrow().clone()
+    pub fn get_artist(&self) -> String {
+        if let Some(artist) = self.imp().artist.borrow().clone() {
+            return artist;
+        }
+        String::from("Unknown artist")
     }
 
     pub fn get_queue_id(&self) -> u32 {
@@ -263,22 +273,45 @@ impl Song {
         self.imp().queue_id.get().is_some()
     }
 
-    pub fn get_album<'a>(&self) -> String {
+    pub fn get_album(&self) -> String {
         if let Some(album) = self.imp().album.borrow().clone() {
             return album;
         }
         String::from("Unknown album")
     }
 
-    pub fn get_cover_hash<'a>(&self) -> u64 {
-        if let Some(h) = self.imp().cover_hash.get() {
-            return h;
+    pub fn get_cover_path(&self, thumbnail: bool) -> Option<String> {
+        if thumbnail {
+            return self.imp().thumbnail_path.borrow().clone();
         }
-        0
+        self.imp().cover_path.borrow().clone()
+    }
+
+    pub fn set_cover_path(&self, path: &PathBuf, thumbnail: bool) {
+        if thumbnail {
+            let _ = self.imp()
+                .thumbnail_path
+                .replace(Some(
+                    path.to_str()
+                    .expect("Invalid thumbnail path!")
+                    .to_owned()
+            ));
+            self.notify("thumbnail-path");
+        }
+        else {
+            let _ = self.imp()
+                .cover_path
+                .replace(Some(
+                    path.to_str()
+                    .expect("Invalid cover path!")
+                    .to_owned()
+            ));
+            self.notify("cover-path");
+        }
     }
 
     pub fn has_cover(&self) -> bool {
-        self.imp().cover_hash.get().is_some()
+        self.imp().thumbnail_path.borrow().is_some() && self.imp().cover_path.borrow().is_some()
     }
 
     pub fn is_playing(&self) -> bool {
