@@ -1,4 +1,5 @@
-extern crate mpd;
+extern crate image;
+use image::io::Reader as ImageReader;
 use uuid::Uuid;
 use crate::player::Player;
 use futures::executor;
@@ -9,18 +10,48 @@ use mpd::{
     Channel,
     error::Error
 };
-use super::albumart::AlbumArtCache;
+use super::albumart::{strip_filename_linux, AlbumArtCache};
 use std::sync::atomic::{AtomicBool, Ordering};
 use async_channel::{Sender, Receiver};
 use glib::{clone, SourceId, MainContext};
 use gtk::{glib, gio};
 
 use std::{
+    io::Cursor,
     cell::RefCell,
     rc::Rc,
     sync::{Arc, Mutex},
     path::PathBuf
 };
+
+pub fn get_dummy_song(uri: &str) -> mpd::Song {
+    // Many of mpd's methods require an impl of trait ToSongPath, which
+    // - Is not made public,
+    // - Is only implemented by their Song struct, and
+    // - Is only for getting the URI anyway.
+    mpd::Song {
+        file: uri.to_owned(),
+        name: None,
+        title: None,
+        last_mod: None,
+        artist: None,
+        duration: None,
+        place: None,
+        range: None,
+        tags: Vec::new()
+    }
+}
+
+pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
+    if let Ok(reader) = ImageReader::new(Cursor::new(bytes)).with_guessed_format() {
+        if let Ok(dyn_img) = reader.decode() {
+            return Some(dyn_img);
+        }
+        return None;
+    }
+    None
+
+}
 
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
@@ -32,7 +63,7 @@ pub enum MpdMessage {
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	// CurrentSong,
-	AlbumArt(PathBuf), // Contains URI of song WITHOUT filename
+	AlbumArt(String), // Contains URI of song WITHOUT filename
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
 	Queue, // Get songs in current queue
 }
@@ -41,7 +72,7 @@ pub enum MpdMessage {
 // Completed results will be reported back via MpdMessage.
 #[derive(Debug)]
 enum BackgroundTask {
-    DownloadAlbumArt(PathBuf, PathBuf)  // With folder-level URL for querying and cache path for writing to.
+    DownloadAlbumArt(String, PathBuf)  // With folder-level URL for querying and cache path for writing to.
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -83,7 +114,6 @@ enum BackgroundTask {
 pub struct MpdWrapper {
     // References to controllers
     player: Rc<Player>,
-
     // For receiving user commands from UI or child thread
     receiver: RefCell<Option<Receiver<MpdMessage>>>,
     // Corresponding sender, for cloning into child thread.
@@ -147,6 +177,22 @@ impl MpdWrapper {
                         // TODO: Take one task for each loop
                         if let Ok(task) = bg_receiver.recv_blocking() {
                             println!("Got task: {:?}", task);
+                            match task {
+                                BackgroundTask::DownloadAlbumArt(uri, cache_path) => {
+                                    // Check if already cached. This usually happens when
+                                    // multiple songs using the same un-cached album art
+                                    // were placed into the work queue.
+                                    if cache_path.exists() {
+                                        println!("{:?} already cached, won't download again", uri);
+                                    }
+                                    else if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
+                                        if let Some(dyn_img) = read_image_from_bytes(bytes) {
+                                            let _ = dyn_img.save(cache_path);
+                                        }
+                                    }
+                                }
+                                _ => unimplemented!()
+                            }
                         }
                     }
                     else {
@@ -199,7 +245,7 @@ impl MpdWrapper {
             MpdMessage::Status => self.get_status(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
-            MpdMessage::AlbumArt(folder_uri) => self.get_album_art(folder_uri),
+            MpdMessage::AlbumArt(folder_uri) => self.get_album_art(&folder_uri),
             _ => {}
         }
         glib::ControlFlow::Continue
@@ -287,15 +333,16 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_album_art(&self, folder_uri: PathBuf) {
+    pub fn get_album_art(&self, uri: &String) {
+        let folder_uri = strip_filename_linux(uri);
+        let cache_path = self.albumart.get_path_for(&folder_uri);
         // Check if we have a cached version
-        if let Some(cache_path) = self.albumart.get_path_for(&folder_uri) {
-            // TODO
+        if !cache_path.exists() {
             // Else download from server
             // Download from server
             println!("Fetching album art for path: {:?}", folder_uri);
             if let Some(sender) = self.bg_sender.borrow().as_ref() {
-                sender.send_blocking(BackgroundTask::DownloadAlbumArt(folder_uri.clone(), cache_path));
+                let _ = sender.send_blocking(BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), cache_path));
             }
             if let Some(client) = self.main_client.borrow_mut().as_mut() {
                 let _ = client.sendmessage(self.bg_channel.clone(), "WAKE");
@@ -308,8 +355,9 @@ impl Drop for MpdWrapper {
     fn drop(&mut self) {
         if let Some(mut main_client) = self.main_client.borrow_mut().take() {
             println!("App closed. Closing clients...");
-            // First, set stop_flag to true
-            self.stop_flag.store(true, Ordering::Relaxed);
+            // First, send stop message
+            let _ = main_client.sendmessage(self.bg_channel.clone(), "STOP");
+            // self.stop_flag.store(true, Ordering::Relaxed);
             // Child thread might have stopped by now if there are idle messages,
             // but that's not guaranteed.
             // Now close the main client, which will trigger an idle message.

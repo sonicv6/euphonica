@@ -165,7 +165,7 @@ impl SlamprustWindow {
 
             if !item.has_cover() {
                 // Request album art. Will be updated later when ready.
-                let _ = sender.send_blocking(MpdMessage::AlbumArt(PathBuf::from(item.get_uri())));
+                let _ = sender.send_blocking(MpdMessage::AlbumArt(item.get_uri()));
             }
 
             // Get `QueueRow` from `ListItem` (the UI widget)

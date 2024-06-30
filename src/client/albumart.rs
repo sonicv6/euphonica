@@ -21,6 +21,14 @@ pub struct AlbumArtCache {
     cache_path: PathBuf
 }
 
+pub fn strip_filename_linux(path: &String) -> &str {
+    // MPD insists on having a trailing slash so here we go
+    if let Some(last_slash) = path.rfind("/") {
+        return &path[..last_slash + 1];
+    }
+    &path[..]
+}
+
 impl AlbumArtCache {
     pub fn new(app_cache_path: &PathBuf) -> Self {
         let mut cache_path = app_cache_path.clone();
@@ -32,14 +40,11 @@ impl AlbumArtCache {
         }
     }
 
-    pub fn get_path_for(&self, folder_uri: &PathBuf) -> Option<PathBuf> {
+    pub fn get_path_for(&self, folder_uri: &str) -> PathBuf {
         // Do not include filename in URI.
-        if let Some(s) = folder_uri.to_str() {
-            let mut path = self.cache_path.clone();
-            path.push(murmur2::hash64(s).to_string() + ".png");
-            return Some(path);
-        }
-        None
+        let mut path = self.cache_path.clone();
+        path.push(murmur2::hash64(folder_uri).to_string() + ".png");
+        path
     }
 
     // pub fn download_for(&self, folder_uri: &PathBuf) {
