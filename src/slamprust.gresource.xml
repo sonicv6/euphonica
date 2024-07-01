@@ -4,6 +4,9 @@
     <file preprocess="xml-stripblanks">window.ui</file>
     <file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
+    <file preprocess="xml-stripblanks">gtk/icons/skip-backward-large-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">gtk/icons/play-large-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">gtk/icons/skip-forward-large-symbolic.svg</file>
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">resources/albumart-placeholder.png</file>
   </gresource>

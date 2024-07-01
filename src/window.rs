@@ -51,6 +51,12 @@ mod imp {
         #[template_child]
         pub label: TemplateChild<gtk::Label>,
         #[template_child]
+        pub play_pause_btn: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub prev_btn: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub next_btn: TemplateChild<gtk::Button>,
+        #[template_child]
         pub seekbar: TemplateChild<gtk::Scale>,
         #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
@@ -86,6 +92,9 @@ mod imp {
             Self {
                 header_bar: TemplateChild::default(),
                 label: TemplateChild::default(),
+                play_pause_btn: TemplateChild::default(),
+                prev_btn: TemplateChild::default(),
+                next_btn: TemplateChild::default(),
                 seekbar: TemplateChild::default(),
                 queue: TemplateChild::default(),
                 notify_position_id: RefCell::new(None),
@@ -120,6 +129,9 @@ impl SlamprustWindow {
 
         win.setup_queue();
         win.setup_seekbar();
+        win.toggle_playback();
+        win.prev_song();
+        win.next_song();
 		win.bind_state();
         win.setup_signals();
         win
@@ -237,12 +249,42 @@ impl SlamprustWindow {
         }));
     }
 
+    fn toggle_playback(&self) {
+        let sender = self.downcast_application().get_sender();
+        self.imp().play_pause_btn.connect_clicked(clone!(@weak self as this => move |_| {
+                let _ = sender.send_blocking(MpdMessage::Toggle);
+        }));
+
+    }
+
+    fn prev_song(&self) {
+        let sender = self.downcast_application().get_sender();
+        self.imp().prev_btn.connect_clicked(clone!(@weak self as this => move |_| {
+                let _ = sender.send_blocking(MpdMessage::Prev);
+        }));
+
+    }
+    fn next_song(&self) {
+        let sender = self.downcast_application().get_sender();
+        self.imp().next_btn.connect_clicked(clone!(@weak self as this => move |_| {
+                let _ = sender.send_blocking(MpdMessage::Next);
+        }));
+
+    }
 	fn update_label(&self) {
 	    let player = self.downcast_application().get_player();
 	    match player.playback_state() {
 	        PlaybackState::Playing => {self.imp().label.set_label("Playing")},
 	        PlaybackState::Paused => {self.imp().label.set_label("Paused")},
 	        PlaybackState::Stopped => {self.imp().label.set_label("Stopped")}
+	    }
+	}
+	fn update_playback(&self) {
+	    let player = self.downcast_application().get_player();
+	    match player.playback_state() {
+	        PlaybackState::Playing => {self.imp().play_pause_btn.set_label("Pause")},
+	        PlaybackState::Paused => {self.imp().play_pause_btn.set_label("Play")},
+	        PlaybackState::Stopped => {self.imp().play_pause_btn.set_label("")}
 	    }
 	}
 
@@ -295,10 +337,12 @@ impl SlamprustWindow {
 
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
         self.update_label();
+        self.update_playback();
         let notify_playback_state_id = player.connect_notify_local(
             Some("playback-state"),
             clone!(@weak self as win => move |_, _| {
                 win.update_label();
+                win.update_playback();
                 win.maybe_start_polling();
             }),
         );

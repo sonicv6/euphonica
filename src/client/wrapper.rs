@@ -60,6 +60,8 @@ pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
 	Toggle, // The "pause" command but renamed since it's a misnomer
+    Prev,
+    Next,
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	AlbumArt(String),
@@ -247,6 +249,9 @@ impl MpdWrapper {
         match request {
             MpdMessage::Connect(host, port) => self.connect(&host, &port).await,
             MpdMessage::Status => self.get_status(),
+            MpdMessage::Toggle => self.set_playback(),
+            MpdMessage::Prev => self.set_prev(),
+            MpdMessage::Next => self.set_next(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::AlbumArt(folder_uri) => self.get_album_art(&folder_uri),
@@ -322,7 +327,45 @@ impl MpdWrapper {
             // TODO: handle error
         }
     }
-
+    pub fn set_playback(self: Rc<Self>) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: Make it stop/play base on toggle
+            if let _ = client.toggle_pause() {
+                // Let each state update their respective properties
+                
+            }
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
+    pub fn set_prev(self: Rc<Self>) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: Make it stop/play base on toggle
+            if let _ = client.prev() {
+                // Let each state update their respective properties
+                
+            }
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
+    pub fn set_next(self: Rc<Self>) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: Make it stop/play base on toggle
+            if let _ = client.next() {
+                // Let each state update their respective properties
+                
+            }
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
     pub fn seek_current_song(&self, position: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.rewind(position);
