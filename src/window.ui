@@ -22,6 +22,12 @@
 											<object class="AdwToolbarView">
 												<child type="top">
 													<object class="AdwHeaderBar" id="main_header_bar">
+														<property name="title-widget">
+															<object class="AdwViewSwitcher" id="browsing_mode_switcher">
+																<property name="stack">stack</property>
+																<property name="policy">wide</property>
+															</object>
+														</property>
 														<child type="end">
 															<object class="GtkMenuButton">
 																<property name="primary">True</property>
@@ -33,15 +39,38 @@
 													</object>
 												</child>
 												<property name="content">
-													<object class="GtkButton">
-														<property name="label" translatable="yes">Open album</property>
-														<property name="halign">center</property>
-														<property name="valign">center</property>
-														<property name="action-name">navigation.push</property>
-														<property name="action-target">'nav_pagetwo'</property>
-														<style>
-														  <class name="pill"/>
-														 </style>
+													<object class="AdwViewStack" id="stack">
+														<child>
+															<object class="AdwViewStackPage">
+																<property name="name">albums</property>
+																<property name="title" translatable="true">Albums</property>
+                								<property name="icon-name">library-music-symbolic</property>
+																<property name="child">
+																	<object class="GtkButton">
+																		<property name="label" translatable="yes">Open album</property>
+																		<property name="halign">center</property>
+																		<property name="valign">center</property>
+																		<property name="action-name">navigation.push</property>
+																		<property name="action-target">'sub_page'</property>
+																		<style>
+																			<class name="pill"/>
+																		 </style>
+																	</object>
+																</property>
+															</object>
+														</child>
+														<child>
+															<object class="AdwViewStackPage">
+																<property name="name">artists</property>
+																<property name="title" translatable="true">Artists</property>
+                								<property name="icon-name">music-artist-symbolic</property>
+																<property name="child">
+																	<object class="AdwStatusPage">
+																		<property name="title">Welcome!</property>
+																	</object>
+																</property>
+															</object>
+														</child>
 													</object>
 												</property>
 											</object>
@@ -49,7 +78,8 @@
                   </object>
                 </child>
                 <child>
-                  <object class="AdwNavigationPage" id="nav_pagetwo">
+                  <object class="AdwNavigationPage" id="sub_page">
+										<property name="name">sub_page</property>
                     <property name="title" translatable="true">The Dark Side of the Moon</property>
                     <child>
                       <object class="AdwToolbarView">
