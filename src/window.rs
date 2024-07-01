@@ -46,8 +46,10 @@ mod imp {
     #[template(resource = "/org/slamprust/Slamprust/window.ui")]
     pub struct SlamprustWindow {
         // Template widgets
-        #[template_child]
-        pub header_bar: TemplateChild<adw::HeaderBar>,
+        // #[template_child]
+        // pub view_switcher: TemplateChild<adw::ViewSwitcher>,
+        // #[template_child]
+        // pub header_bar: TemplateChild<adw::HeaderBar>,
         #[template_child]
         pub label: TemplateChild<gtk::Label>,
         #[template_child]
@@ -84,7 +86,8 @@ mod imp {
 
         fn new() -> Self {
             Self {
-                header_bar: TemplateChild::default(),
+                // header_bar: TemplateChild::default(),
+                // view_switcher: TemplateChild::default(),
                 label: TemplateChild::default(),
                 seekbar: TemplateChild::default(),
                 queue: TemplateChild::default(),
@@ -118,6 +121,8 @@ impl SlamprustWindow {
             .property("application", application)
             .build();
 
+
+        // Mockups for now. Refactor later.
         win.setup_queue();
         win.setup_seekbar();
 		win.bind_state();
