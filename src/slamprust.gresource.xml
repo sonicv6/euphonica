@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
   <gresource prefix="/org/slamprust/Slamprust">
-    <file preprocess="xml-stripblanks">window.ui</file>
-    <file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
+		<file preprocess="xml-stripblanks">window.ui</file>
+		<file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
+		<file preprocess="xml-stripblanks">gtk/album-view.ui</file>
+		<file preprocess="xml-stripblanks">gtk/queue-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
 		<file>gtk/style.css</file>
-		<file alias="albumart-placeholder.png">resources/albumart-placeholder.png</file>
+		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
   </gresource>
+	<gresource prefix="/org/slamprust/Slamprust/icons/scalable/actions/">
+		<file preprocess="xml-stripblanks" alias="music-artist-symbolic.svg">gtk/icons/music-artist-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="library-music-symbolic.svg">gtk/icons/library-music-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="music-queue-symbolic.svg">gtk/icons/music-queue-symbolic.svg</file>
+	</gresource>
 </gresources>

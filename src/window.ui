@@ -40,25 +40,18 @@
 												</child>
 												<property name="content">
 													<object class="AdwViewStack" id="stack">
+
 														<child>
 															<object class="AdwViewStackPage">
 																<property name="name">albums</property>
 																<property name="title" translatable="true">Albums</property>
                 								<property name="icon-name">library-music-symbolic</property>
 																<property name="child">
-																	<object class="GtkButton">
-																		<property name="label" translatable="yes">Open album</property>
-																		<property name="halign">center</property>
-																		<property name="valign">center</property>
-																		<property name="action-name">navigation.push</property>
-																		<property name="action-target">'sub_page'</property>
-																		<style>
-																			<class name="pill"/>
-																		 </style>
-																	</object>
+																	<object class="SlamprustAlbumView" id="album_view"></object>
 																</property>
 															</object>
 														</child>
+
 														<child>
 															<object class="AdwViewStackPage">
 																<property name="name">artists</property>
@@ -68,6 +61,17 @@
 																	<object class="AdwStatusPage">
 																		<property name="title">Welcome!</property>
 																	</object>
+																</property>
+															</object>
+														</child>
+
+														<child>
+															<object class="AdwViewStackPage">
+																<property name="name">queue_page</property>
+																<property name="title" translatable="true">Queue</property>
+                								<property name="icon-name">music-queue-symbolic</property>
+																<property name="child">
+																	<object class="SlamprustQueueView" id="queue_view"></object>
 																</property>
 															</object>
 														</child>
@@ -139,18 +143,6 @@
 				      </object>
 						</child>
 						<!-- The playlist -->
-						<child>
-				      <object class="GtkScrolledWindow">
-				        <property name="hscrollbar-policy">never</property>
-				        <property name="min-content-height">360</property>
-				        <property name="vexpand">false</property>
-				        <child>
-				          <object class="GtkListView" id="queue">
-				            <property name="valign">start</property>
-				          </object>
-				        </child>
-				      </object>
-				    </child>
 					</object>
 				</child>
       </object>
