@@ -6,6 +6,9 @@
 		<file preprocess="xml-stripblanks">gtk/album-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
+    <file preprocess="xml-stripblanks">gtk/icons/skip-backward-large-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">gtk/icons/play-large-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">gtk/icons/skip-forward-large-symbolic.svg</file>
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
   </gresource>
