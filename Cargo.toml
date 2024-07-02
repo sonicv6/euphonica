@@ -11,6 +11,7 @@ futures = "0.3.30"
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
 gtk = { version = "0.7", package = "gtk4" }
 image = "0.25.1"
+librsvg = "2.58.1"
 mpd = "0.1.0"
 once_cell = "1.19.0"
 time = "0.3.36"
