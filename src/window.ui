@@ -134,14 +134,6 @@
                 </property>
               </object>
             </child>
-						<child>
-							<object class="GtkLabel" id="label">
-				        <property name="label">Hello, World!</property>
-				        <style>
-				          <class name="title-1"/>
-				        </style>
-				      </object>
-						</child>
             <child>
               <object id="grid" class="GtkGrid">
                 <child>
@@ -168,9 +160,9 @@
                       <property name="row">0</property>
                     </layout>
                     <child>
-                      <object class="GtkImage">
+                      <object class="GtkImage" id="play_pause_symbol">
                         <property name="visible">True</property>
-                        <property name="icon-name">play-symbolic</property>
+                        <property name="icon-name">play-large-symbolic</property>
                         <property name="icon_size">1</property>
                       </object>
                     </child>

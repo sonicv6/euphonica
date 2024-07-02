@@ -51,9 +51,9 @@ mod imp {
         #[template_child]
         pub album_view: TemplateChild<AlbumView>,
         #[template_child]
-        pub label: TemplateChild<gtk::Label>,
-        #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub play_pause_symbol: TemplateChild<gtk::Image>,  // inside the play/pause button
         #[template_child]
         pub prev_btn: TemplateChild<gtk::Button>,
         #[template_child]
@@ -95,8 +95,8 @@ mod imp {
                 // header_bar: TemplateChild::default(),
                 // view_switcher: TemplateChild::default(),
                 album_view: TemplateChild::default(),
-                label: TemplateChild::default(),
                 play_pause_btn: TemplateChild::default(),
+                play_pause_symbol: TemplateChild::default(),
                 prev_btn: TemplateChild::default(),
                 next_btn: TemplateChild::default(),
                 seekbar: TemplateChild::default(),
@@ -211,20 +211,16 @@ impl SlamprustWindow {
         }));
 
     }
-	fn update_label(&self) {
+
+	fn update_playback_btns(&self) {
 	    let player = self.downcast_application().get_player();
 	    match player.playback_state() {
-	        PlaybackState::Playing => {self.imp().label.set_label("Playing")},
-	        PlaybackState::Paused => {self.imp().label.set_label("Paused")},
-	        PlaybackState::Stopped => {self.imp().label.set_label("Stopped")}
-	    }
-	}
-	fn update_playback(&self) {
-	    let player = self.downcast_application().get_player();
-	    match player.playback_state() {
-	        PlaybackState::Playing => {self.imp().play_pause_btn.set_label("Pause")},
-	        PlaybackState::Paused => {self.imp().play_pause_btn.set_label("Play")},
-	        PlaybackState::Stopped => {self.imp().play_pause_btn.set_label("")}
+	        PlaybackState::Playing => {
+	            self.imp().play_pause_symbol.set_icon_name(Some("pause-large-symbolic"))
+            },
+	        PlaybackState::Paused | PlaybackState::Stopped => {
+	            self.imp().play_pause_symbol.set_icon_name(Some("play-large-symbolic"))
+	        },
 	    }
 	}
 
@@ -276,13 +272,11 @@ impl SlamprustWindow {
 		let player = self.downcast_application().get_player();
 
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
-        self.update_label();
-        self.update_playback();
+        self.update_playback_btns();
         let notify_playback_state_id = player.connect_notify_local(
             Some("playback-state"),
             clone!(@weak self as win => move |_, _| {
-                win.update_label();
-                win.update_playback();
+                win.update_playback_btns();
                 win.maybe_start_polling();
             }),
         );
