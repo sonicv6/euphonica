@@ -91,7 +91,7 @@ mod imp {
                 // These are proxies for Song properties
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
-                // "album" => obj.album().to_value(),
+                "album" => obj.album().to_value(),
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
                 _ => unimplemented!(),
@@ -247,13 +247,12 @@ impl Player {
         None
     }
 
-    // pub fn album(&self) -> Option<String> {
-    //     if let Some(song) = &*self.imp().current_song.borrow() {
-    //         return song.album.clone();
-    //     }
-
-    //     None
-    // }
+    pub fn album(&self) -> Option<String> {
+        if let Some(song) = &*self.imp().current_song.borrow() {
+            return Some(song.get_album());
+        }
+        None
+    }
 
     pub fn duration(&self) -> u64 {
         if let Some(song) = &*self.imp().current_song.borrow() {

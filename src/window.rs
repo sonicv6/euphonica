@@ -139,8 +139,6 @@ impl SlamprustWindow {
         );
         win.setup_seekbar();
         win.toggle_playback();
-        win.prev_song();
-        win.next_song();
 		win.bind_state();
         win.setup_signals();
         win

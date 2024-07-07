@@ -259,7 +259,7 @@ impl Song {
         if let Some(artist) = self.imp().artist.borrow().clone() {
             return artist;
         }
-        String::from("Unknown artist")
+        String::from("Unknown")
     }
 
     pub fn get_queue_id(&self) -> u32 {
@@ -277,7 +277,7 @@ impl Song {
         if let Some(album) = self.imp().album.borrow().clone() {
             return album;
         }
-        String::from("Unknown album")
+        String::from("Unknown")
     }
 
     pub fn get_cover_path(&self, thumbnail: bool) -> Option<String> {

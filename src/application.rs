@@ -22,7 +22,6 @@ use adw::subclass::prelude::*;
 use gtk::{gio, glib};
 use std::{
     cell::RefCell,
-    fmt::{self, Display, Formatter},
     rc::Rc,
     fs::create_dir_all,
     path::PathBuf

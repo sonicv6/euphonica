@@ -1,5 +1,6 @@
 use std::{
-    rc::Rc
+    rc::Rc,
+    cell::RefCell
 };
 
 use async_channel::Sender;
@@ -12,16 +13,23 @@ use gtk::{
     CompositeTemplate,
     NoSelection,
     SignalListItemFactory,
-    ListItem
+    ListItem,
+};
+use glib::{
+    clone,
+    signal::SignalHandlerId
 };
 
 use crate::{
-    player::Player,
     client::MpdMessage,
     common::Song
 };
 
-use super::QueueRow;
+use super::{
+    QueueRow,
+    Player,
+    PlaybackState
+};
 
 mod imp {
     use super::*;
@@ -30,7 +38,19 @@ mod imp {
     #[template(resource = "/org/slamprust/Slamprust/gtk/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
-        pub queue: TemplateChild<gtk::ListView>
+        pub queue: TemplateChild<gtk::ListView>,
+        #[template_child]
+        pub current_albumart: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub song_info_box: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub current_song_name: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub current_artist_name: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub current_album_name: TemplateChild<gtk::Label>,
+
+        pub signal_ids: RefCell<Vec<SignalHandlerId>>
     }
 
     #[glib::object_subclass]
@@ -84,7 +104,7 @@ impl QueueView {
         Self::default()
     }
 
-    pub fn setup(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
+    pub fn setup_listview(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
         // Set selection mode
         // TODO: Allow click to jump to song
         let sel_model = NoSelection::new(Some(player.queue()));
@@ -147,5 +167,76 @@ impl QueueView {
 
         // Set the factory of the list view
         self.imp().queue.set_factory(Some(&factory));
+    }
+
+    fn update_info_visibility(&self, is_playing: bool) {
+        self.imp().song_info_box.set_visible(is_playing);
+    }
+
+    fn update_song_name(&self, song_name: Option<&String>) {
+        if let Some(name) = song_name {
+            self.imp().current_song_name.set_label(name);
+        }
+    }
+
+    fn update_artist_name(&self, artist_name: Option<&String>) {
+        if let Some(name) = artist_name {
+            self.imp().current_artist_name.set_label(name);
+        }
+    }
+
+    fn update_album_name(&self, album_name: Option<&String>) {
+        if let Some(name) = album_name {
+            self.imp().current_album_name.set_label(name);
+        }
+    }
+
+    pub fn bind_state(&self, player: Rc<Player>) {
+        let mut ids = self.imp().signal_ids.borrow_mut();
+        // We'll first need to sync with the state initially; afterwards the binding will do it for us.
+        self.update_info_visibility(player.playback_state() != PlaybackState::Stopped);
+        ids.push(
+            player.connect_notify_local(
+                Some("playback-state"),
+                clone!(@weak self as this, @weak player as p => move |_, _| {
+                    this.update_info_visibility(p.playback_state() != PlaybackState::Stopped);
+                })
+            )  
+        );
+
+        self.update_song_name(player.title().as_ref());
+        ids.push(
+            player.connect_notify_local(
+                Some("title"),
+                clone!(@weak self as this, @weak player as p => move |_, _| {
+                    this.update_song_name(p.title().as_ref());
+                })
+            )
+        );
+
+        self.update_album_name(player.album().as_ref());
+        ids.push(
+            player.connect_notify_local(
+                Some("album"),
+                clone!(@weak self as this, @weak player as p => move |_, _| {
+                    this.update_album_name(p.album().as_ref());
+                })
+            )
+        );
+
+        self.update_artist_name(player.artist().as_ref());
+        ids.push(
+            player.connect_notify_local(
+                Some("artist"),
+                clone!(@weak self as this, @weak player as p => move |_, _| {
+                    this.update_artist_name(p.artist().as_ref());
+                })
+            )
+        );
+    }
+
+    pub fn setup(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
+        self.setup_listview(player.clone(), sender);
+        self.bind_state(player);
     }
 }

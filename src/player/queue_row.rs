@@ -29,6 +29,10 @@ mod imp {
         pub thumbnail: TemplateChild<Image>,
         #[template_child]
         pub song_name: TemplateChild<Label>,
+         #[template_child]
+        pub album_name: TemplateChild<Label>,
+         #[template_child]
+        pub artist_name: TemplateChild<Label>,
         #[template_child]
         pub playing_indicator: TemplateChild<Label>,
         // Vector holding the bindings to properties of the Song GObject
@@ -85,14 +89,10 @@ impl QueueRow {
         // Get state
         let thumbnail_image = self.imp().thumbnail.get();
         let song_name_label = self.imp().song_name.get();
+        let album_name_label = self.imp().album_name.get();
+        let artist_name_label = self.imp().artist_name.get();
         let playing_label = self.imp().playing_indicator.get();
         let mut bindings = self.imp().bindings.borrow_mut();
-
-        // let thumbnail_path_binding = song
-        //     .bind_property("thumbnail-path", &thumbnail_image, "file")
-        //     .sync_create()
-        //     .build();
-        // bindings.push(thumbnail_path_binding);
 
         let thumbnail_path_binding = song
             .connect_notify_local(
@@ -109,6 +109,20 @@ impl QueueRow {
             .build();
         // Save binding
         bindings.push(song_name_binding);
+
+        let album_name_binding = song
+            .bind_property("album", &album_name_label, "label")
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(album_name_binding);
+
+        let artist_name_binding = song
+            .bind_property("artist", &artist_name_label, "label")
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(artist_name_binding);
 
         let song_is_playing_binding = song
             .bind_property("is-playing", &playing_label, "visible")
