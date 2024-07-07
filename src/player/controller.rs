@@ -5,16 +5,16 @@ use std::{
 };
 extern crate mpd;
 use mpd::status::{State, Status};
-use crate::common::Song;
+use crate::{
+    common::Song,
+    client::albumart::strip_filename_linux
+};
 use gtk::{
     glib,
     gio,
     prelude::*,
-    ListItem
 };
 use adw::subclass::prelude::*;
-use async_channel::{Sender};
-use crate::client::wrapper::{MpdMessage};
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "SlamprustPlaybackState")]
@@ -28,7 +28,6 @@ pub enum PlaybackState {
 mod imp {
     use glib::{
         ParamSpec,
-        ParamSpecBoolean,
         // ParamSpecDouble,
         // ParamSpecObject,
         ParamSpecString,
@@ -73,6 +72,7 @@ mod imp {
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
+                    ParamSpecString::builder("albumart").read_only().build(), // Will use high-resolution version
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").read_only().build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
@@ -212,7 +212,7 @@ impl Player {
         // Convert to our internal Song GObjects then add to queue
         let songs: Vec<Song> = new_queue
                 .iter()
-                .map(|mpd_song| Song::from_mpd_song(mpd_song))
+                .map(Song::from_mpd_song)
                 .collect();
         queue.extend_from_slice(&songs);
         // Downstream widgets should now receive an item-changed signal.
@@ -220,12 +220,10 @@ impl Player {
 
     pub fn update_album_art(&self, folder_uri: &str, path: &PathBuf, thumbnail_path: &PathBuf) {
         // Iterate through the queue to see if we can load album art for any
-        for item in self.imp().queue.borrow().iter::<Song>() {
-            if let Ok(song) = item {
-                if !song.has_cover() && song.get_uri() == folder_uri {
-                    song.set_cover_path(path, false);
-                    song.set_cover_path(thumbnail_path, true);
-                }
+        for song in self.imp().queue.borrow().iter::<Song>().flatten() {
+            if !song.has_cover() && strip_filename_linux(&song.get_uri()) == folder_uri {
+                song.set_cover_path(path, false);
+                song.set_cover_path(thumbnail_path, true);
             }
         }
     }

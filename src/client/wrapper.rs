@@ -1,5 +1,8 @@
 extern crate image;
-use image::io::Reader as ImageReader;
+use image::{
+    io::Reader as ImageReader,
+    imageops::FilterType
+};
 use uuid::Uuid;
 use crate::player::Player;
 use futures::executor;
@@ -7,20 +10,18 @@ use mpd::{
     client::Client,
     Subsystem,
     Idle,
-    Channel,
-    error::Error
+    Channel
 };
 use super::albumart::{strip_filename_linux, AlbumArtCache};
 use std::sync::atomic::{AtomicBool, Ordering};
 use async_channel::{Sender, Receiver};
-use glib::{clone, SourceId, MainContext};
+use glib::clone;
 use gtk::{glib, gio};
 
 use std::{
     io::Cursor,
     cell::RefCell,
     rc::Rc,
-    sync::{Arc, Mutex},
     path::PathBuf
 };
 
@@ -128,7 +129,6 @@ pub struct MpdWrapper {
 	main_client: RefCell<Option<Client>>,
     // Handle to the child thread.
 	bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
-	stop_flag: Arc<AtomicBool>, // used to tell the child thread to stop looping
 	bg_channel: Channel, // For waking up the child client
 	bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
 }
@@ -151,7 +151,6 @@ impl MpdWrapper {
             albumart,
             main_client: RefCell::new(None),  // Must be initialised later
             bg_handle: RefCell::new(None),  // Will be spawned later
-            stop_flag: Arc::new(AtomicBool::new(false)),
             bg_channel: Channel::new(&ch_name).unwrap(),
             bg_sender: RefCell::new(None)
         });
@@ -163,7 +162,6 @@ impl MpdWrapper {
 
     fn start_bg_thread(self: Rc<Self>, host: &str, port: &str) {
         let sender_to_fg = self.sender.clone();
-        let stop_flag = self.stop_flag.clone();
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
         self.bg_sender.replace(Some(bg_sender));
         if let Ok(mut client) =  Client::connect(format!("{}:{}", host, port)) {
@@ -171,11 +169,6 @@ impl MpdWrapper {
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting idle loop...");
                 loop {
-                    if stop_flag.load(Ordering::Relaxed) {
-                        println!("Stop flag is true, terminating background thread...");
-                        let _ = client.close();
-                        break;
-                    }
                     // Check if there is work to do
                     if !bg_receiver.is_empty() {
                         // TODO: Take one task for each loop
@@ -191,8 +184,9 @@ impl MpdWrapper {
                                     }
                                     else if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
                                         if let Some(dyn_img) = read_image_from_bytes(bytes) {
-                                            let _ = dyn_img.save(&cache_path);
-                                            let  _= dyn_img.thumbnail(128, 128).save(&thumb_cache_path);
+                                            // Might want to make all of these configurable.
+                                            let _ = dyn_img.resize(256, 256, FilterType::CatmullRom).save(&cache_path);
+                                            let  _= dyn_img.thumbnail(64, 64).save(&thumb_cache_path);
                                         }
                                         let _ = sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri, cache_path, thumb_cache_path));
                                     }
@@ -290,20 +284,16 @@ impl MpdWrapper {
         // Close current clients
         if let Some(mut main_client) = self.main_client.borrow_mut().take() {
             println!("Closing existing clients");
-            // First, set stop_flag to true
-            self.stop_flag.store(true, Ordering::Relaxed);
-            // Child thread might have stopped by now if there are idle messages,
-            // but that's not guaranteed.
-            // Now close the main client, which will trigger an idle message.
+            // Stop child thread by sending a "STOP" message through mpd itself
+            let _ = main_client.sendmessage(self.bg_channel.clone(), "STOP");
+            // Now close the main client
             let _ = main_client.close();
-            // Now the child thread really should have read the stop_flag.
-            // Wait for it to stop.
+            // Wait for child client to stop.
             if let Some(handle) = self.bg_handle.take() {
                 let _ = handle.await;
             }
         }
         println!("Connecting to {}:{}", host, port);
-        self.stop_flag.store(false, Ordering::Relaxed);
         if let Ok(c) = mpd::Client::connect(format!("{}:{}", host, port)) {
             self.main_client.replace(Some(c));
             self.main_client
@@ -383,7 +373,7 @@ impl MpdWrapper {
 
     pub fn get_album_art(&self, uri: &String) {
         let folder_uri = strip_filename_linux(uri);
-        let (cache_path, thumb_cache_path) = self.albumart.get_path_for(&folder_uri);
+        let (cache_path, thumb_cache_path) = self.albumart.get_path_for(folder_uri);
         // Check if we have a cached version
         if !cache_path.exists() || !thumb_cache_path.exists() {
             // Else download from server
@@ -419,9 +409,6 @@ impl Drop for MpdWrapper {
             println!("App closed. Closing clients...");
             // First, send stop message
             let _ = main_client.sendmessage(self.bg_channel.clone(), "STOP");
-            // self.stop_flag.store(true, Ordering::Relaxed);
-            // Child thread might have stopped by now if there are idle messages,
-            // but that's not guaranteed.
             // Now close the main client, which will trigger an idle message.
             let _ = main_client.close();
             // Now the child thread really should have read the stop_flag.
