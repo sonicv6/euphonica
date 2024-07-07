@@ -52,8 +52,7 @@
 												<child>
 													<object class="GtkImage" id="current_albumart">
 														<property name="pixel-size">256</property>
-														<property name="resource">
-															/org/slamprust/Slamprust/albumart-placeholder.png</property>
+														<property name="resource">/org/slamprust/Slamprust/albumart-placeholder.png</property>
 													</object>
 												</child>
 											</object>
@@ -91,13 +90,10 @@
 												</style>
 												<child>
 													<object class="AdwStatusPage" id="lyrics_tba">
-														<property name="title" translatable="true">Coming
-															soon</property>
+														<property name="title" translatable="true">Coming soon</property>
 														<property name="description"
-															translatable="true">TODO: fetch lyrics
-															from Genius</property>
-														<property name="icon-name">
-															help-about-symbolic</property>
+															translatable="true">TODO: fetch lyrics from Genius</property>
+														<property name="icon-name">help-about-symbolic</property>
 													</object>
 												</child>
 

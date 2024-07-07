@@ -33,8 +33,7 @@
 														<child type="end">
 															<object class="GtkMenuButton">
 																<property name="primary">True</property>
-																<property name="icon-name">
-																	open-menu-symbolic</property>
+																<property name="icon-name">open-menu-symbolic</property>
 																<property name="tooltip-text"
 																	translatable="yes">Menu</property>
 																<property name="menu-model">
@@ -51,8 +50,7 @@
 																<property name="name">albums</property>
 																<property name="title"
 																	translatable="true">Albums</property>
-																<property name="icon-name">
-																	library-music-symbolic</property>
+																<property name="icon-name">library-music-symbolic</property>
 																<property name="child">
 																	<object
 																		class="SlamprustAlbumView"
@@ -66,12 +64,10 @@
 																<property name="name">artists</property>
 																<property name="title"
 																	translatable="true">Artists</property>
-																<property name="icon-name">
-																	music-artist-symbolic</property>
+																<property name="icon-name">music-artist-symbolic</property>
 																<property name="child">
 																	<object class="AdwStatusPage">
-																		<property name="title">
-																			Welcome!</property>
+																		<property name="title">Welcome!</property>
 																	</object>
 																</property>
 															</object>
@@ -82,8 +78,7 @@
 																<property name="name">queue_page</property>
 																<property name="title"
 																	translatable="true">Queue</property>
-																<property name="icon-name">
-																	music-queue-symbolic</property>
+																<property name="icon-name">music-queue-symbolic</property>
 																<property name="child">
 																	<object
 																		class="SlamprustQueueView"
@@ -100,8 +95,7 @@
 								<child>
 									<object class="AdwNavigationPage" id="sub_page">
 										<property name="name">sub_page</property>
-										<property name="title" translatable="true">The Dark Side of
-											the Moon</property>
+										<property name="title" translatable="true">The Dark Side of the Moon</property>
 										<child>
 											<object class="AdwToolbarView">
 												<child type="top">
@@ -166,8 +160,7 @@
 										<child>
 											<object class="GtkImage">
 												<property name="visible">True</property>
-												<property name="icon-name">
-													skip-backward-large-symbolic</property>
+												<property name="icon-name">skip-backward-large-symbolic</property>
 												<property name="icon_size">1</property>
 											</object>
 										</child>
