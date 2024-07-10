@@ -72,7 +72,7 @@ mod imp {
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
-                    ParamSpecString::builder("albumart").read_only().build(), // Will use high-resolution version
+                    ParamSpecString::builder("album-art").read_only().build(), // Will use high-resolution version
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").read_only().build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
@@ -92,6 +92,7 @@ mod imp {
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
                 "album" => obj.album().to_value(),
+                "album-art" => obj.album_art().to_value(), // High-res version
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
                 _ => unimplemented!(),
@@ -182,6 +183,7 @@ impl Player {
                         self.notify("title");
                         self.notify("artist");
                         self.notify("album");
+                        self.notify("album-art");
                         self.notify("duration");
                         break;
                     }
@@ -200,6 +202,7 @@ impl Player {
                 self.notify("title");
                 self.notify("artist");
                 self.notify("album");
+                self.notify("album-art");
                 self.notify("duration");
             }
         }
@@ -224,6 +227,11 @@ impl Player {
             if !song.has_cover() && strip_filename_linux(&song.get_uri()) == folder_uri {
                 song.set_cover_path(path, false);
                 song.set_cover_path(thumbnail_path, true);
+
+                // If currently playing, then also update the sidebar
+                if song.is_playing() {
+                    self.notify("album-art");
+                }
             }
         }
     }
@@ -248,6 +256,14 @@ impl Player {
     pub fn album(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
             return Some(song.get_album());
+        }
+        None
+    }
+
+    pub fn album_art(&self) -> Option<String> {
+        // Use high res version
+        if let Some(song) = &*self.imp().current_song.borrow() {
+            return song.get_cover_path(false);
         }
         None
     }

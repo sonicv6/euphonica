@@ -13,7 +13,6 @@ use mpd::{
     Channel
 };
 use super::albumart::{strip_filename_linux, AlbumArtCache};
-use std::sync::atomic::{AtomicBool, Ordering};
 use async_channel::{Sender, Receiver};
 use glib::clone;
 use gtk::{glib, gio};
@@ -394,7 +393,7 @@ impl MpdWrapper {
         }
         else {
             // Notify all controllers of path. Whether this album art is still needed is up to the controllers.
-            self.notify_album_art(uri, &cache_path, &thumb_cache_path);
+            self.notify_album_art(folder_uri, &cache_path, &thumb_cache_path);
         }
     }
 

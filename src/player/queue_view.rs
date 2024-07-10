@@ -40,7 +40,7 @@ mod imp {
         #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
         #[template_child]
-        pub current_albumart: TemplateChild<gtk::Image>,
+        pub current_album_art: TemplateChild<gtk::Image>,
         #[template_child]
         pub song_info_box: TemplateChild<gtk::Box>,
         #[template_child]
@@ -191,6 +191,17 @@ impl QueueView {
         }
     }
 
+    fn update_album_art(&self, maybe_path: Option<&String>) {
+        println!("Setting album art for current song to {:?}", maybe_path);
+        // Use high-resolution version here
+        if let Some(path) = maybe_path {
+            self.imp().current_album_art.set_from_file(Some(path));
+        }
+        else {
+            self.imp().current_album_art.set_from_resource(Some("/org/slamprust/Slamprust/albumart-placeholder.png"));
+        }
+    }
+
     pub fn bind_state(&self, player: Rc<Player>) {
         let mut ids = self.imp().signal_ids.borrow_mut();
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
@@ -230,6 +241,16 @@ impl QueueView {
                 Some("artist"),
                 clone!(@weak self as this, @weak player as p => move |_, _| {
                     this.update_artist_name(p.artist().as_ref());
+                })
+            )
+        );
+
+        self.update_album_art(player.album_art().as_ref());
+        ids.push(
+            player.connect_notify_local(
+                Some("album-art"),
+                clone!(@weak self as this, @weak player as p => move |_, _| {
+                    this.update_album_art(p.album_art().as_ref());
                 })
             )
         );

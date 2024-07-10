@@ -19,6 +19,10 @@
     border-radius: 6px;  /* 12px card radius - 6px padding for concentric rounding */
 }
 
-/* card .thumbnail { */
-/*     border-radius: @; */
-/* } */
+
+.sidebar {
+    padding-top: 12pt;
+    padding-bottom: 12pt;
+    padding-left: 6pt;
+    padding-right: 6pt;
+}

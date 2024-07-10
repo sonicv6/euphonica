@@ -5,7 +5,6 @@ use std::{
     cell::{Cell, RefCell}
 };
 use chrono::NaiveDate;
-use glib::Properties;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
