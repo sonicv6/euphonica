@@ -13,7 +13,6 @@ use gtk::{
 use glib::{
     Object,
     Binding,
-    clone,
     signal::SignalHandlerId
 };
 

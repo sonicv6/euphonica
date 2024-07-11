@@ -24,6 +24,7 @@ mod config;
 mod window;
 mod client;
 mod library;
+mod sidebar;
 
 use self::application::SlamprustApplication;
 use self::window::SlamprustWindow;

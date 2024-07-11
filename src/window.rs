@@ -31,7 +31,8 @@ use crate::{
     client::MpdMessage,
     application::SlamprustApplication,
     player::{QueueView, PlaybackState},
-    library::AlbumView
+    library::AlbumView,
+    sidebar::Sidebar
 };
 
 mod imp {
@@ -67,11 +68,8 @@ mod imp {
         #[template_child]
         pub stack: TemplateChild<gtk::Stack>,
 
-        // Sidebar. TODO: refactor into separate widget
         #[template_child]
-        pub albums_btn: TemplateChild<gtk::ToggleButton>,
-        #[template_child]
-        pub queue_btn: TemplateChild<gtk::ToggleButton>,
+        pub sidebar: TemplateChild<Sidebar>,
 
         // RefCells to notify IDs so we can unbind later
         pub notify_position_id: RefCell<Option<SignalHandlerId>>,
@@ -113,8 +111,7 @@ mod imp {
 
                 stack: TemplateChild::default(),
 
-                albums_btn: TemplateChild::default(),
-                queue_btn: TemplateChild::default(),
+                sidebar: TemplateChild::default(),
 
                 notify_position_id: RefCell::new(None),
                 notify_duration_id: RefCell::new(None),
@@ -152,7 +149,9 @@ impl SlamprustWindow {
             app.get_player(),
             app.get_sender()
         );
-        win.setup_sidebar();
+        win.imp().sidebar.setup(
+            win.imp().stack.clone()
+        );
         win.setup_seekbar();
         win.setup_playback_btns();
 		win.bind_state();
@@ -165,48 +164,6 @@ impl SlamprustWindow {
             .unwrap()
             .downcast::<crate::application::SlamprustApplication>()
             .unwrap()
-    }
-
-    fn setup_sidebar(&self) {
-        // Should have used an enum here, but too bad GTK4's Rust bindings
-        // can only take primitives, strings and a few other things.
-        // Use name property of GtkStackPages as defined in window.ui.
-        // let original_state = String::from("albums");
-        // // Create a stateful action to link the sidebar elements together,
-        // // allowing only one to be true at any given time
-        // let stack = self.imp().stack.get();
-        // let action_nav = ActionEntry::builder("nav")
-        //     .parameter_type(Some(&String::static_variant_type()))
-        //     .state(original_state.to_variant())
-        //     .activate(move |_, action, param| {
-        //         let new_state = param.expect("Could not get sidebar button parameter");
-        //         action.set_state(new_state);
-        //         let new_state_val = new_state
-        //             .get::<String>()
-        //             .expect("Sidebar button parameter must be &str");
-
-        //         // Set visible child by name
-        //         stack.set_visible_child_name(new_state_val.as_str());
-        //     })
-        //     .build();
-
-        // self.add_action_entries([action_nav]);
-
-        // Set default view. TODO: remember last view
-        self.imp().stack.set_visible_child_name("albums");
-        self.imp().albums_btn.set_active(true);
-        // Hook each button to their respective views
-        self.imp().albums_btn.connect_toggled(clone!(@weak self as this => move |btn| {
-            if btn.is_active() {
-                this.imp().stack.set_visible_child_name("albums");
-            }
-        }));
-
-        self.imp().queue_btn.connect_toggled(clone!(@weak self as this => move |btn| {
-            if btn.is_active() {
-                this.imp().stack.set_visible_child_name("queue");
-            }
-        }));
     }
 
     fn setup_seekbar(&self) {
