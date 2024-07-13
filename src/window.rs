@@ -18,27 +18,23 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::{
-    cell::{Cell, RefCell},
-    path::PathBuf
-};
+use std::cell::{Cell, RefCell};
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
     gio,
-    glib,
-    NoSelection,
-    SignalListItemFactory,
-    ListItem
+    glib
 };
 use glib::signal::SignalHandlerId;
 use glib::clone;
 use crate::{
     client::MpdMessage,
     application::SlamprustApplication,
-    player::{QueueRow, PlaybackState},
-    common::Song
+    player::{QueueView, PlaybackState},
+    library::AlbumView,
+    sidebar::Sidebar
 };
+
 mod imp {
     use super::*;
 
@@ -46,20 +42,34 @@ mod imp {
     #[template(resource = "/org/slamprust/Slamprust/window.ui")]
     pub struct SlamprustWindow {
         // Template widgets
-        #[template_child]
-        pub header_bar: TemplateChild<adw::HeaderBar>,
-        #[template_child]
-        pub label: TemplateChild<gtk::Label>,
+        // #[template_child]
+        // pub view_switcher: TemplateChild<adw::ViewSwitcher>,
+        // #[template_child]
+        // pub header_bar: TemplateChild<adw::HeaderBar>,
+
         #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub play_pause_symbol: TemplateChild<gtk::Image>,  // inside the play/pause button
         #[template_child]
         pub prev_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub next_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub seekbar: TemplateChild<gtk::Scale>,
+
+        // Main views
         #[template_child]
-        pub queue: TemplateChild<gtk::ListView>,
+        pub album_view: TemplateChild<AlbumView>,
+        #[template_child]
+        pub queue_view: TemplateChild<QueueView>,
+
+        // Content view stack
+        #[template_child]
+        pub stack: TemplateChild<gtk::Stack>,
+
+        #[template_child]
+        pub sidebar: TemplateChild<Sidebar>,
 
         // RefCells to notify IDs so we can unbind later
         pub notify_position_id: RefCell<Option<SignalHandlerId>>,
@@ -90,13 +100,19 @@ mod imp {
 
         fn new() -> Self {
             Self {
-                header_bar: TemplateChild::default(),
-                label: TemplateChild::default(),
                 play_pause_btn: TemplateChild::default(),
+                play_pause_symbol: TemplateChild::default(),
                 prev_btn: TemplateChild::default(),
                 next_btn: TemplateChild::default(),
                 seekbar: TemplateChild::default(),
-                queue: TemplateChild::default(),
+
+                album_view: TemplateChild::default(),
+                queue_view: TemplateChild::default(),
+
+                stack: TemplateChild::default(),
+
+                sidebar: TemplateChild::default(),
+
                 notify_position_id: RefCell::new(None),
                 notify_duration_id: RefCell::new(None),
                 notify_playback_state_id: RefCell::new(None),
@@ -127,11 +143,17 @@ impl SlamprustWindow {
             .property("application", application)
             .build();
 
-        win.setup_queue();
+        let app = win.downcast_application();
+
+        win.imp().queue_view.setup(
+            app.get_player(),
+            app.get_album_art_cache()
+        );
+        win.imp().sidebar.setup(
+            win.imp().stack.clone()
+        );
         win.setup_seekbar();
-        win.toggle_playback();
-        win.prev_song();
-        win.next_song();
+        win.setup_playback_btns();
 		win.bind_state();
         win.setup_signals();
         win
@@ -142,75 +164,6 @@ impl SlamprustWindow {
             .unwrap()
             .downcast::<crate::application::SlamprustApplication>()
             .unwrap()
-    }
-
-    fn get_queue(&self) -> gio::ListStore {
-        self.downcast_application().get_player().queue()
-    }
-
-    fn setup_queue(&self) {
-        // Set selection mode
-        let sel_model = NoSelection::new(Some(self.get_queue()));
-        self.imp().queue.set_model(Some(&sel_model));
-
-        // Set up factory
-        let factory = SignalListItemFactory::new();
-
-        // Create an empty `QueueRow` during setup
-        factory.connect_setup(move |_, list_item| {
-            let queue_row = QueueRow::new();
-            list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .set_child(Some(&queue_row));
-        });
-        let sender = self.downcast_application().get_sender().clone();
-        // Tell factory how to bind `QueueRow` to one of our Song GObjects
-        factory.connect_bind(move |_, list_item| {
-            // Get `Song` from `ListItem` (that is, the data side)
-            let item: Song = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .item()
-                .and_downcast::<Song>()
-                .expect("The item has to be a common::Song.");
-
-            if !item.has_cover() {
-                // Request album art. Will be updated later when ready.
-                let _ = sender.send_blocking(MpdMessage::AlbumArt(item.get_uri()));
-            }
-
-            // Get `QueueRow` from `ListItem` (the UI widget)
-            let child: QueueRow = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .child()
-                .and_downcast::<QueueRow>()
-                .expect("The child has to be a `QueueRow`.");
-
-            child.bind(&item);
-        });
-
-        // When row goes out of sight, unbind from item to allow reuse with another
-        factory.connect_unbind(move |_, list_item| {
-            // Get `QueueRow` from `ListItem` (the UI widget)
-            let child: QueueRow = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .child()
-                .and_downcast::<QueueRow>()
-                .expect("The child has to be a `QueueRow`.");
-            let item: Song = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .item()
-                .and_downcast::<Song>()
-                .expect("The item has to be a common::Song.");
-            child.unbind(&item);
-        });
-
-        // Set the factory of the list view
-        self.imp().queue.set_factory(Some(&factory));
     }
 
     fn setup_seekbar(&self) {
@@ -249,42 +202,28 @@ impl SlamprustWindow {
         }));
     }
 
-    fn toggle_playback(&self) {
+    fn setup_playback_btns(&self) {
         let sender = self.downcast_application().get_sender();
-        self.imp().play_pause_btn.connect_clicked(clone!(@weak self as this => move |_| {
-                let _ = sender.send_blocking(MpdMessage::Toggle);
+        self.imp().prev_btn.connect_clicked(clone!(@weak self as this, @strong sender as s => move |_| {
+                let _ = s.send_blocking(MpdMessage::Prev);
         }));
-
-    }
-
-    fn prev_song(&self) {
-        let sender = self.downcast_application().get_sender();
-        self.imp().prev_btn.connect_clicked(clone!(@weak self as this => move |_| {
-                let _ = sender.send_blocking(MpdMessage::Prev);
+        self.imp().play_pause_btn.connect_clicked(clone!(@weak self as this, @strong sender as s => move |_| {
+                let _ = s.send_blocking(MpdMessage::Toggle);
         }));
-
-    }
-    fn next_song(&self) {
-        let sender = self.downcast_application().get_sender();
         self.imp().next_btn.connect_clicked(clone!(@weak self as this => move |_| {
                 let _ = sender.send_blocking(MpdMessage::Next);
         }));
-
     }
-	fn update_label(&self) {
+
+	fn update_playback_btns(&self) {
 	    let player = self.downcast_application().get_player();
 	    match player.playback_state() {
-	        PlaybackState::Playing => {self.imp().label.set_label("Playing")},
-	        PlaybackState::Paused => {self.imp().label.set_label("Paused")},
-	        PlaybackState::Stopped => {self.imp().label.set_label("Stopped")}
-	    }
-	}
-	fn update_playback(&self) {
-	    let player = self.downcast_application().get_player();
-	    match player.playback_state() {
-	        PlaybackState::Playing => {self.imp().play_pause_btn.set_label("Pause")},
-	        PlaybackState::Paused => {self.imp().play_pause_btn.set_label("Play")},
-	        PlaybackState::Stopped => {self.imp().play_pause_btn.set_label("")}
+	        PlaybackState::Playing => {
+	            self.imp().play_pause_symbol.set_icon_name(Some("pause-large-symbolic"))
+            },
+	        PlaybackState::Paused | PlaybackState::Stopped => {
+	            self.imp().play_pause_symbol.set_icon_name(Some("play-large-symbolic"))
+	        },
 	    }
 	}
 
@@ -336,13 +275,11 @@ impl SlamprustWindow {
 		let player = self.downcast_application().get_player();
 
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
-        self.update_label();
-        self.update_playback();
+        self.update_playback_btns();
         let notify_playback_state_id = player.connect_notify_local(
             Some("playback-state"),
             clone!(@weak self as win => move |_, _| {
-                win.update_label();
-                win.update_playback();
+                win.update_playback_btns();
                 win.maybe_start_polling();
             }),
         );

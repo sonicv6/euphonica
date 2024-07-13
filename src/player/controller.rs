@@ -1,20 +1,24 @@
+extern crate mpd;
 use std::{
     cell::{Cell, RefCell},
+    rc::Rc,
     vec::Vec,
     path::PathBuf
 };
-extern crate mpd;
+use async_channel::Sender;
 use mpd::status::{State, Status};
-use crate::common::Song;
+use crate::{
+    common::Song,
+    client::albumart::{AlbumArtCache, strip_filename_linux},
+    client::MpdMessage
+};
 use gtk::{
     glib,
     gio,
     prelude::*,
-    ListItem
 };
+use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
-use async_channel::{Sender};
-use crate::client::wrapper::{MpdMessage};
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "SlamprustPlaybackState")]
@@ -28,9 +32,7 @@ pub enum PlaybackState {
 mod imp {
     use glib::{
         ParamSpec,
-        ParamSpecBoolean,
-        // ParamSpecDouble,
-        // ParamSpecObject,
+        ParamSpecObject,
         ParamSpecString,
         ParamSpecUInt,
         ParamSpecUInt64,
@@ -46,6 +48,8 @@ mod imp {
         pub position: Cell<f64>,
         pub current_song: RefCell<Option<Song>>,
         pub queue: RefCell<gio::ListStore>,
+        pub albumart: RefCell<Option<Rc<AlbumArtCache>>>,
+        pub sender: RefCell<Option<Sender<MpdMessage>>>
     }
 
     #[glib::object_subclass]
@@ -59,7 +63,9 @@ mod imp {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
                 current_song: RefCell::new(None),
-                queue
+                queue,
+                albumart: RefCell::new(None),
+                sender: RefCell::new(None)
             }
         }
     }
@@ -73,6 +79,7 @@ mod imp {
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
+                    ParamSpecObject::builder::<Texture>("album-art").read_only().build(), // Will use high-resolution version
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").read_only().build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
@@ -91,7 +98,8 @@ mod imp {
                 // These are proxies for Song properties
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
-                // "album" => obj.album().to_value(),
+                "album" => obj.album().to_value(),
+                "album-art" => obj.album_art().to_value(), // High-res version
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
                 _ => unimplemented!(),
@@ -104,8 +112,18 @@ glib::wrapper! {
     pub struct Player(ObjectSubclass<imp::Player>);
 }
 
+impl Default for Player {
+    fn default() -> Self {
+        glib::Object::new()
+    }
+}
+
 
 impl Player {
+    pub fn setup(&self, sender: Sender<MpdMessage>, albumart: Rc<AlbumArtCache>) {
+        self.imp().albumart.replace(Some(albumart));
+        self.imp().sender.replace(Some(sender));
+    }
     // Update functions
     // These all have side-effects of notifying listeners of changes to the
     // GObject properties, which in turn are read from this struct's fields.
@@ -182,6 +200,7 @@ impl Player {
                         self.notify("title");
                         self.notify("artist");
                         self.notify("album");
+                        self.notify("album-art");
                         self.notify("duration");
                         break;
                     }
@@ -196,35 +215,62 @@ impl Player {
         }
         else {
             // No song is playing. Update state accordingly.
+            #[allow(clippy::redundant_pattern_matching)]
             if let Some(_) = self.imp().current_song.replace(None) {
                 self.notify("title");
                 self.notify("artist");
                 self.notify("album");
+                self.notify("album-art");
                 self.notify("duration");
             }
         }
     }
 
     pub fn update_queue(&self, new_queue: &[mpd::song::Song]) {
-        // TODO: add asynchronously?
+        // TODO: use diffs instead of refreshing the whole queue
         let queue = self.imp().queue.borrow();
         queue.remove_all();
-        // Convert to our internal Song GObjects then add to queue
+        // Convert to our internal Song GObjects
         let songs: Vec<Song> = new_queue
                 .iter()
-                .map(|mpd_song| Song::from_mpd_song(mpd_song))
+                .map(Song::from_mpd_song)
                 .collect();
+        // Ensure we have local copies of all the album arts.
+        // This does not load them into memory yet. That only happens when QueueRow is displayed.
+        // TODO: batch download requests
+        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+            if let Some(sender) = self.imp().sender.borrow().as_ref() {
+                for song in &songs {
+                    let uri = &song.get_uri();
+                    let folder_uri = strip_filename_linux(uri);
+                    if !albumart.get_thumbnail_path_for(folder_uri).exists() {
+                        let _ = sender.send_blocking(MpdMessage::AlbumArt(folder_uri.to_owned()));
+                    }
+                }
+            }
+        }
         queue.extend_from_slice(&songs);
         // Downstream widgets should now receive an item-changed signal.
     }
 
-    pub fn update_album_art(&self, folder_uri: &str, path: &PathBuf, thumbnail_path: &PathBuf) {
+    pub fn update_album_art(&self, folder_uri: &str) {
+        // TODO: batch this too.
+        // This fn is only for updating album art AFTER the songs have already been displayed
+        // in the queue (for example, after finishing downloading their album arts).
+        // Songs whose album arts have already been downloaded will not need this fn.
+        // Instead, their album arts are loaded on-demand from disk or cache by the queue view.
         // Iterate through the queue to see if we can load album art for any
-        for item in self.imp().queue.borrow().iter::<Song>() {
-            if let Ok(song) = item {
-                if !song.has_cover() && song.get_uri() == folder_uri {
-                    song.set_cover_path(path, false);
-                    song.set_cover_path(thumbnail_path, true);
+        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+            if let Some(tex) = albumart.get_for(folder_uri, true) {
+                for song in self.imp().queue.borrow().iter::<Song>().flatten() {
+                    if song.get_thumbnail().is_none() && strip_filename_linux(&song.get_uri()) == folder_uri {
+                        song.set_thumbnail(Some(tex.clone()));
+                        // If currently playing, then also update the sidebar.
+                        // Note: sidebar will use the high-resolution verison.
+                        if song.is_playing() {
+                            self.notify("album-art");
+                        }
+                    }
                 }
             }
         }
@@ -247,13 +293,25 @@ impl Player {
         None
     }
 
-    // pub fn album(&self) -> Option<String> {
-    //     if let Some(song) = &*self.imp().current_song.borrow() {
-    //         return song.album.clone();
-    //     }
+    pub fn album(&self) -> Option<String> {
+        if let Some(song) = &*self.imp().current_song.borrow() {
+            return Some(song.get_album());
+        }
+        None
+    }
 
-    //     None
-    // }
+    pub fn album_art(&self) -> Option<Texture> {
+        // Use high-resolution version
+        if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+                let uri = song.get_uri();
+                let folder_uri = strip_filename_linux(&uri);
+                return albumart.get_for(folder_uri, false);
+            }
+            return None;
+        }
+        None
+    }
 
     pub fn duration(&self) -> u64 {
         if let Some(song) = &*self.imp().current_song.borrow() {
@@ -280,11 +338,5 @@ impl Player {
 
     pub fn queue(&self) -> gio::ListStore {
         self.imp().queue.borrow().clone()
-    }
-}
-
-impl Default for Player {
-    fn default() -> Self {
-        glib::Object::new()
     }
 }

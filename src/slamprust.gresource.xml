@@ -1,13 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-  <gresource prefix="/org/slamprust/Slamprust">
-    <file preprocess="xml-stripblanks">window.ui</file>
-    <file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
+	<gresource prefix="/org/slamprust/Slamprust">
+		<file preprocess="xml-stripblanks">window.ui</file>
+		<file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
+		<file preprocess="xml-stripblanks">gtk/library-view.ui</file>
+		<file preprocess="xml-stripblanks">gtk/album-view.ui</file>
+		<file preprocess="xml-stripblanks">gtk/queue-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
-    <file preprocess="xml-stripblanks">gtk/icons/skip-backward-large-symbolic.svg</file>
-    <file preprocess="xml-stripblanks">gtk/icons/play-large-symbolic.svg</file>
-    <file preprocess="xml-stripblanks">gtk/icons/skip-forward-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks">gtk/sidebar-button.ui</file>
+		<file preprocess="xml-stripblanks">gtk/sidebar.ui</file>
 		<file>gtk/style.css</file>
-		<file alias="albumart-placeholder.png">resources/albumart-placeholder.png</file>
-  </gresource>
+		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
+	</gresource>
+	<gresource prefix="/org/slamprust/Slamprust/icons/scalable/actions/">
+		<file preprocess="xml-stripblanks" alias="skip-backward-large-symbolic.svg">gtk/icons/skip-backward-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="play-large-symbolic.svg">gtk/icons/play-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="pause-large-symbolic.svg">gtk/icons/pause-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="skip-forward-large-symbolic.svg">gtk/icons/skip-forward-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="music-artist-symbolic.svg">gtk/icons/music-artist-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="library-symbolic.svg">gtk/icons/library-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="playlist-symbolic.svg">gtk/icons/playlist-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="library-music-symbolic.svg">gtk/icons/library-music-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="music-queue-symbolic.svg">gtk/icons/music-queue-symbolic.svg</file>
+	</gresource>
 </gresources>

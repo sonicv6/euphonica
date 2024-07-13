@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<requires lib="gtk" version="4.0" />
+	<requires lib="Adw" version="1.0" />
+	<template class="SlamprustSidebar" parent="GtkBox">
+		<property name="spacing">6</property>
+		<property name="orientation">vertical</property>
+		<child>
+			<object class="SlamprustSidebarButton" id="albums_btn">
+				<property name="label" translatable="true">Albums</property>
+				<property name="icon_name">library-music-symbolic</property>
+			</object>
+		</child>
+		<child>
+			<object class="SlamprustSidebarButton" id="artists_btn">
+				<property name="group">albums_btn</property>
+				<property name="label" translatable="true">Artists</property>
+				<property name="icon_name">music-artist-symbolic</property>
+			</object>
+		</child>
+		<child>
+			<object class="SlamprustSidebarButton" id="folders_btn">
+				<property name="group">albums_btn</property>
+				<property name="label" translatable="true">Folders</property>
+				<property name="icon_name">folder-symbolic</property>
+			</object>
+		</child>
+		<child>
+			<object class="GtkSeparator"></object>
+		</child>
+		<child>
+			<object class="SlamprustSidebarButton" id="playlist1_btn">
+				<property name="group">albums_btn</property>
+				<property name="label" translatable="true">Playlist 1</property>
+				<property name="icon_name">folder-symbolic</property>
+			</object>
+		</child>
+		<child>
+			<object class="SlamprustSidebarButton" id="playlist2_btn">
+				<property name="group">albums_btn</property>
+				<property name="label" translatable="true">Playlist 2</property>
+				<property name="icon_name">folder-symbolic</property>
+			</object>
+		</child>
+		<child>
+			<object class="GtkSeparator"></object>
+		</child>
+		<child>
+			<object class="GtkToggleButton" id="queue_btn">
+				<property name="group">albums_btn</property>
+				<property name="child">
+					<object class="GtkCenterBox">
+						<property name="start-widget">
+							<object class="GtkLabel">
+								<property name="label">Queue</property>
+							</object>
+						</property>
+
+						<property name="end-widget">
+							<object class="GtkLabel">
+								<property name="label">4</property>
+							</object>
+						</property>
+					</object>
+				</property>
+				<style>
+					<class name="flat"/>
+				</style>
+			</object>
+		</child>
+
+		<style>
+			<class name="sidebar"/>
+		</style>
+	</template>
+</interface>

@@ -1,0 +1,31 @@
+.queue-view-column {
+    margin-left: 12px;
+    margin-right: 12px;
+}
+
+.floating-listview {
+    background-color: unset;
+}
+
+.floating-listview row {
+    background-color: unset;
+}
+
+.queue-row {
+    padding: 6px;
+}
+
+.queue-row .thumbnail-box {
+    border-radius: 6px;  /* 12px card radius - 6px padding for concentric rounding */
+}
+
+.sidebar {
+    padding-top: 12pt;
+    padding-bottom: 12pt;
+    padding-left: 6pt;
+    padding-right: 6pt;
+}
+
+.sidebar-btn label {
+    font-weight: regular;
+}

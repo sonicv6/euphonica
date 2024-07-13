@@ -22,7 +22,6 @@ use adw::subclass::prelude::*;
 use gtk::{gio, glib};
 use std::{
     cell::RefCell,
-    fmt::{self, Display, Formatter},
     rc::Rc,
     fs::create_dir_all,
     path::PathBuf
@@ -31,7 +30,7 @@ use async_channel::{Sender, Receiver};
 
 use crate::{
     player::Player,
-    client::{AlbumArtCache, MpdWrapper, MpdMessage},
+    client::{MpdWrapper, MpdMessage, AlbumArtCache},
     config::VERSION,
     SlamprustWindow
 };
@@ -42,6 +41,7 @@ mod imp {
     #[derive(Debug)]
     pub struct SlamprustApplication {
         pub player: Rc<Player>,
+        pub albumart: Rc<AlbumArtCache>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
     	pub client: Rc<MpdWrapper>,
@@ -58,7 +58,8 @@ mod imp {
             // Create cache folder. This is where the cached album arts go.
             let mut cache_path: PathBuf = glib::user_cache_dir();
             cache_path.push("slamprust");
-            create_dir_all(&cache_path);
+            println!("Cache path: {}", cache_path.to_str().unwrap());
+            create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
             // Set up channels for communication with client object
             // Only one message at a time to client
@@ -69,13 +70,15 @@ mod imp {
 
             // Create controllers (Rc pointers)
             let player = Rc::new(Player::default());
+            let albumart = Rc::new(AlbumArtCache::new(&cache_path));
+            player.setup(sender.clone(), albumart.clone());
 
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(
                 player.clone(),
                 sender.clone(),
                 RefCell::new(Some(receiver)),
-                &cache_path
+                albumart.clone()
             );
 
             // TODO: use gsettings for reading host & port
@@ -87,6 +90,7 @@ mod imp {
             Self {
                 player,
                 client,
+                albumart,
                 sender,
                 cache_path
             }
@@ -150,6 +154,10 @@ impl SlamprustApplication {
 
     pub fn get_player(&self) -> Rc<Player> {
         self.imp().player.clone()
+    }
+
+    pub fn get_album_art_cache(&self) -> Rc<AlbumArtCache> {
+        self.imp().albumart.clone()
     }
 
     pub fn get_client(&self) -> Rc<MpdWrapper> {

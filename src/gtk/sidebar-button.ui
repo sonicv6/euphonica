@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<requires lib="gtk" version="4.0" />
+	<requires lib="Adw" version="1.0" />
+	<template class="SlamprustSidebarButton" parent="GtkToggleButton">
+		<property name="child">
+			<object class="GtkBox">
+				<property name="spacing">12</property>
+				<child>
+					<object class="GtkImage" id="icon_widget"></object>
+				</child>
+				<child>
+					<object class="GtkLabel" id="label_widget"></object>
+				</child>
+			</object>
+		</property>
+		<style>
+			<class name="flat"/>
+            <class name="sidebar-btn"/>
+		</style>
+    </template>
+</interface>

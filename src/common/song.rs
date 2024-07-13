@@ -1,4 +1,3 @@
-extern crate mpd;
 use core::time::Duration;
 use time::Date;
 use std::{
@@ -6,8 +5,8 @@ use std::{
     cell::{Cell, RefCell}
 };
 use chrono::NaiveDate;
-use glib::Properties;
 use gtk::glib;
+use gtk::gdk::Texture;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
@@ -44,12 +43,14 @@ mod imp {
         ParamSpecUInt64,
         ParamSpecBoolean,
         ParamSpecString,
+        ParamSpecObject
     };
     use once_cell::sync::Lazy;
     use super::*;
 
     #[derive(Default, Debug)]
     pub struct Song {
+        // TODO: Too many RefCells. Might want to move them all into a nested struct then RefCelling that struct.
         // These are all cells to allow for modification by the ID3 tag editor
         pub uri: RefCell<String>,
         pub title: RefCell<Option<String>>,
@@ -61,10 +62,9 @@ mod imp {
         pub album: RefCell<Option<String>>,
         // TODO: add albumartist & albumsort
         // pub release_date: RefCell<Option<u64>>,
-        pub thumbnail_path: RefCell<Option<String>>,
-        pub cover_path: RefCell<Option<String>>,
         // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
-        pub is_playing: Cell<bool>
+        pub is_playing: Cell<bool>,
+        pub thumbnail: RefCell<Option<Texture>>
     }
 
     #[glib::object_subclass]
@@ -80,9 +80,8 @@ mod imp {
                 duration: Cell::new(0),
                 queue_id: Cell::new(None),
                 album: RefCell::new(None),
-                cover_path: RefCell::new(None),
-                thumbnail_path: RefCell::new(None),
-                is_playing: Cell::new(false)
+                is_playing: Cell::new(false),
+                thumbnail: RefCell::new(None)
             }
         }
     }
@@ -100,12 +99,10 @@ mod imp {
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
                     ParamSpecString::builder("album").build(),
                     // ParamSpecString::builder("release_date").build(),
-                    ParamSpecString::builder("cover-path").build(),
-                    ParamSpecString::builder("thumbnail-path").build(),
                     ParamSpecBoolean::builder("is-playing").build(),
-                    // ParamSpecObject::builder::<gdk::Texture>("cover")
-                    //     .read_only()
-                    //     .build(),
+                    ParamSpecObject::builder::<Texture>("thumbnail")
+                        .read_only()
+                        .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -125,9 +122,8 @@ mod imp {
                 "is-queued" => obj.is_queued().to_value(),
                 "album" => obj.get_album().to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
-                "cover-path" => obj.get_cover_path(false).to_value(),
-                "thumbnail-path" => obj.get_cover_path(true).to_value(),
                 "is-playing" => obj.is_playing().to_value(),
+                "thumbnail" => obj.get_thumbnail().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -171,24 +167,6 @@ mod imp {
                     }
                     obj.notify("album");
                 }
-                "cover-path" => {
-                    if let Ok(c) = value.get::<&str>() {
-                        let _ = self.cover_path.replace(Some(c.to_owned()));
-                    }
-                    obj.notify("cover-path");
-                },
-                "thumbnail-path" => {
-                    if let Ok(c) = value.get::<&str>() {
-                        let _ = self.thumbnail_path.replace(Some(c.to_owned()));
-                    }
-                    obj.notify("thumbnail-path");
-                },
-                "is-playing" => {
-                    if let Ok(b) = value.get::<bool>() {
-                        let _ = self.is_playing.replace(b);
-                        obj.notify("is-playing");
-                    }
-                }
                 _ => unimplemented!(),
             }
         }
@@ -211,7 +189,6 @@ impl Song {
             .property("artist", song.artist.clone())
             .property("duration", song.duration.expect("Song must have duration").as_secs())
             // .property("album", None)
-            // .property("cover_hash", None)
             //.property("release_date", None)
             .build();
 
@@ -259,7 +236,7 @@ impl Song {
         if let Some(artist) = self.imp().artist.borrow().clone() {
             return artist;
         }
-        String::from("Unknown artist")
+        String::from("Unknown")
     }
 
     pub fn get_queue_id(&self) -> u32 {
@@ -277,41 +254,16 @@ impl Song {
         if let Some(album) = self.imp().album.borrow().clone() {
             return album;
         }
-        String::from("Unknown album")
+        String::from("Unknown")
     }
 
-    pub fn get_cover_path(&self, thumbnail: bool) -> Option<String> {
-        if thumbnail {
-            return self.imp().thumbnail_path.borrow().clone();
-        }
-        self.imp().cover_path.borrow().clone()
+    pub fn get_thumbnail(&self) -> Option<Texture> {
+        self.imp().thumbnail.borrow().clone()
     }
 
-    pub fn set_cover_path(&self, path: &PathBuf, thumbnail: bool) {
-        if thumbnail {
-            let _ = self.imp()
-                .thumbnail_path
-                .replace(Some(
-                    path.to_str()
-                    .expect("Invalid thumbnail path!")
-                    .to_owned()
-            ));
-            self.notify("thumbnail-path");
-        }
-        else {
-            let _ = self.imp()
-                .cover_path
-                .replace(Some(
-                    path.to_str()
-                    .expect("Invalid cover path!")
-                    .to_owned()
-            ));
-            self.notify("cover-path");
-        }
-    }
-
-    pub fn has_cover(&self) -> bool {
-        self.imp().thumbnail_path.borrow().is_some() && self.imp().cover_path.borrow().is_some()
+    pub fn set_thumbnail(&self, tex: Option<Texture>) {
+        let _ = self.imp().thumbnail.replace(tex);
+        self.notify("thumbnail");
     }
 
     pub fn is_playing(&self) -> bool {
