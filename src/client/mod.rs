@@ -1,5 +1,5 @@
-pub mod wrapper;
 pub mod albumart;
+pub mod wrapper;
 
 pub use wrapper::MpdWrapper;
 pub use wrapper::MpdMessage;

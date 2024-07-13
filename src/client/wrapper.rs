@@ -12,7 +12,7 @@ use mpd::{
     Idle,
     Channel
 };
-use super::albumart::{strip_filename_linux, AlbumArtCache};
+use super::albumart::AlbumArtCache;
 use async_channel::{Sender, Receiver};
 use glib::clone;
 use gtk::{glib, gio};
@@ -69,7 +69,7 @@ pub enum MpdMessage {
 
 	// Reserved for child thread
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
-	AlbumArtDownloaded(String, PathBuf, PathBuf) // Notify which album art was downloaded and where it is
+	AlbumArtDownloaded(String) // Notify which album art was downloaded and where it is
 }
 
 // Work requests for sending to the child thread.
@@ -122,7 +122,7 @@ pub struct MpdWrapper {
     receiver: RefCell<Option<Receiver<MpdMessage>>>,
     // Corresponding sender, for cloning into child thread.
     sender: Sender<MpdMessage>,
-    albumart: AlbumArtCache,
+    albumart: Rc<AlbumArtCache>,
     // The main client living on the main thread. Every single method of
     // mpd::Client is mutating so we'll just rely on a RefCell for now.
 	main_client: RefCell<Option<Client>>,
@@ -137,12 +137,10 @@ impl MpdWrapper {
         player: Rc<Player>,
         sender: Sender<MpdMessage>,
         receiver: RefCell<Option<Receiver<MpdMessage>>>,
-        // Cache path (album arts will be written into a subfolder)
-        cache_path: &PathBuf,
+        albumart: Rc<AlbumArtCache>,
     ) -> Rc<Self> {
         let ch_name = Uuid::new_v4().simple().to_string();
         println!("Channel name: {}", &ch_name);
-        let albumart = AlbumArtCache::new(cache_path);
         let wrapper = Rc::new(Self {
             player,
             receiver, // from UI. Note: RefCell has runtime reference checking
@@ -187,7 +185,7 @@ impl MpdWrapper {
                                             let _ = dyn_img.resize(256, 256, FilterType::CatmullRom).save(&cache_path);
                                             let  _= dyn_img.thumbnail(64, 64).save(&thumb_cache_path);
                                         }
-                                        let _ = sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri, cache_path, thumb_cache_path));
+                                        let _ = sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri));
                                     }
                                 }
                                 _ => unimplemented!()
@@ -204,6 +202,7 @@ impl MpdWrapper {
                                         let content = msg.message.as_str();
                                         println!("Received msg: {}", content);
                                         match content {
+                                            // More to come
                                             "STOP" => {break;}
                                             _ => {}
                                         }
@@ -247,8 +246,20 @@ impl MpdWrapper {
             MpdMessage::Next => self.set_next(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
-            MpdMessage::AlbumArt(folder_uri) => self.get_album_art(&folder_uri),
-            MpdMessage::AlbumArtDownloaded(folder_uri, path, thumb_path) => self.notify_album_art(&folder_uri, &path, &thumb_path),
+            MpdMessage::AlbumArt(folder_uri) => {
+                let cache_path = self.albumart.get_path_for(&folder_uri);
+                let thumb_cache_path = self.albumart.get_thumbnail_path_for(&folder_uri);
+                if let Some(sender) = self.bg_sender.borrow().as_ref() {
+                    let _ = sender.send_blocking(
+                        BackgroundTask::DownloadAlbumArt(
+                            folder_uri.to_owned(),
+                            cache_path.clone(),
+                            thumb_cache_path.clone()
+                        )
+                    );
+                }
+            },
+            MpdMessage::AlbumArtDownloaded(folder_uri) => self.notify_album_art(&folder_uri),
             _ => {}
         }
         glib::ControlFlow::Continue
@@ -287,10 +298,10 @@ impl MpdWrapper {
             let _ = main_client.sendmessage(self.bg_channel.clone(), "STOP");
             // Now close the main client
             let _ = main_client.close();
-            // Wait for child client to stop.
-            if let Some(handle) = self.bg_handle.take() {
-                let _ = handle.await;
-            }
+        }
+        // Wait for child client to stop.
+        if let Some(handle) = self.bg_handle.take() {
+            let _ = handle.await;
         }
         println!("Connecting to {}:{}", host, port);
         if let Ok(c) = mpd::Client::connect(format!("{}:{}", host, port)) {
@@ -319,10 +330,7 @@ impl MpdWrapper {
     pub fn set_playback(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
-            if let _ = client.toggle_pause() {
-                // Let each state update their respective properties
-                
-            }
+            let _ = client.toggle_pause();
             // TODO: handle error
         }
         else {
@@ -332,10 +340,7 @@ impl MpdWrapper {
     pub fn set_prev(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
-            if let _ = client.prev() {
-                // Let each state update their respective properties
-                
-            }
+            let _ = client.prev();
             // TODO: handle error
         }
         else {
@@ -345,10 +350,7 @@ impl MpdWrapper {
     pub fn set_next(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
-            if let _ = client.next() {
-                // Let each state update their respective properties
-                
-            }
+            let _ = client.next();
             // TODO: handle error
         }
         else {
@@ -370,35 +372,8 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_album_art(&self, uri: &String) {
-        let folder_uri = strip_filename_linux(uri);
-        let (cache_path, thumb_cache_path) = self.albumart.get_path_for(folder_uri);
-        // Check if we have a cached version
-        if !cache_path.exists() || !thumb_cache_path.exists() {
-            // Else download from server
-            // Download from server
-            println!("Fetching album art for path: {:?}", folder_uri);
-            if let Some(sender) = self.bg_sender.borrow().as_ref() {
-                let _ = sender.send_blocking(
-                    BackgroundTask::DownloadAlbumArt(
-                        folder_uri.to_owned(),
-                        cache_path.clone(),
-                        thumb_cache_path.clone()
-                    )
-                );
-            }
-            if let Some(client) = self.main_client.borrow_mut().as_mut() {
-                let _ = client.sendmessage(self.bg_channel.clone(), "WAKE");
-            }
-        }
-        else {
-            // Notify all controllers of path. Whether this album art is still needed is up to the controllers.
-            self.notify_album_art(folder_uri, &cache_path, &thumb_cache_path);
-        }
-    }
-
-    pub fn notify_album_art(&self, folder_uri: &str, path: &PathBuf, thumbnail_path: &PathBuf) {
-        self.player.update_album_art(folder_uri, path, thumbnail_path);
+    pub fn notify_album_art(&self, folder_uri: &str) {
+        self.player.update_album_art(folder_uri);
     }
 }
 

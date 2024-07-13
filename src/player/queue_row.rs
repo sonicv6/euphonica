@@ -72,7 +72,6 @@ glib::wrapper! {
     @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
 }
 
-
 impl Default for QueueRow {
     fn default() -> Self {
         Self::new()
@@ -93,14 +92,20 @@ impl QueueRow {
         let playing_label = self.imp().playing_indicator.get();
         let mut bindings = self.imp().bindings.borrow_mut();
 
-        let thumbnail_path_binding = song
+        // Set once first (like sync_create)
+        let thumbnail = song.get_thumbnail();
+        // println!("Thumbnail exists: {}", thumbnail.is_some());
+        thumbnail_image.set_from_paintable(thumbnail.as_ref());
+        let thumbnail_binding = song
             .connect_notify_local(
-                Some("thumbnail-path"),
+                Some("thumbnail"),
                 move |this_song, _| {
-                    thumbnail_image.set_from_file(this_song.get_cover_path(true));
+                    let thumbnail = this_song.get_thumbnail();
+                    // println!("Thumbnail exists: {}", thumbnail.is_some());
+                    thumbnail_image.set_from_paintable(thumbnail.as_ref());
                 },
             );
-        self.imp().thumbnail_signal_id.replace(Some(thumbnail_path_binding));
+        self.imp().thumbnail_signal_id.replace(Some(thumbnail_binding));
 
         let song_name_binding = song
             .bind_property("name", &song_name_label, "label")

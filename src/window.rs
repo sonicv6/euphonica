@@ -147,7 +147,7 @@ impl SlamprustWindow {
 
         win.imp().queue_view.setup(
             app.get_player(),
-            app.get_sender()
+            app.get_album_art_cache()
         );
         win.imp().sidebar.setup(
             win.imp().stack.clone()

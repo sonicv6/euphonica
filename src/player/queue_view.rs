@@ -10,11 +10,13 @@ use gtk::{
     prelude::*,
     gio,
     glib,
+    gdk,
     CompositeTemplate,
     NoSelection,
     SignalListItemFactory,
     ListItem,
 };
+use gdk::Texture;
 use glib::{
     clone,
     signal::SignalHandlerId
@@ -22,6 +24,7 @@ use glib::{
 
 use crate::{
     client::MpdMessage,
+    client::albumart::{AlbumArtCache, strip_filename_linux},
     common::Song
 };
 
@@ -50,7 +53,7 @@ mod imp {
         #[template_child]
         pub current_album_name: TemplateChild<gtk::Label>,
 
-        pub signal_ids: RefCell<Vec<SignalHandlerId>>
+        pub signal_ids: RefCell<Vec<SignalHandlerId>>,
     }
 
     #[glib::object_subclass]
@@ -104,7 +107,7 @@ impl QueueView {
         Self::default()
     }
 
-    pub fn setup_listview(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
+    pub fn setup_listview(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {
         // Set selection mode
         // TODO: Allow click to jump to song
         let sel_model = NoSelection::new(Some(player.queue()));
@@ -122,7 +125,7 @@ impl QueueView {
                 .set_child(Some(&queue_row));
         });
         // Tell factory how to bind `QueueRow` to one of our Song GObjects
-        factory.connect_bind(move |_, list_item| {
+        factory.connect_bind(clone!(@weak albumart as cache => move |_, list_item| {
             // Get `Song` from `ListItem` (that is, the data side)
             let item: Song = list_item
                 .downcast_ref::<ListItem>()
@@ -131,9 +134,15 @@ impl QueueView {
                 .and_downcast::<Song>()
                 .expect("The item has to be a common::Song.");
 
-            if !item.has_cover() {
-                // Request album art. Will be updated later when ready.
-                let _ = sender.send_blocking(MpdMessage::AlbumArt(item.get_uri()));
+            // This song is about to be displayed. Cache its album art (if any) now.
+            // Might result in a cache miss, in which case the file will be immediately loaded
+            // from disk.
+            // Note that this does not trigger any downloading. That's done by the Player
+            // controller upon receiving queue updates.
+            if item.get_thumbnail().is_none() {
+                if let Some(tex) = albumart.get_for(strip_filename_linux(&item.get_uri()), true) {
+                    item.set_thumbnail(Some(tex));
+                }
             }
 
             // Get `QueueRow` from `ListItem` (the UI widget)
@@ -144,10 +153,13 @@ impl QueueView {
                 .and_downcast::<QueueRow>()
                 .expect("The child has to be a `QueueRow`.");
 
+            // Within this binding fn is where the cached album art texture gets used.
             child.bind(&item);
-        });
+        }));
 
-        // When row goes out of sight, unbind from item to allow reuse with another
+
+        // When row goes out of sight, unbind from item to allow reuse with another.
+        // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
         factory.connect_unbind(move |_, list_item| {
             // Get `QueueRow` from `ListItem` (the UI widget)
             let child: QueueRow = list_item
@@ -191,11 +203,10 @@ impl QueueView {
         }
     }
 
-    fn update_album_art(&self, maybe_path: Option<&String>) {
-        println!("Setting album art for current song to {:?}", maybe_path);
+    fn update_album_art(&self, tex: Option<&Texture>) {
         // Use high-resolution version here
-        if let Some(path) = maybe_path {
-            self.imp().current_album_art.set_from_file(Some(path));
+        if tex.is_some() {
+            self.imp().current_album_art.set_from_paintable(tex);
         }
         else {
             self.imp().current_album_art.set_from_resource(Some("/org/slamprust/Slamprust/albumart-placeholder.png"));
@@ -256,8 +267,8 @@ impl QueueView {
         );
     }
 
-    pub fn setup(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
-        self.setup_listview(player.clone(), sender);
+    pub fn setup(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {
+        self.setup_listview(player.clone(), albumart);
         self.bind_state(player);
     }
 }
