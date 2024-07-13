@@ -29,6 +29,7 @@ use std::{
 use async_channel::{Sender, Receiver};
 
 use crate::{
+    library::Library,
     player::Player,
     client::{MpdWrapper, MpdMessage, AlbumArtCache},
     config::VERSION,
@@ -41,6 +42,7 @@ mod imp {
     #[derive(Debug)]
     pub struct SlamprustApplication {
         pub player: Rc<Player>,
+        pub library: Rc<Library>,
         pub albumart: Rc<AlbumArtCache>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
@@ -70,12 +72,15 @@ mod imp {
 
             // Create controllers (Rc pointers)
             let player = Rc::new(Player::default());
+            let library = Rc::new(Library::default());
             let albumart = Rc::new(AlbumArtCache::new(&cache_path));
             player.setup(sender.clone(), albumart.clone());
+            library.setup(sender.clone(), albumart.clone());
 
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(
                 player.clone(),
+                library.clone(),
                 sender.clone(),
                 RefCell::new(Some(receiver)),
                 albumart.clone()
@@ -89,6 +94,7 @@ mod imp {
 
             Self {
                 player,
+                library,
                 client,
                 albumart,
                 sender,
@@ -154,6 +160,10 @@ impl SlamprustApplication {
 
     pub fn get_player(&self) -> Rc<Player> {
         self.imp().player.clone()
+    }
+
+    pub fn get_library(&self) -> Rc<Library> {
+        self.imp().library.clone()
     }
 
     pub fn get_album_art_cache(&self) -> Rc<AlbumArtCache> {

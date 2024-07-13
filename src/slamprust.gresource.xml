@@ -5,6 +5,7 @@
 		<file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
 		<file preprocess="xml-stripblanks">gtk/library-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/album-view.ui</file>
+		<file preprocess="xml-stripblanks">gtk/album-cell.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar-button.ui</file>

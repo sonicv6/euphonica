@@ -149,6 +149,10 @@ impl SlamprustWindow {
             app.get_player(),
             app.get_album_art_cache()
         );
+        win.imp().album_view.setup_gridview(
+            app.get_library(),
+            app.get_album_art_cache()
+        );
         win.imp().sidebar.setup(
             win.imp().stack.clone()
         );
