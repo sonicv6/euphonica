@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc
+    rc::Rc,
+    f64::consts::PI
 };
 use gtk::{
     glib,
@@ -8,15 +9,24 @@ use gtk::{
     subclass::prelude::*,
     CompositeTemplate,
     Label,
-    Image
+    Image,
+    ScrolledWindow,
+    EventControllerMotion,
+    TickCallbackId
 };
 use glib::{
+    clone,
     Object,
     Binding,
+    ControlFlow,
     signal::SignalHandlerId
 };
 
 use crate::common::Song;
+
+fn ease_in_out_sine(progress: f64) -> f64 {
+    (1.0 - (progress * PI).cos()) / 2.0
+}
 
 mod imp {
     use super::*;
@@ -26,6 +36,8 @@ mod imp {
     pub struct QueueRow {
         #[template_child]
         pub thumbnail: TemplateChild<Image>,
+        #[template_child]
+        pub marquee: TemplateChild<ScrolledWindow>,
         #[template_child]
         pub song_name: TemplateChild<Label>,
          #[template_child]
@@ -37,6 +49,9 @@ mod imp {
         // Vector holding the bindings to properties of the Song GObject
         pub bindings: RefCell<Vec<Binding>>,
         pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub marquee_tick_callback_id: RefCell<Option<TickCallbackId>>,
+        pub marquee_forward: Cell<bool>,
+        pub marquee_progress: Cell<f64>
     }
 
     // The central trait for subclassing a GObject
@@ -83,8 +98,57 @@ impl QueueRow {
         Object::builder().build()
     }
 
+    fn start_marquee(&self) {
+        let marquee = self.imp().marquee.get();
+        let adj = marquee.hadjustment();
+        self.imp().marquee_forward.replace(true);
+        self.imp().marquee_progress.replace(0.0);
+        let this = self.clone();
+        let id = marquee.add_tick_callback(move |_, frame_clock| {
+            // TODO: customisable interval. For now hardcoding to 5000ms each direction (10s full cycle).
+            // Full range = upper - page_size, where page is the "content width" and upper is
+            // the maximum "coordinate" that can be seen by the ScrolledWindow, i.e. the far end
+            // of the content.
+            // Value on the other hand is the "coordinate" of the beginning of the content.
+            // Recalculate range at every tick since user might have resized the window.
+            let range = adj.upper() - adj.page_size();
+            if range > 0.0 {
+                let progress_step = (1000.0 / frame_clock.fps()) / 5000.0;  // in milliseconds
+                // Calculate progress value at next frame.
+                if this.imp().marquee_forward.get() {
+                    let next_progress = this.imp().marquee_progress.get() + progress_step;
+                    if next_progress >= 1.0 {
+                        // Do not advance. Instead, simply flip direction for next frame.
+                        let _ = this.imp().marquee_forward.replace(false);
+                    }
+                    else {
+                        // Not at the end yet => advance
+                        let next_value = ease_in_out_sine(next_progress);
+                        let _ = this.imp().marquee_progress.replace(next_progress);
+                        adj.set_value(next_value * range);
+                    }
+                }
+                else {
+                    let next_progress = this.imp().marquee_progress.get() - progress_step;
+                    if next_progress <= 0.0 {
+                        let _ = this.imp().marquee_forward.replace(true);
+                    }
+                    else {
+                        // Not at the end yet => advance
+                        let next_value = ease_in_out_sine(next_progress);
+                        let _ = this.imp().marquee_progress.replace(next_progress);
+                        adj.set_value(next_value * range);
+                    }
+                }
+            }
+            ControlFlow::Continue
+        });
+        self.imp().marquee_tick_callback_id.replace(Some(id));
+    }
+
     pub fn bind(&self, song: &Song) {
         // Get state
+        let marquee = self.imp().marquee.get();
         let thumbnail_image = self.imp().thumbnail.get();
         let song_name_label = self.imp().song_name.get();
         let album_name_label = self.imp().album_name.get();
@@ -134,6 +198,22 @@ impl QueueRow {
             .build();
         // Save binding
         bindings.push(song_is_playing_binding);
+
+        // Run marquee while hovered
+        let hover_ctl = EventControllerMotion::new();
+        hover_ctl.connect_enter(clone!(@weak self as this => move |_, _, _| {
+            this.start_marquee();
+        }));
+        hover_ctl.connect_leave(clone!(@weak self as this => move |_| {
+            // Remove the marquee movement callback & set its position back to 0.
+            if let Some(id) = this.imp().marquee_tick_callback_id.take() {
+                id.remove();
+            }
+            marquee.hadjustment().set_value(
+                marquee.hadjustment().lower()
+            );
+        }));
+        self.add_controller(hover_ctl);
     }
 
     pub fn unbind(&self, song: &Song) {
