@@ -281,7 +281,7 @@ impl Player {
     // internal fields.
     pub fn title(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return Some(song.get_name().clone());
+            return song.get_name();
         }
         None
     }

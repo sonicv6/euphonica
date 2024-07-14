@@ -224,7 +224,6 @@ impl MpdWrapper {
                                         }
                                     }
                                 }
-                                _ => unimplemented!()
                             }
                         }
                     }
