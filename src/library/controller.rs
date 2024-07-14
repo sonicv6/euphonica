@@ -2,12 +2,13 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     vec::Vec,
-    path::PathBuf
+    path::PathBuf,
+    sync::OnceLock
 };
 use async_channel::Sender;
 use crate::{
-    common::{Album, AlbumInfo},
-    client::albumart::{AlbumArtCache, strip_filename_linux},
+    common::{Album, AlbumInfo, Song},
+    client::albumart::AlbumArtCache,
     client::MpdMessage
 };
 use gtk::{
@@ -16,6 +17,8 @@ use gtk::{
     prelude::*,
 };
 use gtk::gdk::Texture;
+use glib::subclass::Signal;
+
 use adw::subclass::prelude::*;
 
 mod imp {
@@ -70,9 +73,6 @@ mod imp {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
                     ParamSpecObject::builder::<gio::ListStore>("albums").read_only().build()
-                    // ParamSpecObject::builder::<gdk::Texture>("cover")
-                    //     .read_only()
-                    //     .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -84,6 +84,17 @@ mod imp {
                 "albums" => obj.albums().to_value(),
                 _ => unimplemented!(),
             }
+        }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("album-clicked")
+                        .param_types([Album::static_type(), gio::ListStore::static_type()])
+                        .build()
+                ]
+            })
         }
     }
 }
@@ -109,6 +120,13 @@ impl Library {
         self.imp().albums.borrow().clone()
     }
 
+    pub fn on_album_clicked(&self, album: Album) {
+        // Used by AlbumView
+        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+            let _ = sender.send_blocking(MpdMessage::Album(album.get_info()));
+        }
+    }
+
     pub fn add_album_info(&self, info: AlbumInfo) {
         println!("Adding album: {:?}", info);
         let album = Album::from_info(info);
@@ -124,5 +142,36 @@ impl Library {
         self.imp().albums.borrow().append(
             &album
         );
+    }
+
+    pub fn push_album_content_page(&self, info: AlbumInfo, songs: Vec<Song>) {
+        let song_list = gio::ListStore::new::<Song>();
+        song_list.extend_from_slice(&songs);
+        self.emit_by_name::<()>(
+            "album-clicked",
+            &[
+                // Need to wrap info in an Album GObject again to pass along signal
+                &Album::from_info(info),
+                &song_list
+            ]
+        );
+    }
+
+    pub fn update_album_art(&self, folder_uri: &str) {
+        // TODO: batch this too.
+        // This fn is only for updating album art AFTER the albums have already been displayed
+        // in the grid view (for example, after finishing downloading their album arts).
+        // Albums whose covers have already been downloaded will not need this fn.
+        // Instead, they are loaded on-demand from disk or cache by the grid view.
+        // Iterate through the list store to see if we can load album art for any
+        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+            if let Some(tex) = albumart.get_for(folder_uri, true) {
+                for album in self.imp().albums.borrow().iter::<Album>().flatten() {
+                    if album.get_cover().is_none() && album.get_uri() == folder_uri {
+                        album.set_cover(Some(tex.clone()));
+                    }
+                }
+            }
+        }
     }
 }

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<template class="SlamprustAlbumSongRow" parent="GtkBox">
+		<child>
+			<object class="GtkLabel" id="track_index">
+				<property name="label">NaN</property>
+			</object>
+		</child>
+		<child>
+			<object class="GtkBox">
+				<property name="orientation">vertical</property>
+				<property name="spacing">6</property>
+				<property name="margin-start">12</property>
+				<child>
+					<object class="GtkBox">
+						<child>
+							<object class="GtkLabel" id="song_name">
+								<property name="halign">start</property>
+								<style>
+									<class name="heading" />
+								</style>
+							</object>
+						</child>
+					</object>
+				</child>
+				<child>
+					<object class="GtkBox">
+
+						<child>
+							<object class="GtkImage">
+								<property name="icon-name">music-artist-symbolic</property>
+							</object>
+						</child>
+						<child>
+							<object class="GtkLabel" id="artist_name">
+								<property name="margin-start">4</property>
+								<property name="label">Unknown</property>
+							</object>
+						</child>
+
+						<child>
+							<object class="GtkSeparator">
+								<style>
+									<class name="spacer" />
+								</style>
+							</object>
+						</child>
+
+						<child>
+							<object class="GtkImage">
+								<property name="icon-name">clock-alt-symbolic</property>
+							</object>
+						</child>
+						<child>
+							<object class="GtkLabel" id="duration">
+								<property name="margin-start">4</property>
+								<property name="label">0:00</property>
+							</object>
+						</child>
+
+						<style>
+							<class name="dim-label" />
+							<class name="caption" />
+						</style>
+					</object>
+				</child>
+			</object>
+		</child>
+		<style>
+			<class name="card" />
+			<class name="queue-row" />
+		</style>
+	</template>
+</interface>

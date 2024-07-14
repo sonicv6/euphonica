@@ -27,7 +27,7 @@ mod imp {
         pub cover: TemplateChild<Image>,  // Use high-resolution version
         #[template_child]
         pub title: TemplateChild<Label>,
-        // Vector holding the bindings to properties of the Song GObject
+        // Vector holding the bindings to properties of the Album GObject
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
     }

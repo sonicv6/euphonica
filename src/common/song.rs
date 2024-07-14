@@ -56,11 +56,12 @@ mod imp {
         pub title: RefCell<Option<String>>,
         // pub last_mod: RefCell<Option<u64>>,
         pub artist: RefCell<Option<String>>,
+        pub album_artist: RefCell<Option<String>>,
         pub duration: Cell<u64>, // Default to 0 if somehow the option in mpd's Song is None
         pub queue_id: Cell<Option<u32>>,
         // range: Option<Range>,
         pub album: RefCell<Option<String>>,
-        // TODO: add albumartist & albumsort
+        // TODO: add albumsort
         // pub release_date: RefCell<Option<u64>>,
         // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
         pub is_playing: Cell<bool>,
@@ -77,6 +78,7 @@ mod imp {
                 uri: RefCell::new(String::from("")),
                 title: RefCell::new(None),
                 artist: RefCell::new(None),
+                album_artist: RefCell::new(None),
                 duration: Cell::new(0),
                 queue_id: Cell::new(None),
                 album: RefCell::new(None),
@@ -94,6 +96,7 @@ mod imp {
                     ParamSpecString::builder("name").build(),
                     // ParamSpecString::builder("last_mod").build(),
                     ParamSpecString::builder("artist").build(),
+                    ParamSpecString::builder("album-artist").build(),
                     ParamSpecUInt64::builder("duration").construct_only().build(),
                     ParamSpecUInt::builder("queue-id").build(),
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
@@ -116,6 +119,7 @@ mod imp {
                 "name" => obj.get_name().to_value(),
                 // "last_mod" => obj.get_last_mod().to_value(),
                 "artist" => obj.get_artist().to_value(),
+                "album-artist" => obj.get_album_artist().to_value(),
                 // "album" => obj.album().to_value(),
                 "duration" => obj.get_duration().to_value(),
                 "queue-id" => obj.get_queue_id().to_value(),
@@ -153,6 +157,12 @@ mod imp {
                         let _ = self.artist.replace(Some(a.to_owned()));
                     }
                     obj.notify("artist");
+                }
+                "album-artist" => {
+                    if let Ok(a) = value.get::<&str>() {
+                        let _ = self.album_artist.replace(Some(a.to_owned()));
+                    }
+                    obj.notify("album-artist");
                 }
                 // "queue-id" => {
                 //     if let Ok(id) = value.get::<u32>() {
@@ -201,6 +211,7 @@ impl Song {
         for (tag, val) in song.tags.iter() {
             match tag.as_str() {
                 "Album" => {let _ = res.imp().album.replace(Some(val.clone()));},
+                "AlbumArtist" => {let _ = res.imp().album_artist.replace(Some(val.clone()));},
                 // "date" => res.imp().release_date.replace(Some(val.clone())),
                 _ => {}
             }
@@ -225,18 +236,19 @@ impl Song {
         else if let Some(stem) = Path::new(&self.get_uri()).file_stem() {
             return String::from(stem.to_str().unwrap());
         }
-        String::from("Untitled")
+        String::from("Untitled Song")
     }
 
     pub fn get_duration(&self) -> u64 {
         self.imp().duration.get()
     }
 
-    pub fn get_artist(&self) -> String {
-        if let Some(artist) = self.imp().artist.borrow().clone() {
-            return artist;
-        }
-        String::from("Unknown")
+    pub fn get_artist(&self) -> Option<String> {
+        self.imp().artist.borrow().clone()
+    }
+
+    pub fn get_album_artist(&self) -> Option<String> {
+        self.imp().album_artist.borrow().clone()
     }
 
     pub fn get_queue_id(&self) -> u32 {
@@ -250,11 +262,8 @@ impl Song {
         self.imp().queue_id.get().is_some()
     }
 
-    pub fn get_album(&self) -> String {
-        if let Some(album) = self.imp().album.borrow().clone() {
-            return album;
-        }
-        String::from("Unknown")
+    pub fn get_album(&self) -> Option<String> {
+        self.imp().album.borrow().clone()
     }
 
     pub fn get_thumbnail(&self) -> Option<Texture> {

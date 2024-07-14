@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     player::Player,
     library::Library,
-    common::AlbumInfo
+    common::{AlbumInfo, Album, Song}
 };
 use futures::executor;
 use mpd::{
@@ -56,7 +56,6 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
         return None;
     }
     None
-
 }
 
 // One for each command in mpd's protocol plus a few special ones such
@@ -73,6 +72,7 @@ pub enum MpdMessage {
 	AlbumArt(String),
 	Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
+    Album(AlbumInfo), // Get list of songs in album with given tag name
 
 	// Reserved for child thread
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
@@ -209,14 +209,14 @@ impl MpdWrapper {
                                                 Query::new()
                                                     .and(Term::Tag(Cow::Borrowed("album")), tag),
                                                 Window::from((0, 1))
-
                                             ) {
                                                 if !songs.is_empty() {
-                                                    let first_song = &songs[0];
+                                                    let first_song = Song::from_mpd_song(&songs[0]);
                                                     let _ = sender_to_fg.send_blocking(MpdMessage::AlbumInfo(
                                                         AlbumInfo::new(
-                                                            strip_filename_linux(&first_song.file),
-                                                            tag.as_str()
+                                                            strip_filename_linux(&first_song.get_uri()),
+                                                            tag.as_str(),
+                                                            first_song.get_album_artist().as_deref()
                                                         )
                                                     ));
                                                 }
@@ -283,6 +283,7 @@ impl MpdWrapper {
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
+            MpdMessage::Album(info) => self.get_songs_in_album(info),
             MpdMessage::AlbumArt(folder_uri) => {
                 let cache_path = self.albumart.get_path_for(&folder_uri);
                 let thumb_cache_path = self.albumart.get_thumbnail_path_for(&folder_uri);
@@ -417,8 +418,23 @@ impl MpdWrapper {
         }
     }
 
+    pub fn get_songs_in_album(&self, info: AlbumInfo) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let songs: Vec<Song> = client.find(
+                Query::new().and(Term::Tag(Cow::Borrowed("album")), info.title()),
+                Window::from((0, 4096))
+            ).unwrap().iter().map(Song::from_mpd_song).collect();
+
+            if !songs.is_empty() {
+                // Notify library to push new nav page
+                self.library.push_album_content_page(info, songs);
+            }
+        }
+    }
+
     pub fn notify_album_art(&self, folder_uri: &str) {
         self.player.update_album_art(folder_uri);
+        self.library.update_album_art(folder_uri);
     }
 
     pub fn notify_album_info(&self, info: AlbumInfo) {

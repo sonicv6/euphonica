@@ -288,14 +288,14 @@ impl Player {
 
     pub fn artist(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return Some(song.get_artist());
+            return song.get_artist();
         }
         None
     }
 
     pub fn album(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return Some(song.get_album());
+            return song.get_album();
         }
         None
     }

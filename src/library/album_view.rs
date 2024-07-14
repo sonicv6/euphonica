@@ -9,11 +9,16 @@ use gtk::{
     SignalListItemFactory,
     ListItem,
 };
-use glib::clone;
+
+use glib::{
+    clone,
+    closure_local
+};
 
 use super::{
     Library,
-    AlbumCell
+    AlbumCell,
+    AlbumContentView
 };
 use crate::{
     common::Album, client::albumart::AlbumArtCache
@@ -26,7 +31,9 @@ mod imp {
     #[template(resource = "/org/slamprust/Slamprust/gtk/album-view.ui")]
     pub struct AlbumView {
         #[template_child]
-        pub grid_view: TemplateChild<gtk::GridView>
+        pub nav_view: TemplateChild<adw::NavigationView>,
+        #[template_child]
+        pub grid_view: TemplateChild<gtk::GridView>,
     }
 
     #[glib::object_subclass]
@@ -78,6 +85,54 @@ impl Default for AlbumView {
 impl AlbumView {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn setup(&self, library: Rc<Library>, albumart: Rc<AlbumArtCache>) {
+        self.setup_gridview(library.clone(), albumart);
+        self.bind_state(library);
+    }
+
+    pub fn bind_state(&self, library: Rc<Library>) {
+        // Here we will listen to the album-clicked signal of Library.
+        // Upon receiving that signal, create a new AlbumContentView page and push it onto the stack.
+        // The view (AlbumView):
+
+        // - Upon receiving click signal, get the list item at the indicated activate index.
+        // - Extract album from that list item.
+        // - Extract a non-GObject AlbumInfo sub-struct from that album object (implemented as GObject).
+        // - Call a method of the Library controller, passing that AlbumInfo struct.
+        // The controller (Library):
+        // - When called with that AlbumInfoStruct, send that AlbumInfo to client wrapper via MpdMessage.
+        //   This is why we had to extract the AlbumInfo struct out instead of sending the whole Album object:
+        //   GObjects are not thread-safe, and while this action is not multithreaded, the MpdMessage enum
+        //   has to remain thread safe as a whole since we're also using it to send results from the child
+        //   client back to the main one. As such, the MpdMessage enum cannot carry any GObject in any of
+        //   its variants, not just the variants used by child threads.
+        // - Client fetches all songs with album tag matching given name in AlbumInfo.
+        // - Client replies by calling another method of the Library controller & passing the list of songs
+        //   it received, since the Library controller did not directly call any method of the client
+        //   (it used a message instead) and as such cannot receive results in the normal return-value way.
+        // Back to controller (Library):
+        // - Upon being called by client wrapper with that list of songs, reconstruct the album GObject,
+        //   construct a gio::ListStore of those Songs, then send them both over a custom signal. The
+        //   reason we're back to albums instead of AlbumInfos is that signal parameters must be GObjects
+        //   (or sth implementing glib::ToValue trait).
+        // Back to the view (AlbumView):
+        // - Listen to that custom signal. Upon that signal triggering, construct an AlbumContentView,
+        //   populate it with the songs, then push it to the NavigationView inside AlbumView.
+        let this = self.clone();
+        library.connect_closure(
+            "album-clicked",
+            false,
+            closure_local!(move |_: Library, album: Album, song_list: gio::ListStore| {
+                let content_view = AlbumContentView::new(album, song_list);
+                let content_page = adw::NavigationPage::builder()
+                    .child(&content_view)
+                    .title("Album Info")
+                    .build();
+                this.imp().nav_view.push(&content_page);
+            })
+        );
     }
 
     pub fn setup_gridview(&self, library: Rc<Library>, albumart: Rc<AlbumArtCache>) {
@@ -153,5 +208,18 @@ impl AlbumView {
 
         // Set the factory of the list view
         self.imp().grid_view.set_factory(Some(&factory));
+
+        // Setup click action
+        self.imp().grid_view.connect_activate(move |grid_view, position| {
+            // Get `IntegerObject` from model
+            let model = grid_view.model().expect("The model has to exist.");
+            let album = model
+                .item(position)
+                .and_downcast::<Album>()
+                .expect("The item has to be a `common::Album`.");
+
+            // Increase "number" of `IntegerObject`
+            library.on_album_clicked(album);
+        });
     }
 }

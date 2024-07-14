@@ -39,13 +39,15 @@ pub struct AlbumInfo {
     title: String,
     // Folder-based URI, acquired from the first song found with this album's tag.
     uri: String,
+    artist: Option<String>,  // use AlbumArtist tag
     cover: Option<Texture>
 }
 
 impl AlbumInfo {
-    pub fn new(uri: &str, title: &str) -> Self {
+    pub fn new(uri: &str, title: &str, artist: Option<&str>) -> Self {
         Self {
             uri: uri.to_owned(),
+            artist: artist.map(str::to_string),
             title: title.to_owned(),
             cover: None
         }
@@ -55,6 +57,10 @@ impl AlbumInfo {
     // This should allow for an easier ID3 tag editor implementation.
     pub fn title(&self) -> String {
         self.title.clone()
+    }
+
+    pub fn artist(&self) -> Option<String> {
+        self.artist.clone()
     }
 
     pub fn uri(&self) -> String {
@@ -69,8 +75,9 @@ impl AlbumInfo {
 impl Default for AlbumInfo {
     fn default() -> Self {
         AlbumInfo {
-            title: "Untitled album".to_owned(),
+            title: "Untitled Album".to_owned(),
             uri: "".to_owned(),
+            artist: None,
             cover: None
         }
     }
@@ -111,6 +118,7 @@ mod imp {
                 vec![
                     ParamSpecString::builder("uri").construct_only().build(),
                     ParamSpecString::builder("title").build(),
+                    ParamSpecString::builder("artist").build(),
                     ParamSpecObject::builder::<Texture>("cover")
                         .read_only()
                         .build(),
@@ -124,6 +132,7 @@ mod imp {
             match pspec.name() {
                 "uri" => obj.get_uri().to_value(),
                 "title" => obj.get_title().to_value(),
+                "artist" => obj.get_artist().to_value(),
                 "cover" => obj.get_cover().to_value(),
                 _ => unimplemented!(),
             }
@@ -144,6 +153,12 @@ mod imp {
                     }
                     obj.notify("title");
                 }
+                "artist" => {
+                    if let Ok(artist) = value.get::<&str>() {
+                        self.info.borrow_mut().artist.replace(artist.to_owned());
+                    }
+                    obj.notify("artist");
+                }
                 _ => unimplemented!(),
             }
         }
@@ -161,12 +176,20 @@ impl Album {
         res
     }
 
+    pub fn get_info(&self) -> AlbumInfo {
+        self.imp().info.borrow().clone()
+    }
+
     pub fn get_uri(&self) -> String {
         self.imp().info.borrow().uri()
     }
 
     pub fn get_title(&self) -> String {
         self.imp().info.borrow().title()
+    }
+
+    pub fn get_artist(&self) -> Option<String> {
+        self.imp().info.borrow().artist()
     }
 
     pub fn get_cover(&self) -> Option<Texture> {

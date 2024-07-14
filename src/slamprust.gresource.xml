@@ -6,6 +6,8 @@
 		<file preprocess="xml-stripblanks">gtk/library-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/album-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/album-cell.ui</file>
+		<file preprocess="xml-stripblanks">gtk/album-song-row.ui</file>
+		<file preprocess="xml-stripblanks">gtk/album-content-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar-button.ui</file>
@@ -16,6 +18,7 @@
 	<gresource prefix="/org/slamprust/Slamprust/icons/scalable/actions/">
 		<file preprocess="xml-stripblanks" alias="skip-backward-large-symbolic.svg">gtk/icons/skip-backward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-large-symbolic.svg">gtk/icons/play-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="clock-alt-symbolic.svg">gtk/icons/clock-alt-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="pause-large-symbolic.svg">gtk/icons/pause-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="skip-forward-large-symbolic.svg">gtk/icons/skip-forward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="music-artist-symbolic.svg">gtk/icons/music-artist-symbolic.svg</file>
