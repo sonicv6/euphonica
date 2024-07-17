@@ -339,4 +339,10 @@ impl Player {
     pub fn queue(&self) -> gio::ListStore {
         self.imp().queue.borrow().clone()
     }
+
+    pub fn clear_queue(&self) {
+        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+            let _ = sender.send_blocking(MpdMessage::Clear);
+        }
+    }
 }

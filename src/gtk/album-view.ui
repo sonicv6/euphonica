@@ -37,6 +37,15 @@
             </child>
           </object>
         </child>
+        <child>
+          <object class="AdwNavigationPage" id="content_page">
+            <property name="tag">content</property>
+            <property name="title">Album Info</property>
+            <child>
+              <object class="SlamprustAlbumContentView" id="content_view"></object>
+            </child>
+          </object>
+        </child>
       </object>
 		</child>
 	</template>

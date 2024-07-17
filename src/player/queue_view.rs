@@ -52,6 +52,8 @@ mod imp {
         pub current_artist_name: TemplateChild<gtk::Label>,
         #[template_child]
         pub current_album_name: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub clear_queue: TemplateChild<gtk::Button>,
 
         pub signal_ids: RefCell<Vec<SignalHandlerId>>,
     }
@@ -108,6 +110,7 @@ impl QueueView {
     }
 
     pub fn setup_listview(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {
+        // Enable/disable clear queue button depending on whether the queue is empty or not
         // Set selection mode
         // TODO: Allow click to jump to song
         let sel_model = NoSelection::new(Some(player.queue()));
@@ -265,6 +268,22 @@ impl QueueView {
                 })
             )
         );
+
+        let player_queue = player.queue();
+        let clear_queue_btn = self.imp().clear_queue.get();
+        player_queue
+            .bind_property(
+                "n-items",
+                &clear_queue_btn,
+                "sensitive"
+            )
+            .transform_to(|_, size: u32| {Some(size > 0)})
+            .sync_create()
+            .build();
+
+        clear_queue_btn.connect_clicked(clone!(@weak player as p => move |_| {
+            player.clear_queue();
+        }));
     }
 
     pub fn setup(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {

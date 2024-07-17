@@ -18,6 +18,7 @@
 	<gresource prefix="/org/slamprust/Slamprust/icons/scalable/actions/">
 		<file preprocess="xml-stripblanks" alias="skip-backward-large-symbolic.svg">gtk/icons/skip-backward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-large-symbolic.svg">gtk/icons/play-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="play-symbolic.svg">gtk/icons/play-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="clock-alt-symbolic.svg">gtk/icons/clock-alt-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="pause-large-symbolic.svg">gtk/icons/pause-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="skip-forward-large-symbolic.svg">gtk/icons/skip-forward-large-symbolic.svg</file>
@@ -26,5 +27,6 @@
 		<file preprocess="xml-stripblanks" alias="playlist-symbolic.svg">gtk/icons/playlist-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="library-music-symbolic.svg">gtk/icons/library-music-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="music-queue-symbolic.svg">gtk/icons/music-queue-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="user-trash-symbolic.svg">gtk/icons/user-trash-symbolic.svg</file>
 	</gresource>
 </gresources>

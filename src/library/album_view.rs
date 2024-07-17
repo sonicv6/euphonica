@@ -1,4 +1,8 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell
+};
+use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
@@ -34,6 +38,10 @@ mod imp {
         pub nav_view: TemplateChild<adw::NavigationView>,
         #[template_child]
         pub grid_view: TemplateChild<gtk::GridView>,
+        #[template_child]
+        pub content_page: TemplateChild<adw::NavigationPage>,
+        #[template_child]
+        pub content_view: TemplateChild<AlbumContentView>
     }
 
     #[glib::object_subclass]
@@ -89,6 +97,12 @@ impl AlbumView {
 
     pub fn setup(&self, library: Rc<Library>, albumart: Rc<AlbumArtCache>) {
         self.setup_gridview(library.clone(), albumart);
+        let content_view = self.imp().content_view.get();
+        content_view.setup(library.clone());
+        self.imp().content_page.connect_hidden(move |_| {
+            content_view.unbind();
+            content_view.clear_content();
+        });
         self.bind_state(library);
     }
 
@@ -125,12 +139,9 @@ impl AlbumView {
             "album-clicked",
             false,
             closure_local!(move |_: Library, album: Album, song_list: gio::ListStore| {
-                let content_view = AlbumContentView::new(album, song_list);
-                let content_page = adw::NavigationPage::builder()
-                    .child(&content_view)
-                    .title("Album Info")
-                    .build();
-                this.imp().nav_view.push(&content_page);
+                let content_view = this.imp().content_view.get();
+                content_view.set_album(album, song_list);
+                this.imp().nav_view.push_by_tag("content");
             })
         );
     }

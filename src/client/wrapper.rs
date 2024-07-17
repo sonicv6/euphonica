@@ -27,7 +27,8 @@ use std::{
     io::Cursor,
     cell::RefCell,
     rc::Rc,
-    path::PathBuf
+    path::PathBuf,
+    convert::Into
 };
 
 pub fn get_dummy_song(uri: &str) -> mpd::Song {
@@ -58,6 +59,32 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
     None
 }
 
+// A non-Cow alternative to mpd::search::Term, for sending into async
+// loops or across thread boundaries.
+#[derive(Clone, Debug, Copy)]
+pub enum QueryTerm {
+    Any,
+    File,
+    Base,
+    LastMod,
+    // Defined directly here for convenience
+    Album,
+    Artist
+}
+
+impl<'a> Into<Term<'a>> for QueryTerm {
+    fn into(self) -> Term<'a> {
+        match self {
+            QueryTerm::Any => Term::Any,
+            QueryTerm::File => Term::File,
+            QueryTerm::Base => Term::Base,
+            QueryTerm::LastMod => Term::LastMod,
+            QueryTerm::Album => Term::Tag(Cow::Borrowed("Album")),
+            QueryTerm::Artist => Term::Tag(Cow::Borrowed("Artist"))
+        }
+    }
+}
+
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
 #[derive(Debug)]
@@ -65,11 +92,13 @@ pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
 	Toggle, // The "pause" command but renamed since it's a misnomer
+    Clear, // Clear queue
     Prev,
     Next,
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	AlbumArt(String),
+    FindAdd(Vec<(QueryTerm, String)>),
 	Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
     Album(AlbumInfo), // Get list of songs in album with given tag name
@@ -279,6 +308,7 @@ impl MpdWrapper {
             MpdMessage::Toggle => self.set_playback(),
             MpdMessage::Prev => self.set_prev(),
             MpdMessage::Next => self.set_next(),
+            MpdMessage::Clear => self.clear_queue(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
@@ -296,6 +326,7 @@ impl MpdWrapper {
                     );
                 }
             },
+            MpdMessage::FindAdd(terms) => self.find_add(terms),
             MpdMessage::AlbumArtDownloaded(folder_uri) => self.notify_album_art(&folder_uri),
             MpdMessage::AlbumInfo(info) => self.notify_album_info(info),
             _ => {}
@@ -396,6 +427,18 @@ impl MpdWrapper {
             // TODO: handle error
         }
     }
+
+    pub fn clear_queue(self: Rc<Self>) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: Make it stop/play base on toggle
+            let _ = client.clear();
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
+
     pub fn seek_current_song(&self, position: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.rewind(position);
@@ -428,6 +471,18 @@ impl MpdWrapper {
                 // Notify library to push new nav page
                 self.library.push_album_content_page(info, songs);
             }
+        }
+    }
+
+    pub fn find_add(&self, terms: Vec<(QueryTerm, String)>) {
+        // Convert back to mpd::search::Query
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // println!("Running findadd query: {:?}", &terms);
+            let mut query = Query::new();
+            for term in terms.into_iter() {
+                query.and(term.0.into(), term.1);
+            }
+            client.findadd(&query).expect("Failed to run query!");
         }
     }
 

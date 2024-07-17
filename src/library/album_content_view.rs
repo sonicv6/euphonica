@@ -44,7 +44,10 @@ mod imp {
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub replace_queue: TemplateChild<gtk::Button>,
 
+        pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
     }
@@ -96,57 +99,14 @@ impl Default for AlbumContentView {
 }
 
 impl AlbumContentView {
-    pub fn new(album: Album, song_list: gio::ListStore) -> Self {
-        let res = Self::default();
-        res.setup(album, song_list);
-        res
-    }
-
-    pub fn setup(&self, album: Album, song_list: gio::ListStore) {
-        self.setup_content(song_list);
-        self.setup_info(album);
-    }
-
-    fn update_cover(&self, tex: Option<&Texture>) {
-        // Use high-resolution version here
-        if tex.is_some() {
-            self.imp().cover.set_from_paintable(tex);
-        }
-    }
-
-    pub fn setup_info(&self, album: Album) {
-        let title_label = self.imp().title.get();
-        let artist_label = self.imp().artist.get();
-        let mut bindings = self.imp().bindings.borrow_mut();
-
-        let title_binding = album
-            .bind_property("title", &title_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(title_binding);
-
-        let artist_binding = album
-            .bind_property("artist", &artist_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(artist_binding);
-
-        self.update_cover(album.get_cover().as_ref());
-        self.imp().cover_signal_id.replace(Some(
-           album.connect_notify_local(
-                Some("cover"),
-                clone!(@weak self as this, @weak album as a => move |_, _| {
-                    this.update_cover(a.get_cover().as_ref());
-                })
-            )
-        ));
-    }
-
-    pub fn setup_content(&self, song_list: gio::ListStore) {
-        let sel_model = gtk::NoSelection::new(Some(song_list));
-        self.imp().content.set_model(Some(&sel_model));
+    pub fn setup(&self, library: Rc<Library>) {
+        let replace_queue_btn = self.imp().replace_queue.get();
+        replace_queue_btn.connect_clicked(clone!(@strong self as this, @weak library as lib => move |_| {
+            if let Some(album) = this.imp().album.borrow().as_ref() {
+                println!("Replace queue button clicked");
+                lib.queue_album(album.clone(), true);
+            }
+        }));
 
         // Set up factory
         let factory = SignalListItemFactory::new();
@@ -196,5 +156,71 @@ impl AlbumContentView {
 
         // Set the factory of the list view
         self.imp().content.set_factory(Some(&factory));
+    }
+
+    pub fn set_album(&self, album: Album, song_list: gio::ListStore) {
+        self.setup_content(song_list);
+        self.bind(album);
+    }
+
+    fn update_cover(&self, tex: Option<&Texture>) {
+        // Use high-resolution version here
+        if tex.is_some() {
+            self.imp().cover.set_from_paintable(tex);
+        }
+    }
+
+    pub fn bind(&self, album: Album) {
+        let title_label = self.imp().title.get();
+        let artist_label = self.imp().artist.get();
+        let mut bindings = self.imp().bindings.borrow_mut();
+
+        let title_binding = album
+            .bind_property("title", &title_label, "label")
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(title_binding);
+
+        let artist_binding = album
+            .bind_property("artist", &artist_label, "label")
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(artist_binding);
+
+        self.update_cover(album.get_cover().as_ref());
+        self.imp().cover_signal_id.replace(Some(
+           album.connect_notify_local(
+                Some("cover"),
+                clone!(@weak self as this, @weak album as a => move |_, _| {
+                    this.update_cover(a.get_cover().as_ref());
+                })
+            )
+        ));
+
+        // Save reference to album object
+        self.imp().album.borrow_mut().replace(album);
+    }
+
+    pub fn unbind(&self) {
+        println!("Album content page hidden. Unbinding...");
+        for binding in self.imp().bindings.borrow_mut().drain(..) {
+            binding.unbind();
+        }
+        if let Some(id) = self.imp().cover_signal_id.take() {
+            if let Some(album) = self.imp().album.borrow_mut().take() {
+                album.disconnect(id);
+            }
+        }
+    }
+
+    pub fn setup_content(&self, song_list: gio::ListStore) {
+        let sel_model = gtk::NoSelection::new(Some(song_list));
+        self.imp().content.set_model(Some(&sel_model));
+    }
+
+    pub fn clear_content(&self) {
+        self.imp().content.set_model(Option::<&gtk::NoSelection>::None);
     }
 }

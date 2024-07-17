@@ -1,22 +1,19 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     rc::Rc,
     vec::Vec,
-    path::PathBuf,
-    sync::OnceLock
+    sync::OnceLock,
 };
 use async_channel::Sender;
 use crate::{
     common::{Album, AlbumInfo, Song},
-    client::albumart::AlbumArtCache,
-    client::MpdMessage
+    client::{MpdMessage, QueryTerm, AlbumArtCache}
 };
 use gtk::{
     glib,
     gio,
     prelude::*,
 };
-use gtk::gdk::Texture;
 use glib::subclass::Signal;
 
 use adw::subclass::prelude::*;
@@ -25,11 +22,11 @@ mod imp {
     use glib::{
         ParamSpec,
         ParamSpecObject,
-        ParamSpecString,
-        ParamSpecUInt,
-        ParamSpecUInt64,
-        ParamSpecDouble,
-        ParamSpecEnum
+        // ParamSpecString,
+        // ParamSpecUInt,
+        // ParamSpecUInt64,
+        // ParamSpecDouble,
+        // ParamSpecEnum
     };
     use once_cell::sync::Lazy;
     use super::*;
@@ -128,13 +125,13 @@ impl Library {
     }
 
     pub fn add_album_info(&self, info: AlbumInfo) {
-        println!("Adding album: {:?}", info);
+        // println!("Adding album: {:?}", info);
         let album = Album::from_info(info);
         let folder_uri = album.get_uri();
         if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
             if let Some(sender) = self.imp().sender.borrow().as_ref() {
                 if !albumart.get_path_for(&folder_uri).exists() {
-                    println!("Albumart not locally available, will download");
+                    // println!("Albumart not locally available, will download");
                     let _ = sender.send_blocking(MpdMessage::AlbumArt(folder_uri.to_owned()));
                 }
             }
@@ -172,6 +169,23 @@ impl Library {
                     }
                 }
             }
+        }
+    }
+
+    pub fn queue_album(&self, album: Album, replace: bool) {
+        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+            if replace {
+                let _ = sender.send_blocking(MpdMessage::Clear);
+            }
+            let _ = sender.send_blocking(MpdMessage::FindAdd(
+                vec!(
+                    (QueryTerm::Album, album.get_title())
+                )
+            ));
+            // if replace {
+            //     let _ = sender.send_blocking(MpdMessage::Clear);
+            // }
+            // TODO: Implement play trigger
         }
     }
 }

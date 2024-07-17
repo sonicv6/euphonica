@@ -11,6 +11,14 @@
 								<property name="title" translatable="true">Album Info</property>
 							</object>
 						</property>
+                        <child>
+                            <object class="GtkButton" id="replace_queue">
+                                <property name="icon-name">play-symbolic</property>
+                                <style>
+                                    <class name="suggested-action"/>
+                                </style>
+                            </object>
+                        </child>
 					</object>
 				</child>
 				<property name="content">
