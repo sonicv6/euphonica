@@ -143,7 +143,9 @@ impl QueueRow {
             }
             ControlFlow::Continue
         });
-        self.imp().marquee_tick_callback_id.replace(Some(id));
+        if let Some(old_id) = self.imp().marquee_tick_callback_id.replace(Some(id)) {
+            old_id.remove();
+        }
     }
 
     pub fn bind(&self, song: &Song) {
@@ -207,6 +209,7 @@ impl QueueRow {
         hover_ctl.connect_leave(clone!(@weak self as this => move |_| {
             // Remove the marquee movement callback & set its position back to 0.
             if let Some(id) = this.imp().marquee_tick_callback_id.take() {
+                println!("Mouse left queuerow");
                 id.remove();
             }
             marquee.hadjustment().set_value(

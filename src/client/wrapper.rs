@@ -91,6 +91,7 @@ impl<'a> Into<Term<'a>> for QueryTerm {
 pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
+    PlayId(u32), // Play song at queue ID
 	Toggle, // The "pause" command but renamed since it's a misnomer
     Clear, // Clear queue
     Prev,
@@ -306,7 +307,7 @@ impl MpdWrapper {
                 if let Some(client) = this.main_client.borrow_mut().as_mut() {
                     let res = client.ping();
                     if res.is_ok() {
-                        println!("[KeepAlive] Pinged daemon successfully. Sleeping for 10s...");
+                        println!("[KeepAlive]");
                     }
                     else {
                         println!("[KeepAlive] [FATAL] Could not ping mpd. The connection might have already timed out, or the daemon might have crashed.");
@@ -329,6 +330,7 @@ impl MpdWrapper {
             MpdMessage::Toggle => self.set_playback(),
             MpdMessage::Prev => self.set_prev(),
             MpdMessage::Next => self.set_next(),
+            MpdMessage::PlayId(id) => self.play_id(id),
             MpdMessage::Clear => self.clear_queue(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
@@ -438,10 +440,22 @@ impl MpdWrapper {
             // TODO: handle error
         }
     }
+
     pub fn set_next(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
             let _ = client.next();
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
+
+    pub fn play_id(self: Rc<Self>, id: u32) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: Make it stop/play base on toggle
+            let _ = client.switch(id);
             // TODO: handle error
         }
         else {
