@@ -298,6 +298,27 @@ impl MpdWrapper {
                 this.clone().respond(request).await;
             }
         }));
+
+        // Set up a ping loop. Main client does not use idle mode, so it needs to ping periodically.
+        // If there is no client connected, it will simply skip pinging.
+        glib::MainContext::default().spawn_local(clone!(@strong self as this => async move {
+            loop {
+                if let Some(client) = this.main_client.borrow_mut().as_mut() {
+                    let res = client.ping();
+                    if res.is_ok() {
+                        println!("[KeepAlive] Pinged daemon successfully. Sleeping for 10s...");
+                    }
+                    else {
+                        println!("[KeepAlive] [FATAL] Could not ping mpd. The connection might have already timed out, or the daemon might have crashed.");
+                        break;
+                    }
+                }
+                else {
+                    println!("[KeepAlive] There is no client currently running. Won't ping.");
+                }
+                glib::timeout_future_seconds(10).await;  // TODO: make this customisable
+            }
+        }));
     }
 
     async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
