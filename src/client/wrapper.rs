@@ -13,6 +13,7 @@ use futures::executor;
 use mpd::{
     client::Client,
     search::{Term, Query, Window},
+    song::Id,
     Subsystem,
     Idle,
     Channel
@@ -472,7 +473,7 @@ impl MpdWrapper {
     pub fn play_id(self: Rc<Self>, id: u32) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
-            let _ = client.switch(id);
+            client.switch(Id(id)).expect("Could not switch song");
             // TODO: handle error
         }
         else {

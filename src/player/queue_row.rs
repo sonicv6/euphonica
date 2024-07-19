@@ -10,7 +10,7 @@ use gtk::{
     CompositeTemplate,
     Label,
     Image,
-    ScrolledWindow,
+    Viewport,
     EventControllerMotion,
     TickCallbackId
 };
@@ -37,7 +37,7 @@ mod imp {
         #[template_child]
         pub thumbnail: TemplateChild<Image>,
         #[template_child]
-        pub marquee: TemplateChild<ScrolledWindow>,
+        pub marquee: TemplateChild<Viewport>,
         #[template_child]
         pub song_name: TemplateChild<Label>,
          #[template_child]
@@ -48,6 +48,7 @@ mod imp {
         pub playing_indicator: TemplateChild<Label>,
         // Vector holding the bindings to properties of the Song GObject
         pub bindings: RefCell<Vec<Binding>>,
+        pub playing_signal_id: RefCell<Option<SignalHandlerId>>,
         pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
         pub marquee_tick_callback_id: RefCell<Option<TickCallbackId>>,
         pub marquee_forward: Cell<bool>,
@@ -97,31 +98,31 @@ impl QueueRow {
     pub fn new() -> Self {
         let res: Self = Object::builder().build();
 
-        Bind marquee controller only once here
-        let marquee = res.imp().marquee.get();
-        // Run marquee while hovered
-        let hover_ctl = EventControllerMotion::new();
-        hover_ctl.set_propagation_phase(gtk::PropagationPhase::Capture);
-        hover_ctl.connect_enter(clone!(@weak res as this => move |_, _, _| {
-            this.start_marquee();
-        }));
-        hover_ctl.connect_leave(clone!(@weak res as this => move |_| {
-            // Remove the marquee movement callback & set its position back to 0.
-            if let Some(id) = this.imp().marquee_tick_callback_id.take() {
-                id.remove();
-            }
-            marquee.hadjustment().set_value(
-                marquee.hadjustment().lower()
-            );
-        }));
-        res.add_controller(hover_ctl);
+        // // Bind marquee controller only once here
+        // let marquee = res.imp().marquee.get();
+        // // Run marquee while hovered
+        // let hover_ctl = EventControllerMotion::new();
+        // hover_ctl.set_propagation_phase(gtk::PropagationPhase::Capture);
+        // hover_ctl.connect_enter(clone!(@weak res as this => move |_, _, _| {
+        //     this.start_marquee();
+        // }));
+        // hover_ctl.connect_leave(clone!(@weak res as this => move |_| {
+        //     // Remove the marquee movement callback & set its position back to 0.
+        //     if let Some(id) = this.imp().marquee_tick_callback_id.take() {
+        //         id.remove();
+        //     }
+        //     marquee.hadjustment().set_value(
+        //         marquee.hadjustment().lower()
+        //     );
+        // }));
+        // res.add_controller(hover_ctl);
 
         res
     }
 
     fn start_marquee(&self) {
         let marquee = self.imp().marquee.get();
-        let adj = marquee.hadjustment();
+        let adj = marquee.hadjustment().expect("No adjustment?");
         self.imp().marquee_forward.replace(true);
         self.imp().marquee_progress.replace(0.0);
         let this = self.clone();
@@ -169,6 +170,18 @@ impl QueueRow {
         }
     }
 
+    fn stop_marquee(&self) {
+        let marquee = self.imp().marquee.get();
+        // Remove the marquee movement callback & set its position back to 0.
+        if let Some(id) = self.imp().marquee_tick_callback_id.take() {
+            id.remove();
+        }
+        let adj = marquee.hadjustment().expect("No adjustment?");
+        adj.set_value(
+            adj.lower()
+        );
+    }
+
     pub fn bind(&self, song: &Song) {
         // Get state
         let thumbnail_image = self.imp().thumbnail.get();
@@ -214,12 +227,30 @@ impl QueueRow {
         // Save binding
         bindings.push(artist_name_binding);
 
-        let song_is_playing_binding = song
-            .bind_property("is-playing", &playing_label, "visible")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(song_is_playing_binding);
+        // let song_is_playing_binding = song
+        //     .bind_property("is-playing", &playing_label, "visible")
+        //     .sync_create()
+        //     .build();
+        // // Save binding
+        // bindings.push(song_is_playing_binding);
+
+        // Set once first (like sync_create)
+        if song.is_playing() {
+            self.start_marquee();
+        }
+        let playing_binding = song
+            .connect_notify_local(
+                Some("is-playing"),
+                clone!(@weak self as this => move |this_song, _| {
+                    if this_song.is_playing() {
+                        this.start_marquee();
+                    }
+                    else {
+                        this.stop_marquee();
+                    }
+                }),
+            );
+        self.imp().playing_signal_id.replace(Some(playing_binding));
     }
 
     pub fn unbind(&self, song: &Song) {
@@ -228,6 +259,10 @@ impl QueueRow {
             binding.unbind();
         }
         if let Some(id) = self.imp().thumbnail_signal_id.take() {
+            song.disconnect(id);
+        }
+
+        if let Some(id) = self.imp().playing_signal_id.take() {
             song.disconnect(id);
         }
     }
