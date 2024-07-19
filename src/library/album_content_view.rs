@@ -34,7 +34,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/album-content-view.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/album-content-view.ui")]
     pub struct AlbumContentView {
         #[template_child]
         pub cover: TemplateChild<gtk::Image>,
@@ -54,7 +54,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for AlbumContentView {
-        const NAME: &'static str = "SlamprustAlbumContentView";
+        const NAME: &'static str = "EuphoniaAlbumContentView";
         type Type = super::AlbumContentView;
         type ParentType = gtk::Widget;
 

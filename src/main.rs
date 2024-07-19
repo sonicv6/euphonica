@@ -26,8 +26,8 @@ mod client;
 mod library;
 mod sidebar;
 
-use self::application::SlamprustApplication;
-use self::window::SlamprustWindow;
+use self::application::EuphoniaApplication;
+use self::window::EuphoniaWindow;
 
 use config::{GETTEXT_PACKAGE, LOCALEDIR, PKGDATADIR};
 use gettextrs::{bind_textdomain_codeset, bindtextdomain, textdomain};
@@ -38,7 +38,7 @@ use gdk::Display;
 fn load_css() {
     // Load the CSS file and add it to the provider
     let provider = CssProvider::new();
-    provider.load_from_resource("/org/slamprust/Slamprust/gtk/style.css");
+    provider.load_from_resource("/org/euphonia/Euphonia/gtk/style.css");
 
     // Add the provider to the default screen
     gtk::style_context_add_provider_for_display(
@@ -56,14 +56,14 @@ fn main() -> glib::ExitCode {
     textdomain(GETTEXT_PACKAGE).expect("Unable to switch to the text domain");
 
     // Load resources
-    let resources = gio::Resource::load(PKGDATADIR.to_owned() + "/slamprust.gresource")
+    let resources = gio::Resource::load(PKGDATADIR.to_owned() + "/euphonia.gresource")
         .expect("Could not load resources");
     gio::resources_register(&resources);
 
     // Create a new GtkApplication. The application manages our main loop,
     // application windows, integration with the window manager/compositor, and
     // desktop features such as file opening and single-instance applications.
-    let app = SlamprustApplication::new("org.slamprust.Slamprust", &gio::ApplicationFlags::empty());
+    let app = EuphoniaApplication::new("org.euphonia.Euphonia", &gio::ApplicationFlags::empty());
     app.connect_startup(|_| load_css());
 
     // Run the application. This function will block until the application

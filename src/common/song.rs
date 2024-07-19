@@ -125,7 +125,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Song {
-        const NAME: &'static str = "SlamprustSong";
+        const NAME: &'static str = "EuphoniaSong";
         type Type = super::Song;
 
         fn new() -> Self {
@@ -312,8 +312,10 @@ impl Song {
     }
 
     pub fn set_thumbnail(&self, tex: Option<Texture>) {
-        let mut info = self.imp().info.borrow_mut();
-        info.thumbnail = tex;
+        {
+            let mut info = self.imp().info.borrow_mut();
+            info.thumbnail = tex;
+        }
         self.notify("thumbnail");
     }
 

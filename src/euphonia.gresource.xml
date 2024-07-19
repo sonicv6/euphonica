@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-	<gresource prefix="/org/slamprust/Slamprust">
+	<gresource prefix="/org/euphonia/Euphonia">
 		<file preprocess="xml-stripblanks">window.ui</file>
 		<file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
 		<file preprocess="xml-stripblanks">gtk/library-view.ui</file>
@@ -15,7 +15,7 @@
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
-	<gresource prefix="/org/slamprust/Slamprust/icons/scalable/actions/">
+	<gresource prefix="/org/euphonia/Euphonia/icons/scalable/actions/">
 		<file preprocess="xml-stripblanks" alias="skip-backward-large-symbolic.svg">gtk/icons/skip-backward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-large-symbolic.svg">gtk/icons/play-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-symbolic.svg">gtk/icons/play-symbolic.svg</file>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <requires lib="gtk" version="4.0"/>
-  <template class="SlamprustAlbumView" parent="GtkWidget">
+  <template class="EuphoniaAlbumView" parent="GtkWidget">
     <child>
       <object class="AdwNavigationView" id="nav_view">
         <child>
@@ -42,7 +42,7 @@
             <property name="tag">content</property>
             <property name="title">Album Info</property>
             <child>
-              <object class="SlamprustAlbumContentView" id="content_view"></object>
+              <object class="EuphoniaAlbumContentView" id="content_view"></object>
             </child>
           </object>
         </child>

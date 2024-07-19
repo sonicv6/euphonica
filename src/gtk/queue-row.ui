@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<template class="SlamprustQueueRow" parent="GtkBox">
+	<template class="EuphoniaQueueRow" parent="GtkBox">
 		<child>
 			<object class="GtkBox">
 				<property name="overflow">hidden</property>
@@ -10,7 +10,7 @@
 				<child>
 					<object class="GtkImage" id="thumbnail">
 						<property name="icon-size">2</property>
-						<property name="resource">/org/slamprust/Slamprust/albumart-placeholder.png</property>
+						<property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
 					</object>
 				</child>
 			</object>

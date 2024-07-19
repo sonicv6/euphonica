@@ -1,4 +1,4 @@
-data/org.slamprust.Slamprust.desktop.in
-data/org.slamprust.Slamprust.metainfo.xml.in
-data/org.slamprust.Slamprust.gschema.xml
+data/org.euphonia.Euphonia.desktop.in
+data/org.euphonia.Euphonia.metainfo.xml.in
+data/org.euphonia.Euphonia.gschema.xml
 src/window.ui

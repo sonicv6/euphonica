@@ -7,7 +7,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/library-view.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/library-view.ui")]
     pub struct LibraryView {
         #[template_child]
         pub prev_mode: TemplateChild<gtk::Button>,
@@ -23,7 +23,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for LibraryView {
-        const NAME: &'static str = "SlamprustLibraryView";
+        const NAME: &'static str = "EuphoniaLibraryView";
         type Type = super::LibraryView;
         type ParentType = gtk::Widget;
 

@@ -1,6 +1,6 @@
 desktop_file = i18n.merge_file(
-        input: 'org.slamprust.Slamprust.desktop.in',
-       output: 'org.slamprust.Slamprust.desktop',
+        input: 'org.euphonia.Euphonia.desktop.in',
+       output: 'org.euphonia.Euphonia.desktop',
          type: 'desktop',
        po_dir: '../po',
       install: true,
@@ -13,8 +13,8 @@ if desktop_utils.found()
 endif
 
 appstream_file = i18n.merge_file(
-        input: 'org.slamprust.Slamprust.metainfo.xml.in',
-       output: 'org.slamprust.Slamprust.metainfo.xml',
+        input: 'org.euphonia.Euphonia.metainfo.xml.in',
+       output: 'org.euphonia.Euphonia.metainfo.xml',
        po_dir: '../po',
       install: true,
   install_dir: get_option('datadir') / 'metainfo'
@@ -24,7 +24,7 @@ appstreamcli = find_program('appstreamcli', required: false, disabler: true)
 test('Validate appstream file', appstreamcli,
      args: ['validate', '--no-net', '--explain', appstream_file])
 
-install_data('org.slamprust.Slamprust.gschema.xml',
+install_data('org.euphonia.Euphonia.gschema.xml',
   install_dir: get_option('datadir') / 'glib-2.0' / 'schemas'
 )
 

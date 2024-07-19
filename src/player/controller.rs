@@ -21,7 +21,7 @@ use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
-#[enum_type(name = "SlamprustPlaybackState")]
+#[enum_type(name = "EuphoniaPlaybackState")]
 pub enum PlaybackState {
     #[default]
     Stopped,
@@ -54,7 +54,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Player {
-        const NAME: &'static str = "SlamprustPlayer";
+        const NAME: &'static str = "EuphoniaPlayer";
         type Type = super::Player;
 
         fn new() -> Self {

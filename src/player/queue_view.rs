@@ -38,7 +38,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/queue-view.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
@@ -60,7 +60,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for QueueView {
-        const NAME: &'static str = "SlamprustQueueView";
+        const NAME: &'static str = "EuphoniaQueueView";
         type Type = super::QueueView;
         type ParentType = gtk::Widget;
 
@@ -225,7 +225,7 @@ impl QueueView {
             self.imp().current_album_art.set_from_paintable(tex);
         }
         else {
-            self.imp().current_album_art.set_from_resource(Some("/org/slamprust/Slamprust/albumart-placeholder.png"));
+            self.imp().current_album_art.set_from_resource(Some("/org/euphonia/Euphonia/albumart-placeholder.png"));
         }
     }
 

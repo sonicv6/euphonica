@@ -22,7 +22,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/album-song-row.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/album-song-row.ui")]
     pub struct AlbumSongRow {
         #[template_child]
         pub track_index: TemplateChild<Label>,
@@ -41,7 +41,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for AlbumSongRow {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "SlamprustAlbumSongRow";
+        const NAME: &'static str = "EuphoniaAlbumSongRow";
         type Type = super::AlbumSongRow;
         type ParentType = gtk::Box;
 

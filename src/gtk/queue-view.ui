@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
 	<requires lib="gtk" version="4.0" />
-	<template class="SlamprustQueueView" parent="GtkWidget">
+	<template class="EuphoniaQueueView" parent="GtkWidget">
 		<child>
 			<object class="AdwToolbarView">
 				<child type="top">
@@ -72,7 +72,7 @@
 												<child>
 													<object class="GtkImage" id="current_album_art">
 														<property name="pixel-size">256</property>
-														<property name="resource">/org/slamprust/Slamprust/albumart-placeholder.png</property>
+														<property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
 													</object>
 												</child>
 											</object>

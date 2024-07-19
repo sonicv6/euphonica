@@ -1,4 +1,4 @@
-application_id = 'org.slamprust.Slamprust'
+application_id = 'org.euphonia.Euphonia'
 
 scalable_dir = 'hicolor' / 'scalable' / 'apps'
 install_data(

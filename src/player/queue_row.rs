@@ -32,7 +32,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/queue-row.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/queue-row.ui")]
     pub struct QueueRow {
         #[template_child]
         pub thumbnail: TemplateChild<Image>,
@@ -58,7 +58,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for QueueRow {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "SlamprustQueueRow";
+        const NAME: &'static str = "EuphoniaQueueRow";
         type Type = super::QueueRow;
         type ParentType = gtk::Box;
 
@@ -209,7 +209,6 @@ impl QueueRow {
         hover_ctl.connect_leave(clone!(@weak self as this => move |_| {
             // Remove the marquee movement callback & set its position back to 0.
             if let Some(id) = this.imp().marquee_tick_callback_id.take() {
-                println!("Mouse left queuerow");
                 id.remove();
             }
             marquee.hadjustment().set_value(

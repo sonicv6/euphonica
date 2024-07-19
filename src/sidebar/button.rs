@@ -16,7 +16,7 @@ mod imp {
     use super::*;
 
     #[derive(Properties, Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/sidebar-button.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/sidebar-button.ui")]
     #[properties(wrapper_type = super::SidebarButton)]
     pub struct SidebarButton {
         #[template_child]
@@ -33,7 +33,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for SidebarButton {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "SlamprustSidebarButton";
+        const NAME: &'static str = "EuphoniaSidebarButton";
         type Type = super::SidebarButton;
         type ParentType = gtk::ToggleButton;
 

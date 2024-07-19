@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     player::Player,
     library::Library,
-    common::{AlbumInfo, Album, Song}
+    common::{AlbumInfo, Song}
 };
 use futures::executor;
 use mpd::{
@@ -222,12 +222,15 @@ impl MpdWrapper {
                                         println!("{:?} already cached, won't download again", uri);
                                     }
                                     else if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
+                                        println!("Downloaded album art for {:?}", uri);
                                         if let Some(dyn_img) = read_image_from_bytes(bytes) {
                                             // Might want to make all of these configurable.
                                             let _ = dyn_img.resize(256, 256, FilterType::CatmullRom).save(&cache_path);
                                             let  _= dyn_img.thumbnail(64, 64).save(&thumb_cache_path);
                                         }
-                                        let _ = sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri));
+                                        sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri)).expect(
+                                            "Warning: cannot notify main client of new album art."
+                                        );
                                     }
                                 }
                                 BackgroundTask::FetchAlbums => {
@@ -339,15 +342,13 @@ impl MpdWrapper {
             MpdMessage::AlbumArt(folder_uri) => {
                 let cache_path = self.albumart.get_path_for(&folder_uri);
                 let thumb_cache_path = self.albumart.get_thumbnail_path_for(&folder_uri);
-                if let Some(sender) = self.bg_sender.borrow().as_ref() {
-                    let _ = sender.send_blocking(
-                        BackgroundTask::DownloadAlbumArt(
-                            folder_uri.to_owned(),
-                            cache_path.clone(),
-                            thumb_cache_path.clone()
-                        )
-                    );
-                }
+                self.queue_task(
+                    BackgroundTask::DownloadAlbumArt(
+                        folder_uri.to_owned(),
+                        cache_path.clone(),
+                        thumb_cache_path.clone()
+                    )
+                );
             },
             MpdMessage::FindAdd(terms) => self.find_add(terms),
             MpdMessage::AlbumArtDownloaded(folder_uri) => self.notify_album_art(&folder_uri),
@@ -357,18 +358,18 @@ impl MpdWrapper {
         glib::ControlFlow::Continue
     }
 
-    async fn handle_idle_changes(self: Rc<Self>, changes: Vec<Subsystem>) {
+    async fn handle_idle_changes(&self, changes: Vec<Subsystem>) {
         for subsystem in changes {
             match subsystem {
                 Subsystem::Player => {
                     // No need to get current song separately as we'll just pull it
                     // from the queue
-                    self.clone().get_status();
+                    self.get_status();
                 }
                 Subsystem::Queue => {
                     // Retrieve entire queue for now, since there's no way to know
                     // specifically what changed
-                    self.clone().get_current_queue();
+                    self.get_current_queue();
                 }
                 // Else just skip. More features to come.
                 _ => {}
@@ -376,11 +377,27 @@ impl MpdWrapper {
         }
     }
 
-    fn init_state(self: Rc<Self>) {
-        self.clone().get_album_list();
+    fn queue_task(&self, task: BackgroundTask) {
+        if let Some(sender) = self.bg_sender.borrow().as_ref() {
+            sender.send_blocking(task).expect("Cannot queue background task");
+            if let Some(client) = self.main_client.borrow_mut().as_mut() {
+                // Wake background thread
+                let _ = client.sendmessage(self.bg_channel.clone(), "WAKE");
+            }
+            else {
+                println!("Warning: cannot wake child thread. Task might be delayed.");
+            }
+        }
+        else {
+            panic!("Cannot queue background task (background sender not initialised)");
+        }
+    }
+
+    fn init_state(&self) {
+        self.queue_task(BackgroundTask::FetchAlbums);
         // Get queue first so we can look for current song in it later
-        self.clone().get_current_queue();
-        self.clone().get_status();
+        self.get_current_queue();
+        self.get_status();
     }
 
     async fn connect(self: Rc<Self>, host: &str, port: &str) {
@@ -408,7 +425,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_status(self: Rc<Self>) {
+    pub fn get_status(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
                 // Let each state update their respective properties
@@ -486,12 +503,6 @@ impl MpdWrapper {
             if let Ok(queue) = client.queue() {
                 self.player.update_queue(&queue);
             }
-        }
-    }
-
-    pub fn get_album_list(&self) {
-        if let Some(sender) = self.bg_sender.borrow().as_ref() {
-            let _ = sender.send_blocking(BackgroundTask::FetchAlbums);
         }
     }
 

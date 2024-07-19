@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<template class="SlamprustAlbumSongRow" parent="GtkBox">
+	<template class="EuphoniaAlbumSongRow" parent="GtkBox">
 		<child>
 			<object class="GtkLabel" id="track_index">
 				<property name="label">NaN</property>

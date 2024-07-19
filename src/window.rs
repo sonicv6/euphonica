@@ -29,7 +29,7 @@ use glib::signal::SignalHandlerId;
 use glib::clone;
 use crate::{
     client::MpdMessage,
-    application::SlamprustApplication,
+    application::EuphoniaApplication,
     player::{QueueView, PlaybackState},
     library::AlbumView,
     sidebar::Sidebar
@@ -39,8 +39,8 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, gtk::CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/window.ui")]
-    pub struct SlamprustWindow {
+    #[template(resource = "/org/euphonia/Euphonia/window.ui")]
+    pub struct EuphoniaWindow {
         // Template widgets
         // #[template_child]
         // pub view_switcher: TemplateChild<adw::ViewSwitcher>,
@@ -85,9 +85,9 @@ mod imp {
     }
 
     #[glib::object_subclass]
-    impl ObjectSubclass for SlamprustWindow {
-        const NAME: &'static str = "SlamprustWindow";
-        type Type = super::SlamprustWindow;
+    impl ObjectSubclass for EuphoniaWindow {
+        const NAME: &'static str = "EuphoniaWindow";
+        type Type = super::EuphoniaWindow;
         type ParentType = adw::ApplicationWindow;
 
         fn class_init(klass: &mut Self::Class) {
@@ -123,21 +123,21 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for SlamprustWindow {}
-    impl WidgetImpl for SlamprustWindow {}
-    impl WindowImpl for SlamprustWindow {}
-    impl ApplicationWindowImpl for SlamprustWindow {}
-    impl AdwApplicationWindowImpl for SlamprustWindow {}
+    impl ObjectImpl for EuphoniaWindow {}
+    impl WidgetImpl for EuphoniaWindow {}
+    impl WindowImpl for EuphoniaWindow {}
+    impl ApplicationWindowImpl for EuphoniaWindow {}
+    impl AdwApplicationWindowImpl for EuphoniaWindow {}
 }
 
 glib::wrapper! {
-    pub struct SlamprustWindow(ObjectSubclass<imp::SlamprustWindow>)
+    pub struct EuphoniaWindow(ObjectSubclass<imp::EuphoniaWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
         adw::ApplicationWindow,
         @implements gio::ActionGroup, gio::ActionMap;
 }
 
-impl SlamprustWindow {
+impl EuphoniaWindow {
     pub fn new<P: glib::IsA<gtk::Application>>(application: &P) -> Self {
         let win: Self =  glib::Object::builder()
             .property("application", application)
@@ -163,10 +163,10 @@ impl SlamprustWindow {
         win
     }
 
-    fn downcast_application(&self) -> SlamprustApplication {
+    fn downcast_application(&self) -> EuphoniaApplication {
         self.application()
             .unwrap()
-            .downcast::<crate::application::SlamprustApplication>()
+            .downcast::<crate::application::EuphoniaApplication>()
             .unwrap()
     }
 

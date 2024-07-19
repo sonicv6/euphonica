@@ -1,3 +1,3 @@
-# slamprust
+# Euphonia
 
-A description of this project.
+An MPD frontend with delusions of grandeur.

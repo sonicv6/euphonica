@@ -7,7 +7,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/sidebar.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/sidebar.ui")]
     pub struct Sidebar {
         #[template_child]
         pub albums_btn: TemplateChild<SidebarButton>,
@@ -17,7 +17,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Sidebar {
-        const NAME: &'static str = "SlamprustSidebar";
+        const NAME: &'static str = "EuphoniaSidebar";
         type Type = super::Sidebar;
         type ParentType = gtk::Box;
 

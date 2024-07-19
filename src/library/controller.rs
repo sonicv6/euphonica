@@ -52,7 +52,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Library {
-        const NAME: &'static str = "SlamprustLibrary";
+        const NAME: &'static str = "EuphoniaLibrary";
         type Type = super::Library;
 
         fn new() -> Self {
@@ -125,13 +125,11 @@ impl Library {
     }
 
     pub fn add_album_info(&self, info: AlbumInfo) {
-        // println!("Adding album: {:?}", info);
         let album = Album::from_info(info);
         let folder_uri = album.get_uri();
         if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
             if let Some(sender) = self.imp().sender.borrow().as_ref() {
                 if !albumart.get_path_for(&folder_uri).exists() {
-                    // println!("Albumart not locally available, will download");
                     let _ = sender.send_blocking(MpdMessage::AlbumArt(folder_uri.to_owned()));
                 }
             }
@@ -162,7 +160,8 @@ impl Library {
         // Instead, they are loaded on-demand from disk or cache by the grid view.
         // Iterate through the list store to see if we can load album art for any
         if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
-            if let Some(tex) = albumart.get_for(folder_uri, true) {
+            println!("Updating album art for {}", folder_uri);
+            if let Some(tex) = albumart.get_for(folder_uri, false) {
                 for album in self.imp().albums.borrow().iter::<Album>().flatten() {
                     if album.get_cover().is_none() && album.get_uri() == folder_uri {
                         album.set_cover(Some(tex.clone()));

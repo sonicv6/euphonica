@@ -23,7 +23,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/player-bar.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player-bar.ui")]
     pub struct PlayerBar {
         #[template_child]
         pub thumbnail: TemplateChild<Image>,
@@ -40,7 +40,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for PlayerBar {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "SlamprustPlayerBar";
+        const NAME: &'static str = "EuphoniaPlayerBar";
         type Type = super::PlayerBar;
         type ParentType = gtk::Box;
 
