@@ -95,7 +95,28 @@ impl Default for QueueRow {
 
 impl QueueRow {
     pub fn new() -> Self {
-        Object::builder().build()
+        let res: Self = Object::builder().build();
+
+        Bind marquee controller only once here
+        let marquee = res.imp().marquee.get();
+        // Run marquee while hovered
+        let hover_ctl = EventControllerMotion::new();
+        hover_ctl.set_propagation_phase(gtk::PropagationPhase::Capture);
+        hover_ctl.connect_enter(clone!(@weak res as this => move |_, _, _| {
+            this.start_marquee();
+        }));
+        hover_ctl.connect_leave(clone!(@weak res as this => move |_| {
+            // Remove the marquee movement callback & set its position back to 0.
+            if let Some(id) = this.imp().marquee_tick_callback_id.take() {
+                id.remove();
+            }
+            marquee.hadjustment().set_value(
+                marquee.hadjustment().lower()
+            );
+        }));
+        res.add_controller(hover_ctl);
+
+        res
     }
 
     fn start_marquee(&self) {
@@ -150,7 +171,6 @@ impl QueueRow {
 
     pub fn bind(&self, song: &Song) {
         // Get state
-        let marquee = self.imp().marquee.get();
         let thumbnail_image = self.imp().thumbnail.get();
         let song_name_label = self.imp().song_name.get();
         let album_name_label = self.imp().album_name.get();
@@ -200,22 +220,6 @@ impl QueueRow {
             .build();
         // Save binding
         bindings.push(song_is_playing_binding);
-
-        // Run marquee while hovered
-        let hover_ctl = EventControllerMotion::new();
-        hover_ctl.connect_enter(clone!(@weak self as this => move |_, _, _| {
-            this.start_marquee();
-        }));
-        hover_ctl.connect_leave(clone!(@weak self as this => move |_| {
-            // Remove the marquee movement callback & set its position back to 0.
-            if let Some(id) = this.imp().marquee_tick_callback_id.take() {
-                id.remove();
-            }
-            marquee.hadjustment().set_value(
-                marquee.hadjustment().lower()
-            );
-        }));
-        self.add_controller(hover_ctl);
     }
 
     pub fn unbind(&self, song: &Song) {
