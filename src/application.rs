@@ -29,18 +29,20 @@ use std::{
 use async_channel::{Sender, Receiver};
 
 use crate::{
+    library::Library,
     player::Player,
     client::{MpdWrapper, MpdMessage, AlbumArtCache},
     config::VERSION,
-    SlamprustWindow
+    EuphoniaWindow
 };
 
 mod imp {
     use super::*;
 
     #[derive(Debug)]
-    pub struct SlamprustApplication {
+    pub struct EuphoniaApplication {
         pub player: Rc<Player>,
+        pub library: Rc<Library>,
         pub albumart: Rc<AlbumArtCache>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
@@ -49,15 +51,15 @@ mod imp {
     }
 
     #[glib::object_subclass]
-    impl ObjectSubclass for SlamprustApplication {
-        const NAME: &'static str = "SlamprustApplication";
-        type Type = super::SlamprustApplication;
+    impl ObjectSubclass for EuphoniaApplication {
+        const NAME: &'static str = "EuphoniaApplication";
+        type Type = super::EuphoniaApplication;
         type ParentType = adw::Application;
 
         fn new() -> Self {
             // Create cache folder. This is where the cached album arts go.
             let mut cache_path: PathBuf = glib::user_cache_dir();
-            cache_path.push("slamprust");
+            cache_path.push("euphonia");
             println!("Cache path: {}", cache_path.to_str().unwrap());
             create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
@@ -70,12 +72,15 @@ mod imp {
 
             // Create controllers (Rc pointers)
             let player = Rc::new(Player::default());
+            let library = Rc::new(Library::default());
             let albumart = Rc::new(AlbumArtCache::new(&cache_path));
             player.setup(sender.clone(), albumart.clone());
+            library.setup(sender.clone(), albumart.clone());
 
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(
                 player.clone(),
+                library.clone(),
                 sender.clone(),
                 RefCell::new(Some(receiver)),
                 albumart.clone()
@@ -89,6 +94,7 @@ mod imp {
 
             Self {
                 player,
+                library,
                 client,
                 albumart,
                 sender,
@@ -97,7 +103,7 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for SlamprustApplication {
+    impl ObjectImpl for EuphoniaApplication {
         fn constructed(&self) {
             self.parent_constructed();
             let obj = self.obj();
@@ -106,7 +112,7 @@ mod imp {
         }
     }
 
-    impl ApplicationImpl for SlamprustApplication {
+    impl ApplicationImpl for EuphoniaApplication {
         // We connect to the activate callback to create a window when the application
         // has been launched. Additionally, this callback notifies us when the user
         // tries to launch a "second instance" of the application. When they try
@@ -117,7 +123,7 @@ mod imp {
             let window = if let Some(window) = application.active_window() {
                 window
             } else {
-                let window = SlamprustWindow::new(&*application);
+                let window = EuphoniaWindow::new(&*application);
                 window.upcast()
             };
 
@@ -126,17 +132,17 @@ mod imp {
         }
     }
 
-    impl GtkApplicationImpl for SlamprustApplication {}
-    impl AdwApplicationImpl for SlamprustApplication {}
+    impl GtkApplicationImpl for EuphoniaApplication {}
+    impl AdwApplicationImpl for EuphoniaApplication {}
 }
 
 glib::wrapper! {
-    pub struct SlamprustApplication(ObjectSubclass<imp::SlamprustApplication>)
+    pub struct EuphoniaApplication(ObjectSubclass<imp::EuphoniaApplication>)
         @extends gio::Application, gtk::Application, adw::Application,
         @implements gio::ActionGroup, gio::ActionMap;
 }
 
-impl SlamprustApplication {
+impl EuphoniaApplication {
     pub fn new(application_id: &str, flags: &gio::ApplicationFlags) -> Self {
         glib::Object::builder()
             .property("application-id", application_id)
@@ -154,6 +160,10 @@ impl SlamprustApplication {
 
     pub fn get_player(&self) -> Rc<Player> {
         self.imp().player.clone()
+    }
+
+    pub fn get_library(&self) -> Rc<Library> {
+        self.imp().library.clone()
     }
 
     pub fn get_album_art_cache(&self) -> Rc<AlbumArtCache> {
@@ -182,8 +192,8 @@ impl SlamprustApplication {
         let window = self.active_window().unwrap();
         let about = adw::AboutWindow::builder()
             .transient_for(&window)
-            .application_name("Slamprust")
-            .application_icon("org.slamprust.Slamprust")
+            .application_name("Euphonia")
+            .application_icon("org.euphonia.Euphonia")
             .developer_name("Work")
             .version(VERSION)
             .developers(vec!["Work"])

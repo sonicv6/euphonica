@@ -4,24 +4,32 @@ use image::{
     imageops::FilterType
 };
 use uuid::Uuid;
-use crate::player::Player;
+use crate::{
+    player::Player,
+    library::Library,
+    common::{AlbumInfo, Song}
+};
 use futures::executor;
 use mpd::{
     client::Client,
+    search::{Term, Query, Window},
+    song::Id,
     Subsystem,
     Idle,
     Channel
 };
-use super::albumart::AlbumArtCache;
+use super::albumart::{strip_filename_linux, AlbumArtCache};
 use async_channel::{Sender, Receiver};
 use glib::clone;
 use gtk::{glib, gio};
 
 use std::{
+    borrow::Cow,
     io::Cursor,
     cell::RefCell,
     rc::Rc,
-    path::PathBuf
+    path::PathBuf,
+    convert::Into
 };
 
 pub fn get_dummy_song(uri: &str) -> mpd::Song {
@@ -50,7 +58,32 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
         return None;
     }
     None
+}
 
+// A non-Cow alternative to mpd::search::Term, for sending into async
+// loops or across thread boundaries.
+#[derive(Clone, Debug, Copy)]
+pub enum QueryTerm {
+    Any,
+    File,
+    Base,
+    LastMod,
+    // Defined directly here for convenience
+    Album,
+    Artist
+}
+
+impl<'a> Into<Term<'a>> for QueryTerm {
+    fn into(self) -> Term<'a> {
+        match self {
+            QueryTerm::Any => Term::Any,
+            QueryTerm::File => Term::File,
+            QueryTerm::Base => Term::Base,
+            QueryTerm::LastMod => Term::LastMod,
+            QueryTerm::Album => Term::Tag(Cow::Borrowed("Album")),
+            QueryTerm::Artist => Term::Tag(Cow::Borrowed("Artist"))
+        }
+    }
 }
 
 // One for each command in mpd's protocol plus a few special ones such
@@ -59,24 +92,31 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
 pub enum MpdMessage {
     Connect(String, String), // Host and port (both as strings)
 	Play,
+    PlayId(u32), // Play song at queue ID
 	Toggle, // The "pause" command but renamed since it's a misnomer
+    Clear, // Clear queue
     Prev,
     Next,
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	AlbumArt(String),
+    FindAdd(Vec<(QueryTerm, String)>),
 	Queue, // Get songs in current queue
+    Albums, // Get albums. Will return one by one
+    Album(AlbumInfo), // Get list of songs in album with given tag name
 
 	// Reserved for child thread
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
-	AlbumArtDownloaded(String) // Notify which album art was downloaded and where it is
+	AlbumArtDownloaded(String), // Notify which album art was downloaded and where it is
+    AlbumInfo(AlbumInfo) // Return new album to be added to the list model.
 }
 
 // Work requests for sending to the child thread.
 // Completed results will be reported back via MpdMessage.
 #[derive(Debug)]
 enum BackgroundTask {
-    DownloadAlbumArt(String, PathBuf, PathBuf)  // With folder-level URL for querying and cache paths to write to (full-res & thumb)
+    DownloadAlbumArt(String, PathBuf, PathBuf),  // With folder-level URL for querying and cache paths to write to (full-res & thumb)
+    FetchAlbums  // Gradually get all albums
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -118,6 +158,7 @@ enum BackgroundTask {
 pub struct MpdWrapper {
     // References to controllers
     player: Rc<Player>,
+    library: Rc<Library>,
     // For receiving user commands from UI or child thread
     receiver: RefCell<Option<Receiver<MpdMessage>>>,
     // Corresponding sender, for cloning into child thread.
@@ -135,6 +176,7 @@ pub struct MpdWrapper {
 impl MpdWrapper {
     pub fn new(
         player: Rc<Player>,
+        library: Rc<Library>,
         sender: Sender<MpdMessage>,
         receiver: RefCell<Option<Receiver<MpdMessage>>>,
         albumart: Rc<AlbumArtCache>,
@@ -143,6 +185,7 @@ impl MpdWrapper {
         println!("Channel name: {}", &ch_name);
         let wrapper = Rc::new(Self {
             player,
+            library,
             receiver, // from UI. Note: RefCell has runtime reference checking
             sender,
             albumart,
@@ -180,15 +223,41 @@ impl MpdWrapper {
                                         println!("{:?} already cached, won't download again", uri);
                                     }
                                     else if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
+                                        println!("Downloaded album art for {:?}", uri);
                                         if let Some(dyn_img) = read_image_from_bytes(bytes) {
                                             // Might want to make all of these configurable.
                                             let _ = dyn_img.resize(256, 256, FilterType::CatmullRom).save(&cache_path);
                                             let  _= dyn_img.thumbnail(64, 64).save(&thumb_cache_path);
                                         }
-                                        let _ = sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri));
+                                        sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri)).expect(
+                                            "Warning: cannot notify main client of new album art."
+                                        );
                                     }
                                 }
-                                _ => unimplemented!()
+                                BackgroundTask::FetchAlbums => {
+                                    // Get list of unique album tags
+                                    // Will block child thread until info for all albums have been retrieved.
+                                    if let Ok(tag_list) = client.list(&Term::Tag(Cow::Borrowed("album")), &Query::new()) {
+                                        for tag in &tag_list {
+                                            if let Ok(songs) = client.find(
+                                                Query::new()
+                                                    .and(Term::Tag(Cow::Borrowed("album")), tag),
+                                                Window::from((0, 1))
+                                            ) {
+                                                if !songs.is_empty() {
+                                                    let first_song = Song::from_mpd_song(&songs[0]);
+                                                    let _ = sender_to_fg.send_blocking(MpdMessage::AlbumInfo(
+                                                        AlbumInfo::new(
+                                                            strip_filename_linux(&first_song.get_uri()),
+                                                            tag.as_str(),
+                                                            first_song.get_album_artist().as_deref()
+                                                        )
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -234,49 +303,74 @@ impl MpdWrapper {
                 this.clone().respond(request).await;
             }
         }));
+
+        // Set up a ping loop. Main client does not use idle mode, so it needs to ping periodically.
+        // If there is no client connected, it will simply skip pinging.
+        glib::MainContext::default().spawn_local(clone!(@strong self as this => async move {
+            loop {
+                if let Some(client) = this.main_client.borrow_mut().as_mut() {
+                    let res = client.ping();
+                    if res.is_ok() {
+                        println!("[KeepAlive]");
+                    }
+                    else {
+                        println!("[KeepAlive] [FATAL] Could not ping mpd. The connection might have already timed out, or the daemon might have crashed.");
+                        break;
+                    }
+                }
+                else {
+                    println!("[KeepAlive] There is no client currently running. Won't ping.");
+                }
+                glib::timeout_future_seconds(10).await;  // TODO: make this customisable
+            }
+        }));
     }
 
     async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
-        println!("Received MpdMessage {:?}", request);
+        // println!("Received MpdMessage {:?}", request);
         match request {
             MpdMessage::Connect(host, port) => self.connect(&host, &port).await,
             MpdMessage::Status => self.get_status(),
             MpdMessage::Toggle => self.set_playback(),
             MpdMessage::Prev => self.set_prev(),
             MpdMessage::Next => self.set_next(),
+            MpdMessage::PlayId(id) => self.play_id(id),
+            MpdMessage::Clear => self.clear_queue(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
+            MpdMessage::Queue => self.get_current_queue(),
+            MpdMessage::Album(info) => self.get_songs_in_album(info),
             MpdMessage::AlbumArt(folder_uri) => {
                 let cache_path = self.albumart.get_path_for(&folder_uri);
                 let thumb_cache_path = self.albumart.get_thumbnail_path_for(&folder_uri);
-                if let Some(sender) = self.bg_sender.borrow().as_ref() {
-                    let _ = sender.send_blocking(
-                        BackgroundTask::DownloadAlbumArt(
-                            folder_uri.to_owned(),
-                            cache_path.clone(),
-                            thumb_cache_path.clone()
-                        )
-                    );
-                }
+                self.queue_task(
+                    BackgroundTask::DownloadAlbumArt(
+                        folder_uri.to_owned(),
+                        cache_path.clone(),
+                        thumb_cache_path.clone()
+                    )
+                );
             },
+            MpdMessage::FindAdd(terms) => self.find_add(terms),
             MpdMessage::AlbumArtDownloaded(folder_uri) => self.notify_album_art(&folder_uri),
+            MpdMessage::AlbumInfo(info) => self.notify_album_info(info),
             _ => {}
         }
         glib::ControlFlow::Continue
     }
 
-    async fn handle_idle_changes(self: Rc<Self>, changes: Vec<Subsystem>) {
+    async fn handle_idle_changes(&self, changes: Vec<Subsystem>) {
         for subsystem in changes {
             match subsystem {
                 Subsystem::Player => {
                     // No need to get current song separately as we'll just pull it
                     // from the queue
-                    self.clone().get_status();
+                    self.get_status();
                 }
                 Subsystem::Queue => {
                     // Retrieve entire queue for now, since there's no way to know
                     // specifically what changed
-                    self.clone().get_current_queue();
+                    self.get_current_queue();
                 }
                 // Else just skip. More features to come.
                 _ => {}
@@ -284,10 +378,27 @@ impl MpdWrapper {
         }
     }
 
-    fn init_state(self: Rc<Self>) {
+    fn queue_task(&self, task: BackgroundTask) {
+        if let Some(sender) = self.bg_sender.borrow().as_ref() {
+            sender.send_blocking(task).expect("Cannot queue background task");
+            if let Some(client) = self.main_client.borrow_mut().as_mut() {
+                // Wake background thread
+                let _ = client.sendmessage(self.bg_channel.clone(), "WAKE");
+            }
+            else {
+                println!("Warning: cannot wake child thread. Task might be delayed.");
+            }
+        }
+        else {
+            panic!("Cannot queue background task (background sender not initialised)");
+        }
+    }
+
+    fn init_state(&self) {
+        self.queue_task(BackgroundTask::FetchAlbums);
         // Get queue first so we can look for current song in it later
-        self.clone().get_current_queue();
-        self.clone().get_status();
+        self.get_current_queue();
+        self.get_status();
     }
 
     async fn connect(self: Rc<Self>, host: &str, port: &str) {
@@ -310,12 +421,12 @@ impl MpdWrapper {
                 .borrow_mut().as_mut().unwrap()
                 .subscribe(self.bg_channel.clone())
                 .expect("Could not connect to an inter-client channel for child thread wakeups!");
-            self.clone().init_state();
-            self.start_bg_thread(host, port);
+            self.clone().start_bg_thread(host, port);
+            self.init_state();
         }
     }
 
-    pub fn get_status(self: Rc<Self>) {
+    pub fn get_status(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
                 // Let each state update their respective properties
@@ -347,6 +458,7 @@ impl MpdWrapper {
             // TODO: handle error
         }
     }
+
     pub fn set_next(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
@@ -357,6 +469,29 @@ impl MpdWrapper {
             // TODO: handle error
         }
     }
+
+    pub fn play_id(self: Rc<Self>, id: u32) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: Make it stop/play base on toggle
+            client.switch(Id(id)).expect("Could not switch song");
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
+
+    pub fn clear_queue(self: Rc<Self>) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: Make it stop/play base on toggle
+            let _ = client.clear();
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
+
     pub fn seek_current_song(&self, position: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.rewind(position);
@@ -372,8 +507,39 @@ impl MpdWrapper {
         }
     }
 
+    pub fn get_songs_in_album(&self, info: AlbumInfo) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let songs: Vec<Song> = client.find(
+                Query::new().and(Term::Tag(Cow::Borrowed("album")), info.title()),
+                Window::from((0, 4096))
+            ).unwrap().iter().map(Song::from_mpd_song).collect();
+
+            if !songs.is_empty() {
+                // Notify library to push new nav page
+                self.library.push_album_content_page(info, songs);
+            }
+        }
+    }
+
+    pub fn find_add(&self, terms: Vec<(QueryTerm, String)>) {
+        // Convert back to mpd::search::Query
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // println!("Running findadd query: {:?}", &terms);
+            let mut query = Query::new();
+            for term in terms.into_iter() {
+                query.and(term.0.into(), term.1);
+            }
+            client.findadd(&query).expect("Failed to run query!");
+        }
+    }
+
     pub fn notify_album_art(&self, folder_uri: &str) {
         self.player.update_album_art(folder_uri);
+        self.library.update_album_art(folder_uri);
+    }
+
+    pub fn notify_album_info(&self, info: AlbumInfo) {
+        self.library.add_album_info(info);
     }
 }
 

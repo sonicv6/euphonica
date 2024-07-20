@@ -21,7 +21,7 @@ use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
-#[enum_type(name = "SlamprustPlaybackState")]
+#[enum_type(name = "EuphoniaPlaybackState")]
 pub enum PlaybackState {
     #[default]
     Stopped,
@@ -54,7 +54,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Player {
-        const NAME: &'static str = "SlamprustPlayer";
+        const NAME: &'static str = "EuphoniaPlayer";
         type Type = super::Player;
 
         fn new() -> Self {
@@ -281,21 +281,21 @@ impl Player {
     // internal fields.
     pub fn title(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return Some(song.get_name().clone());
+            return song.get_name();
         }
         None
     }
 
     pub fn artist(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return Some(song.get_artist());
+            return song.get_artist();
         }
         None
     }
 
     pub fn album(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return Some(song.get_album());
+            return song.get_album();
         }
         None
     }
@@ -338,5 +338,17 @@ impl Player {
 
     pub fn queue(&self) -> gio::ListStore {
         self.imp().queue.borrow().clone()
+    }
+
+    pub fn clear_queue(&self) {
+        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+            let _ = sender.send_blocking(MpdMessage::Clear);
+        }
+    }
+
+    pub fn on_song_clicked(&self, song: Song) {
+        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+            let _ = sender.send_blocking(MpdMessage::PlayId(song.get_queue_id()));
+        }
     }
 }

@@ -1,23 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <requires lib="gtk" version="4.0"/>
-  <template class="SlamprustAlbumView" parent="GtkWidget">
+  <template class="EuphoniaAlbumView" parent="GtkWidget">
     <child>
-      <object class="AdwToolbarView">
-				<property name="content">
-					<object class="GtkScrolledWindow">
-            <property name="hscrollbar-policy">never</property>
-            <property name="vscrollbar-policy">automatic</property>
-            <property name="propagate-natural-height">true</property>
-            <property name="vexpand">true</property>
-            <property name="child">
-              <object class="GtkListView" id="grid_view">
-                <property name="single-click-activate">true</property>
-              </object>
-            </property>
+      <object class="AdwNavigationView" id="nav_view">
+        <child>
+          <object class="AdwNavigationPage">
+            <property name="title">Albums</property>
+            <child>
+              <object class="AdwToolbarView">
+                <child type="top">
+					        <object class="AdwHeaderBar">
+
+					        </object>
+				        </child>
+				        <property name="content">
+					        <object class="GtkScrolledWindow">
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vscrollbar-policy">automatic</property>
+                    <property name="propagate-natural-height">true</property>
+                    <property name="has-frame">false</property>
+                    <property name="vexpand">true</property>
+                    <property name="child">
+                      <object class="GtkGridView" id="grid_view">
+                        <property name="orientation">1</property>
+                        <property name="min-columns">1</property>
+                        <property name="single-click-activate">true</property>
+                        <style>
+                          <class name="gridview"/>
+                        </style>
+                      </object>
+                    </property>
+                  </object>
+				        </property>
+			        </object>
+            </child>
           </object>
-				</property>
-			</object>
+        </child>
+        <child>
+          <object class="AdwNavigationPage" id="content_page">
+            <property name="tag">content</property>
+            <property name="title">Album Info</property>
+            <child>
+              <object class="EuphoniaAlbumContentView" id="content_view"></object>
+            </child>
+          </object>
+        </child>
+      </object>
 		</child>
 	</template>
 </interface>

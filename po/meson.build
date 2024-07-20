@@ -1,1 +1,1 @@
-i18n.gettext('slamprust', preset: 'glib')
+i18n.gettext('euphonia', preset: 'glib')

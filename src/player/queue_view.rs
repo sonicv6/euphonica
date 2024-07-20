@@ -12,7 +12,7 @@ use gtk::{
     glib,
     gdk,
     CompositeTemplate,
-    NoSelection,
+    SingleSelection,
     SignalListItemFactory,
     ListItem,
 };
@@ -38,7 +38,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/slamprust/Slamprust/gtk/queue-view.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
@@ -52,13 +52,15 @@ mod imp {
         pub current_artist_name: TemplateChild<gtk::Label>,
         #[template_child]
         pub current_album_name: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub clear_queue: TemplateChild<gtk::Button>,
 
         pub signal_ids: RefCell<Vec<SignalHandlerId>>,
     }
 
     #[glib::object_subclass]
     impl ObjectSubclass for QueueView {
-        const NAME: &'static str = "SlamprustQueueView";
+        const NAME: &'static str = "EuphoniaQueueView";
         type Type = super::QueueView;
         type ParentType = gtk::Widget;
 
@@ -108,9 +110,10 @@ impl QueueView {
     }
 
     pub fn setup_listview(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {
+        // Enable/disable clear queue button depending on whether the queue is empty or not
         // Set selection mode
         // TODO: Allow click to jump to song
-        let sel_model = NoSelection::new(Some(player.queue()));
+        let sel_model = SingleSelection::new(Some(player.queue()));
         self.imp().queue.set_model(Some(&sel_model));
 
         // Set up factory
@@ -179,6 +182,19 @@ impl QueueView {
 
         // Set the factory of the list view
         self.imp().queue.set_factory(Some(&factory));
+
+        // Setup click action
+        self.imp().queue.connect_activate(move |queue, position| {
+            // Get `IntegerObject` from model
+            let model = queue.model().expect("The model has to exist.");
+            let song = model
+                .item(position)
+                .and_downcast::<Song>()
+                .expect("The item has to be a `common::Song`.");
+
+            // Increase "number" of `IntegerObject`
+            player.on_song_clicked(song);
+        });
     }
 
     fn update_info_visibility(&self, is_playing: bool) {
@@ -209,7 +225,7 @@ impl QueueView {
             self.imp().current_album_art.set_from_paintable(tex);
         }
         else {
-            self.imp().current_album_art.set_from_resource(Some("/org/slamprust/Slamprust/albumart-placeholder.png"));
+            self.imp().current_album_art.set_from_resource(Some("/org/euphonia/Euphonia/albumart-placeholder.png"));
         }
     }
 
@@ -265,6 +281,22 @@ impl QueueView {
                 })
             )
         );
+
+        let player_queue = player.queue();
+        let clear_queue_btn = self.imp().clear_queue.get();
+        player_queue
+            .bind_property(
+                "n-items",
+                &clear_queue_btn,
+                "sensitive"
+            )
+            .transform_to(|_, size: u32| {Some(size > 0)})
+            .sync_create()
+            .build();
+
+        clear_queue_btn.connect_clicked(clone!(@weak player as p => move |_| {
+            player.clear_queue();
+        }));
     }
 
     pub fn setup(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {
