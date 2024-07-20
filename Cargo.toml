@@ -18,8 +18,8 @@ stretto = { version = "0.8", features = ["sync"] }
 
 [dependencies.gtk]
 package = "gtk4"
-version = "0.7.1"
-features = ["v4_6"]
+version = "0.9"
+features = ["v4_14"]
 
 [dependencies.uuid]
 version = "1.9.0"
@@ -31,5 +31,5 @@ features = [
 
 [dependencies.adw]
 package = "libadwaita"
-version = "0.5"
-features = ["v1_4"]
+version = "0.7"
+features = ["v1_5"]

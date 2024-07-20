@@ -166,7 +166,7 @@ impl AlbumContentView {
     fn update_cover(&self, tex: Option<&Texture>) {
         // Use high-resolution version here
         if tex.is_some() {
-            self.imp().cover.set_from_paintable(tex);
+            self.imp().cover.set_paintable(tex);
         }
     }
 

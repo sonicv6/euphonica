@@ -25,7 +25,8 @@ mod window;
 mod client;
 mod library;
 mod sidebar;
-mod settings;
+mod utils;
+mod preferences;
 
 use self::application::EuphoniaApplication;
 use self::window::EuphoniaWindow;

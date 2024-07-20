@@ -1,28 +1,3 @@
-extern crate image;
-use image::{
-    io::Reader as ImageReader,
-    imageops::FilterType
-};
-use uuid::Uuid;
-use crate::{
-    player::Player,
-    library::Library,
-    common::{AlbumInfo, Song}
-};
-use futures::executor;
-use mpd::{
-    client::Client,
-    search::{Term, Query, Window},
-    song::Id,
-    Subsystem,
-    Idle,
-    Channel
-};
-use super::albumart::{strip_filename_linux, AlbumArtCache};
-use async_channel::{Sender, Receiver};
-use glib::clone;
-use gtk::{glib, gio};
-
 use std::{
     borrow::Cow,
     io::Cursor,
@@ -31,6 +6,37 @@ use std::{
     path::PathBuf,
     convert::Into
 };
+use gtk::gio::prelude::*;
+use futures::executor;
+use async_channel::{Sender, Receiver};
+use glib::clone;
+use gtk::{glib, gio};
+
+use crate::{
+    utils,
+    player::Player,
+    library::Library,
+    common::{AlbumInfo, Song}
+};
+
+use super::{
+    albumart::{strip_filename_linux, AlbumArtCache},
+    state::{ClientState, ConnectionState}
+};
+
+use mpd::{
+    client::Client,
+    search::{Term, Query, Window},
+    song::Id,
+    Subsystem,
+    Idle,
+    Channel
+};
+use image::{
+    io::Reader as ImageReader,
+    imageops::FilterType
+};
+use uuid::Uuid;
 
 pub fn get_dummy_song(uri: &str) -> mpd::Song {
     // Many of mpd's methods require an impl of trait ToSongPath, which
@@ -90,7 +96,7 @@ impl<'a> Into<Term<'a>> for QueryTerm {
 // as Connect and Toggle.
 #[derive(Debug)]
 pub enum MpdMessage {
-    Connect(String, String), // Host and port (both as strings)
+    Connect, // Host and port are always read from gsettings
 	Play,
     PlayId(u32), // Play song at queue ID
 	Toggle, // The "pause" command but renamed since it's a misnomer
@@ -167,6 +173,8 @@ pub struct MpdWrapper {
     // The main client living on the main thread. Every single method of
     // mpd::Client is mutating so we'll just rely on a RefCell for now.
 	main_client: RefCell<Option<Client>>,
+    // The state GObject, used for communicating client status & changes to UI elements
+    state: Rc<ClientState>,
     // Handle to the child thread.
 	bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
 	bg_channel: Channel, // For waking up the child client
@@ -179,7 +187,7 @@ impl MpdWrapper {
         library: Rc<Library>,
         sender: Sender<MpdMessage>,
         receiver: RefCell<Option<Receiver<MpdMessage>>>,
-        albumart: Rc<AlbumArtCache>,
+        albumart: Rc<AlbumArtCache>
     ) -> Rc<Self> {
         let ch_name = Uuid::new_v4().simple().to_string();
         println!("Channel name: {}", &ch_name);
@@ -189,6 +197,7 @@ impl MpdWrapper {
             receiver, // from UI. Note: RefCell has runtime reference checking
             sender,
             albumart,
+            state: Rc::new(ClientState::default()),
             main_client: RefCell::new(None),  // Must be initialised later
             bg_handle: RefCell::new(None),  // Will be spawned later
             bg_channel: Channel::new(&ch_name).unwrap(),
@@ -200,15 +209,19 @@ impl MpdWrapper {
         wrapper
     }
 
-    fn start_bg_thread(self: Rc<Self>, host: &str, port: &str) {
+    pub fn get_client_state(self: Rc<Self>) -> Rc<ClientState> {
+        self.state.clone()
+    }
+
+    fn start_bg_thread(self: Rc<Self>, addr: &str) {
         let sender_to_fg = self.sender.clone();
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
         self.bg_sender.replace(Some(bg_sender));
-        if let Ok(mut client) =  Client::connect(format!("{}:{}", host, port)) {
+        if let Ok(mut client) =  Client::connect(addr) {
             client.subscribe(self.bg_channel.clone()).expect("Child thread could not subscribe to inter-client channel!");
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting idle loop...");
-                loop {
+                'outer: loop {
                     // Check if there is work to do
                     if !bg_receiver.is_empty() {
                         // TODO: Take one task for each loop
@@ -272,7 +285,7 @@ impl MpdWrapper {
                                         println!("Received msg: {}", content);
                                         match content {
                                             // More to come
-                                            "STOP" => {break;}
+                                            "STOP" => {break 'outer}
                                             _ => {}
                                         }
                                     }
@@ -329,7 +342,7 @@ impl MpdWrapper {
     async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
         // println!("Received MpdMessage {:?}", request);
         match request {
-            MpdMessage::Connect(host, port) => self.connect(&host, &port).await,
+            MpdMessage::Connect => self.connect().await,
             MpdMessage::Status => self.get_status(),
             MpdMessage::Toggle => self.set_playback(),
             MpdMessage::Prev => self.set_prev(),
@@ -401,7 +414,7 @@ impl MpdWrapper {
         self.get_status();
     }
 
-    async fn connect(self: Rc<Self>, host: &str, port: &str) {
+    async fn connect(self: Rc<Self>) {
         // Close current clients
         if let Some(mut main_client) = self.main_client.borrow_mut().take() {
             println!("Closing existing clients");
@@ -410,19 +423,35 @@ impl MpdWrapper {
             // Now close the main client
             let _ = main_client.close();
         }
+        // self.state.set_connection_state(ConnectionState::NotConnected);
         // Wait for child client to stop.
         if let Some(handle) = self.bg_handle.take() {
             let _ = handle.await;
+            println!("Stopped all clients successfully.");
         }
-        println!("Connecting to {}:{}", host, port);
-        if let Ok(c) = mpd::Client::connect(format!("{}:{}", host, port)) {
-            self.main_client.replace(Some(c));
+        let conn = utils::settings_manager().child("client");
+
+        let addr = format!("{}:{}", conn.string("mpd-host"), conn.int("mpd-port"));
+        println!("Connecting to {}", &addr);
+        self.state.set_connection_state(ConnectionState::Connecting);
+        let addr_clone = addr.clone();
+        let handle = gio::spawn_blocking(move || {
+            mpd::Client::connect(addr_clone)
+        }).await;
+        if let Ok(Ok(client)) = handle {
+            self.main_client.replace(Some(client));
             self.main_client
-                .borrow_mut().as_mut().unwrap()
+                .borrow_mut()
+                .as_mut()
+                .unwrap()
                 .subscribe(self.bg_channel.clone())
                 .expect("Could not connect to an inter-client channel for child thread wakeups!");
-            self.clone().start_bg_thread(host, port);
+            self.clone().start_bg_thread(addr.as_ref());
             self.init_state();
+            self.state.set_connection_state(ConnectionState::Connected);
+        }
+        else {
+            self.state.set_connection_state(ConnectionState::NotConnected);
         }
     }
 

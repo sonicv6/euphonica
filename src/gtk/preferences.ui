@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<requires lib="gtk" version="4.0" />
+	<requires lib="Adw" version="1.0" />
+	<template class="EuphoniaPreferences" parent="AdwPreferencesDialog">
+		<property name="content-width">800</property>
+		<property name="content-height">600</property>
+		<property name="title" translatable="true">Preferences</property>
+		<child>
+			<object class="AdwPreferencesPage" id="connection_page">
+				<property name="title" translatable="true">Connection</property>
+				<property name="icon-name">server-pick-symbolic</property>
+				<child>
+					<object class="AdwPreferencesGroup">
+						<property name="title" translatable="true">MPD Connection</property>
+						<property name="description" translatable="true">Change how Euphonia connects to your Music Player Daemon instance. Click Apply to save these settings and initiate a new connection.</property>
+						<property name="header-suffix">
+							<object class="GtkButton" id="reconnect">
+								<property name="label" translatable="true">Apply</property>
+								<property name="valign">2</property>
+								<property name="margin-start">12</property>
+								<style>
+									<class name="suggested-action"/>
+								</style>
+							</object>
+						</property>
+						<child>
+							<object class="AdwEntryRow" id="mpd_host">
+								<property name="title" translatable="true">Host address</property>
+							</object>
+						</child>
+						<child>
+							<object class="AdwEntryRow" id="mpd_port">
+								<property name="title" translatable="true">Port</property>
+							</object>
+						</child>
+					</object>
+				</child>
+			</object>
+		</child>
+	</template>
+</interface>

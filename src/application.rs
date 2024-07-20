@@ -33,8 +33,12 @@ use crate::{
     player::Player,
     client::{MpdWrapper, MpdMessage, AlbumArtCache},
     config::VERSION,
+    utils,
+    preferences::Preferences,
     EuphoniaWindow
 };
+
+use adw::prelude::*;
 
 mod imp {
     use super::*;
@@ -86,12 +90,6 @@ mod imp {
                 albumart.clone()
             );
 
-            // TODO: use gsettings for reading host & port
-            let _ = sender.send_blocking(MpdMessage::Connect(
-                String::from("localhost"),
-                String::from("6600")
-            ));
-
             Self {
                 player,
                 library,
@@ -129,6 +127,11 @@ mod imp {
 
             // Ask the window manager/compositor to present the window
             window.present();
+
+            // Start attempting to connect to the daemon once the window has been displayed.
+            // This avoids delaying the presentation until the connection process concludes.
+            let client_info = utils::settings_manager().child("client");
+            let _ = application.imp().sender.send_blocking(MpdMessage::Connect);
         }
     }
 
@@ -148,14 +151,6 @@ impl EuphoniaApplication {
             .property("application-id", application_id)
             .property("flags", flags)
             .build()
-    }
-
-    pub fn connect(&self) {
-        // TODO: GUI & config file
-        // TODO: move this to a submod for the settings dialogue instead maybe?
-        let _ = self.imp().sender.send_blocking(
-            MpdMessage::Connect(String::from("localhost"), String::from("6600"))
-        );
     }
 
     pub fn get_player(&self) -> Rc<Player> {
@@ -185,13 +180,15 @@ impl EuphoniaApplication {
         let about_action = gio::ActionEntry::builder("about")
             .activate(move |app: &Self, _, _| app.show_about())
             .build();
-        self.add_action_entries([quit_action, about_action]);
+        let preferences_action = gio::ActionEntry::builder("preferences")
+            .activate(move |app: &Self, _, _| app.show_preferences())
+            .build();
+        self.add_action_entries([quit_action, about_action, preferences_action]);
     }
 
     fn show_about(&self) {
         let window = self.active_window().unwrap();
-        let about = adw::AboutWindow::builder()
-            .transient_for(&window)
+        let about = adw::AboutDialog::builder()
             .application_name("Euphonia")
             .application_icon("org.euphonia.Euphonia")
             .developer_name("Work")
@@ -200,6 +197,15 @@ impl EuphoniaApplication {
             .copyright("© 2024 Work")
             .build();
 
-        about.present();
+        about.present(Some(&window));
+    }
+
+    fn show_preferences(&self) {
+        let window = self.active_window().unwrap();
+        let prefs = Preferences::new(
+            self.imp().sender.clone(),
+            self.imp().client.clone().get_client_state()
+        );
+        prefs.present(Some(&window));
     }
 }

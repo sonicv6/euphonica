@@ -3,9 +3,18 @@
 
 	<schema id="org.euphonia.Euphonia" path="/org/euphonia/Euphonia/">
 		<child schema="org.euphonia.Euphonia.state" name="state"/>
-		<key name="test" type="s">
-			<default>'Test'</default>
+		<child schema="org.euphonia.Euphonia.client" name="client"/>
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.client" path="/org/euphonia/Euphonia/client/">
+		<!-- TODO: bool key for whether there's a password. Store password with oo7. -->
+		<key name="mpd-host" type="s">
+			<default>'localhost'</default>
 		</key>
+		<key name="mpd-port" type="i">
+			<default>6600</default>
+		</key>
+
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">
