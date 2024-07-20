@@ -28,6 +28,7 @@ use gtk::{
 use glib::signal::SignalHandlerId;
 use glib::clone;
 use crate::{
+    settings,
     client::MpdMessage,
     application::EuphoniaApplication,
     player::{QueueView, PlaybackState},
@@ -145,6 +146,7 @@ impl EuphoniaWindow {
 
         let app = win.downcast_application();
 
+        win.restore_window_state();
         win.imp().queue_view.setup(
             app.get_player(),
             app.get_album_art_cache()
@@ -161,6 +163,14 @@ impl EuphoniaWindow {
 		win.bind_state();
         win.setup_signals();
         win
+    }
+
+    fn restore_window_state(&self) {
+        let settings = settings::settings_manager();
+        let state = settings.child("state");
+        let width = state.int("last-window-width");
+        let height = state.int("last-window-height");
+        self.set_default_size(width, height);
     }
 
     fn downcast_application(&self) -> EuphoniaApplication {
@@ -324,7 +334,19 @@ impl EuphoniaWindow {
 
 	fn setup_signals(&self) {
 	    self.connect_close_request(move |window| {
-	        // TODO: save window size?
+            let size = window.default_size();
+	        let width = size.0;
+            let height = size.1;
+
+            let settings = settings::settings_manager();
+            let state = settings.child("state");
+            state
+                .set_int("last-window-width", width)
+                .expect("Unable to store last-window-width");
+            state
+                .set_int("last-window-height", height)
+                .expect("Unable to stop last-window-height");
+
 	        // TODO: persist other settings at closing?
             window.unbind_state();
             glib::Propagation::Proceed

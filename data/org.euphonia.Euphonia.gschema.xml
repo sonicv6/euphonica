@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="euphonia">
+
 	<schema id="org.euphonia.Euphonia" path="/org/euphonia/Euphonia/">
+		<child schema="org.euphonia.Euphonia.state" name="state"/>
+		<key name="test" type="s">
+			<default>'Test'</default>
+		</key>
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">
+		<!-- Remember last window size -->
+		<key name="last-window-width" type="i">
+			<default>600</default>
+		</key>
+		<key name="last-window-height" type="i">
+			<default>400</default>
+		</key>
+
 	</schema>
 </schemalist>
