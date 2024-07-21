@@ -319,6 +319,8 @@ impl MpdWrapper {
 
         // Set up a ping loop. Main client does not use idle mode, so it needs to ping periodically.
         // If there is no client connected, it will simply skip pinging.
+        let conn = utils::settings_manager().child("client");
+        let ping_interval = conn.uint("mpd-ping-interval-s");
         glib::MainContext::default().spawn_local(clone!(@strong self as this => async move {
             loop {
                 if let Some(client) = this.main_client.borrow_mut().as_mut() {
@@ -334,7 +336,7 @@ impl MpdWrapper {
                 else {
                     println!("[KeepAlive] There is no client currently running. Won't ping.");
                 }
-                glib::timeout_future_seconds(10).await;  // TODO: make this customisable
+                glib::timeout_future_seconds(ping_interval).await;
             }
         }));
     }
@@ -431,7 +433,7 @@ impl MpdWrapper {
         }
         let conn = utils::settings_manager().child("client");
 
-        let addr = format!("{}:{}", conn.string("mpd-host"), conn.int("mpd-port"));
+        let addr = format!("{}:{}", conn.string("mpd-host"), conn.uint("mpd-port"));
         println!("Connecting to {}", &addr);
         self.state.set_connection_state(ConnectionState::Connecting);
         let addr_clone = addr.clone();

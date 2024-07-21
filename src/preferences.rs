@@ -116,19 +116,36 @@ impl Preferences {
                 res,
                 move |cs, _| {
                     match cs.get_connection_state() {
-                        ConnectionState::NotConnected => this.add_toast(
-                            adw::Toast::new("Failed to connect")
-                        ),
-                        // ConnectionState::Connecting => this.add_toast(
-                        //     adw::Toast::new("Connecting...")
-                        // ),
-                        ConnectionState::Unauthenticated => this.add_toast(
-                            adw::Toast::new("Authentication failed")
-                        ),
-                        ConnectionState::Connected => this.add_toast(
-                            adw::Toast::new("Connected!")
-                        ),
-                        _ => {}
+                        ConnectionState::NotConnected => {
+                            this.add_toast(
+                                adw::Toast::new("Failed to connect")
+                            );
+                            if !this.imp().mpd_port.has_css_class("error") {
+                                this.imp().reconnect.set_sensitive(true);
+                            }
+                        },
+                        ConnectionState::Connecting => {
+                            // No toast for this one, as it will prevent the
+                            // "result" toasts from being displayed.
+                            // Instead we'll simply dim the Apply button.
+                            this.imp().reconnect.set_sensitive(false);
+                        },
+                        ConnectionState::Unauthenticated => {
+                            this.add_toast(
+                                adw::Toast::new("Authentication failed")
+                            );
+                            if !this.imp().mpd_port.has_css_class("error") {
+                                this.imp().reconnect.set_sensitive(true);
+                            }
+                        },
+                        ConnectionState::Connected => {
+                            this.add_toast(
+                                adw::Toast::new("Connected!")
+                            );
+                            if !this.imp().mpd_port.has_css_class("error") {
+                                this.imp().reconnect.set_sensitive(true);
+                            }
+                        }
                     }
                 }
             )
@@ -143,7 +160,7 @@ impl Preferences {
             sender,
             move |_| {
                 let _ = conn_settings.set_string("mpd-host", &this.imp().mpd_host.text());
-                let _ = conn_settings.set_int("mpd-port", this.imp().mpd_port.text().parse::<i32>().unwrap());
+                let _ = conn_settings.set_uint("mpd-port", this.imp().mpd_port.text().parse::<u32>().unwrap());
                 let _ = sender.send_blocking(MpdMessage::Connect);
             }
         ));

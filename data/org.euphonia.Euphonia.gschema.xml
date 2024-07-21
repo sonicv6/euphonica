@@ -11,8 +11,19 @@
 		<key name="mpd-host" type="s">
 			<default>'localhost'</default>
 		</key>
-		<key name="mpd-port" type="i">
+		<key name="mpd-port" type="u">
 			<default>6600</default>
+		</key>
+		<key name="mpd-ping-interval-s" type="u">
+			<summary>Ping interval for main client</summary>
+			<description>
+			Euphonia relies on a secondary background client that's always in "idle mode" to
+			synchronise itself with changes made by other frontend apps. Its main client does not
+			poll the daemon unless needed (e.g. to update the seekbar). Due to this, it still
+			needs to occasionally ping the daemon to keep the connection alive. Set this to
+			lower than your daemon's timeout interval, which by default is 30s.
+			</description>
+			<default>20</default>
 		</key>
 
 	</schema>
