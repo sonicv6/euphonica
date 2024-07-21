@@ -12,6 +12,7 @@
 		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar-button.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar.ui</file>
+		<file preprocess="xml-stripblanks">gtk/player-bar.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences.ui</file>
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>

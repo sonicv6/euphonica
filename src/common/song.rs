@@ -82,7 +82,7 @@ impl SongInfo {
                 "Album" => {let _ = res.album.replace(val.clone());},
                 "AlbumArtist" => {let _ = res.album_artist.replace(val.clone());},
                 // "date" => res.imp().release_date.replace(Some(val.clone())),
-                // "Format" => {println!("{}", val.clone());},
+                "Format" => {println!("{}", val.clone());},
                 _ => {}
             }
         }
@@ -253,36 +253,6 @@ impl Song {
             return dur.as_secs();
         }
         0
-    }
-
-    pub fn format_duration(&self) -> Option<String> {
-        if let Some(duration) = self.imp().info.borrow().duration.as_ref() {
-            let total_seconds = duration.as_secs();
-            let days = total_seconds / 86400;
-            let hours = (total_seconds % 86400) / 3600;
-            let minutes = (total_seconds % 3600) / 60;
-            let seconds = total_seconds % 60;
-
-            if days > 0 {
-                return Some(format!(
-                    "{} days {:02}:{:02}:{:02}",
-                    days, hours, minutes, seconds
-                ));
-            } else if hours > 0 {
-                return Some(format!(
-                    "{:02}:{:02}:{:02}",
-                    hours, minutes, seconds
-                ));
-            } else if minutes > 0 {
-                return Some(format!(
-                    "{:02}:{:02}",
-                    minutes, seconds
-                ));
-            } else {
-                return Some(format!("{}s", seconds));
-            }
-        }
-        None
     }
 
     pub fn get_artist(&self) -> Option<String> {

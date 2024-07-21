@@ -236,9 +236,15 @@ impl QueueView {
         ids.push(
             player.connect_notify_local(
                 Some("playback-state"),
-                clone!(@weak self as this, @weak player as p => move |_, _| {
-                    this.update_info_visibility(p.playback_state() != PlaybackState::Stopped);
-                })
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    player,
+                    move |_, _| {
+                        this.update_info_visibility(player.playback_state() != PlaybackState::Stopped);
+                    }
+                )
             )  
         );
 
@@ -246,9 +252,15 @@ impl QueueView {
         ids.push(
             player.connect_notify_local(
                 Some("title"),
-                clone!(@weak self as this, @weak player as p => move |_, _| {
-                    this.update_song_name(p.title().as_ref());
-                })
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    player,
+                    move |_, _| {
+                        this.update_song_name(player.title().as_ref());
+                    }
+                )
             )
         );
 
@@ -256,9 +268,15 @@ impl QueueView {
         ids.push(
             player.connect_notify_local(
                 Some("album"),
-                clone!(@weak self as this, @weak player as p => move |_, _| {
-                    this.update_album_name(p.album().as_ref());
-                })
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    player,
+                    move |_, _| {
+                        this.update_album_name(player.album().as_ref());
+                    }
+                )
             )
         );
 
@@ -266,9 +284,15 @@ impl QueueView {
         ids.push(
             player.connect_notify_local(
                 Some("artist"),
-                clone!(@weak self as this, @weak player as p => move |_, _| {
-                    this.update_artist_name(p.artist().as_ref());
-                })
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    player,
+                    move |_, _| {
+                        this.update_artist_name(player.artist().as_ref());
+                    }
+                )
             )
         );
 
@@ -276,9 +300,15 @@ impl QueueView {
         ids.push(
             player.connect_notify_local(
                 Some("album-art"),
-                clone!(@weak self as this, @weak player as p => move |_, _| {
-                    this.update_album_art(p.album_art().as_ref());
-                })
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    player,
+                    move |_, _| {
+                        this.update_album_art(player.album_art().as_ref());
+                    }
+                )
             )
         );
 

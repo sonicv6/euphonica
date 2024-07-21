@@ -33,3 +33,7 @@
 .sidebar-btn label {
     font-weight: regular;
 }
+
+.player-bar {
+    padding: 12pt;
+}

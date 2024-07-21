@@ -23,7 +23,7 @@
 			needs to occasionally ping the daemon to keep the connection alive. Set this to
 			lower than your daemon's timeout interval, which by default is 30s.
 			</description>
-			<default>20</default>
+			<default>15</default>
 		</key>
 
 	</schema>
