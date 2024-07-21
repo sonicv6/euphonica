@@ -307,7 +307,10 @@ impl MpdWrapper {
         // Set up a listener to the receiver we got from Application.
         // This will be the loop that handles user interaction and idle updates.
         let receiver = self.receiver.borrow_mut().take().unwrap();
-        glib::MainContext::default().spawn_local(clone!(@strong self as this => async move {
+        glib::MainContext::default().spawn_local(clone!(
+            #[strong(rename_to = this)]
+            self,
+            async move {
             use futures::prelude::*;
             // Allow receiver to be mutated, but keep it at the same memory address.
             // See Receiver::next doc for why this is needed.
@@ -321,7 +324,10 @@ impl MpdWrapper {
         // If there is no client connected, it will simply skip pinging.
         let conn = utils::settings_manager().child("client");
         let ping_interval = conn.uint("mpd-ping-interval-s");
-        glib::MainContext::default().spawn_local(clone!(@strong self as this => async move {
+        glib::MainContext::default().spawn_local(clone!(
+            #[strong(rename_to = this)]
+            self,
+            async move {
             loop {
                 if let Some(client) = this.main_client.borrow_mut().as_mut() {
                     let res = client.ping();
