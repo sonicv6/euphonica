@@ -96,7 +96,7 @@ impl AlbumCell {
                     let cover = this_album.get_cover();
                     if cover.is_some() {
                         // Don't set to None as that will still override the placeholder resource.
-                        cover_image.set_from_paintable(cover.as_ref());
+                        cover_image.set_paintable(cover.as_ref());
                     }
                 },
             );

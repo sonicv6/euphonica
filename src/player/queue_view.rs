@@ -128,7 +128,7 @@ impl QueueView {
                 .set_child(Some(&queue_row));
         });
         // Tell factory how to bind `QueueRow` to one of our Song GObjects
-        factory.connect_bind(clone!(@weak albumart as cache => move |_, list_item| {
+        factory.connect_bind(move |_, list_item| {
             // Get `Song` from `ListItem` (that is, the data side)
             let item: Song = list_item
                 .downcast_ref::<ListItem>()
@@ -158,7 +158,7 @@ impl QueueView {
 
             // Within this binding fn is where the cached album art texture gets used.
             child.bind(&item);
-        }));
+        });
 
 
         // When row goes out of sight, unbind from item to allow reuse with another.
@@ -222,10 +222,10 @@ impl QueueView {
     fn update_album_art(&self, tex: Option<&Texture>) {
         // Use high-resolution version here
         if tex.is_some() {
-            self.imp().current_album_art.set_from_paintable(tex);
+            self.imp().current_album_art.set_paintable(tex);
         }
         else {
-            self.imp().current_album_art.set_from_resource(Some("/org/euphonia/Euphonia/albumart-placeholder.png"));
+            self.imp().current_album_art.set_resource(Some("/org/euphonia/Euphonia/albumart-placeholder.png"));
         }
     }
 
@@ -294,7 +294,7 @@ impl QueueView {
             .sync_create()
             .build();
 
-        clear_queue_btn.connect_clicked(clone!(@weak player as p => move |_| {
+        clear_queue_btn.connect_clicked(clone!(#[weak] player, move |_| {
             player.clear_queue();
         }));
     }

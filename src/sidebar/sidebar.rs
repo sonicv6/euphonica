@@ -1,6 +1,7 @@
 use adw::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
 use glib::clone;
+
 use super::SidebarButton;
 
 mod imp {

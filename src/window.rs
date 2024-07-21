@@ -25,10 +25,13 @@ use gtk::{
     gio,
     glib
 };
-use glib::signal::SignalHandlerId;
-use glib::clone;
+use glib::{
+    clone,
+    signal::SignalHandlerId
+};
 use crate::{
-    client::MpdMessage,
+    utils,
+    client::{MpdMessage, ConnectionState},
     application::EuphoniaApplication,
     player::{QueueView, PlaybackState},
     library::AlbumView,
@@ -46,7 +49,6 @@ mod imp {
         // pub view_switcher: TemplateChild<adw::ViewSwitcher>,
         // #[template_child]
         // pub header_bar: TemplateChild<adw::HeaderBar>,
-
         #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
         #[template_child]
@@ -68,6 +70,8 @@ mod imp {
         #[template_child]
         pub stack: TemplateChild<gtk::Stack>,
 
+        #[template_child]
+        pub title: TemplateChild<adw::WindowTitle>,
         #[template_child]
         pub sidebar: TemplateChild<Sidebar>,
 
@@ -111,6 +115,7 @@ mod imp {
 
                 stack: TemplateChild::default(),
 
+                title: TemplateChild::default(),
                 sidebar: TemplateChild::default(),
 
                 notify_position_id: RefCell::new(None),
@@ -138,13 +143,14 @@ glib::wrapper! {
 }
 
 impl EuphoniaWindow {
-    pub fn new<P: glib::IsA<gtk::Application>>(application: &P) -> Self {
+    pub fn new<P: glib::object::IsA<gtk::Application>>(application: &P) -> Self {
         let win: Self =  glib::Object::builder()
             .property("application", application)
             .build();
 
         let app = win.downcast_application();
 
+        win.restore_window_state();
         win.imp().queue_view.setup(
             app.get_player(),
             app.get_album_art_cache()
@@ -161,6 +167,14 @@ impl EuphoniaWindow {
 		win.bind_state();
         win.setup_signals();
         win
+    }
+
+    fn restore_window_state(&self) {
+        let settings = utils::settings_manager();
+        let state = settings.child("state");
+        let width = state.int("last-window-width");
+        let height = state.int("last-window-height");
+        self.set_default_size(width, height);
     }
 
     fn downcast_application(&self) -> EuphoniaApplication {
@@ -276,6 +290,7 @@ impl EuphoniaWindow {
     }
 
 	fn bind_state(&self) {
+        // TODO: Move these into separate bottom bar widget
 		let player = self.downcast_application().get_player();
 
         // We'll first need to sync with the state initially; afterwards the binding will do it for us.
@@ -304,6 +319,27 @@ impl EuphoniaWindow {
         self.imp().notify_playback_state_id.replace(Some(notify_playback_state_id));
         self.imp().notify_position_id.replace(Some(notify_position_id));
         self.imp().notify_duration_id.replace(Some(notify_duration_id));
+
+        // Bind client state to app name widget
+        let client = self.downcast_application().get_client();
+        let state = client.get_client_state();
+        let title = self.imp().title.get();
+        state
+            .bind_property(
+                "connection-state",
+                &title,
+                "subtitle"
+            )
+            .transform_to(|_, state: ConnectionState| {
+                match state {
+                    ConnectionState::NotConnected => Some("Not connected"),
+                    ConnectionState::Connecting => Some("Connecting"),
+                    ConnectionState::Unauthenticated => Some("Unauthenticated"),
+                    ConnectionState::Connected => Some("Connected")
+                }
+            })
+            .sync_create()
+            .build();
 	}
 
 	fn unbind_state(&self) {
@@ -324,7 +360,18 @@ impl EuphoniaWindow {
 
 	fn setup_signals(&self) {
 	    self.connect_close_request(move |window| {
-	        // TODO: save window size?
+            let size = window.default_size();
+	        let width = size.0;
+            let height = size.1;
+            let settings = utils::settings_manager();
+            let state = settings.child("state");
+            state
+                .set_int("last-window-width", width)
+                .expect("Unable to store last-window-width");
+            state
+                .set_int("last-window-height", height)
+                .expect("Unable to stop last-window-height");
+
 	        // TODO: persist other settings at closing?
             window.unbind_state();
             glib::Propagation::Proceed

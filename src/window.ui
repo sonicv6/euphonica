@@ -26,7 +26,22 @@
 								<property name="child">
 									<object class="AdwToolbarView">
 										<child type="top">
-											<object class="AdwHeaderBar"></object>
+											<object class="AdwHeaderBar">
+												<property name="title-widget">
+													<object class="AdwWindowTitle" id="title">
+														<property name="title">Euphonia</property>
+													</object>
+												</property>
+
+												<child type="end">
+													<object class="GtkMenuButton">
+														<property name="primary">True</property>
+														<property name="icon-name">open-menu-symbolic</property>
+														<property name="tooltip-text" translatable="yes">Menu</property>
+														<property name="menu-model">primary_menu</property>
+													</object>
+												</child>
+											</object>
 										</child>
 										<property name="content">
 											<object class="EuphoniaSidebar" id="sidebar">
@@ -152,6 +167,7 @@
 			</object>
 		</property>
 	</template>
+
 	<menu id="primary_menu">
 		<section>
 			<item>

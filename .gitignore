@@ -2,3 +2,4 @@
 *.bkp
 target/
 build/
+src/config.rs

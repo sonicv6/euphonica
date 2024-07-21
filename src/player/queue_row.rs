@@ -194,14 +194,14 @@ impl QueueRow {
         // Set once first (like sync_create)
         let thumbnail = song.get_thumbnail();
         // println!("Thumbnail exists: {}", thumbnail.is_some());
-        thumbnail_image.set_from_paintable(thumbnail.as_ref());
+        thumbnail_image.set_paintable(thumbnail.as_ref());
         let thumbnail_binding = song
             .connect_notify_local(
                 Some("thumbnail"),
                 move |this_song, _| {
                     let thumbnail = this_song.get_thumbnail();
                     // println!("Thumbnail exists: {}", thumbnail.is_some());
-                    thumbnail_image.set_from_paintable(thumbnail.as_ref());
+                    thumbnail_image.set_paintable(thumbnail.as_ref());
                 },
             );
         self.imp().thumbnail_signal_id.replace(Some(thumbnail_binding));

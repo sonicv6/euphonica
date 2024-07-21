@@ -6,8 +6,26 @@ project('euphonia', 'rust',
 
 i18n = import('i18n')
 gnome = import('gnome')
+fs = import('fs')
 
+if get_option('profile') == 'development'
+  profile = '.Devel'
+  if fs.is_dir('.git')
+    vcs_tag = run_command('git', 'rev-parse', '--short', 'HEAD', check: true).stdout().strip()
+    if vcs_tag == ''
+      version_suffix = '-devel'
+    else
+      version_suffix = '-@0@'.format(vcs_tag)
+    endif
+  else
+    version_suffix = '-devel'
+  endif
+else
+  profile = ''
+  version_suffix = ''
+endif
 
+application_id = 'org.euphonia.Euphonia@0@'.format(profile)
 
 subdir('data')
 subdir('src')
