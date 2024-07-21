@@ -149,6 +149,7 @@ impl Player {
             State::Pause => PlaybackState::Paused,
             State::Stop => PlaybackState::Stopped
         };
+
         let old_state = self.imp().state.replace(new_state);
         if old_state != new_state {
             // These properties are affected by the "state" field.

@@ -11,7 +11,7 @@ futures = "0.3.30"
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
 image = "0.25.1"
 librsvg = "2.58.1"
-mpd = "0.1.0"
+mpd = { path = "./rust-mpd" }
 once_cell = "1.19.0"
 time = "0.3.36"
 stretto = { version = "0.8", features = ["sync"] }

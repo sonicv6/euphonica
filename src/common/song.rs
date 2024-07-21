@@ -82,6 +82,7 @@ impl SongInfo {
                 "Album" => {let _ = res.album.replace(val.clone());},
                 "AlbumArtist" => {let _ = res.album_artist.replace(val.clone());},
                 // "date" => res.imp().release_date.replace(Some(val.clone())),
+                // "Format" => {println!("{}", val.clone());},
                 _ => {}
             }
         }
