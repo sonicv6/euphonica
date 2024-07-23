@@ -33,7 +33,6 @@ use crate::{
     player::Player,
     client::{MpdWrapper, MpdMessage, AlbumArtCache},
     config::VERSION,
-    utils,
     preferences::Preferences,
     EuphoniaWindow
 };

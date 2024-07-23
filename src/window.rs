@@ -18,7 +18,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cell::{Cell, RefCell};
+use std::cell::{RefCell};
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
@@ -26,14 +26,13 @@ use gtk::{
     glib
 };
 use glib::{
-    clone,
     signal::SignalHandlerId
 };
 use crate::{
     utils,
-    client::{MpdMessage, ConnectionState},
+    client::{ConnectionState},
     application::EuphoniaApplication,
-    player::{QueueView, PlayerBar, PlaybackState},
+    player::{QueueView, PlayerBar},
     library::AlbumView,
     sidebar::Sidebar
 };

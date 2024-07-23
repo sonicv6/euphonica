@@ -9,7 +9,6 @@ use gtk::{
     gdk,
     glib,
     CompositeTemplate,
-    SingleSelection,
     SignalListItemFactory,
     ListItem,
 };
@@ -22,12 +21,10 @@ use glib::{
 
 use super::{
     Library,
-    AlbumCell,
     AlbumSongRow
 };
 use crate::{
-    common::{Album, Song},
-    client::albumart::AlbumArtCache
+    common::{Album, Song}
 };
 
 mod imp {

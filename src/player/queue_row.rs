@@ -1,6 +1,5 @@
 use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
+    cell::{RefCell},
     f64::consts::PI
 };
 use gtk::{
@@ -9,16 +8,11 @@ use gtk::{
     subclass::prelude::*,
     CompositeTemplate,
     Label,
-    Image,
-    Viewport,
-    EventControllerMotion,
-    TickCallbackId
+    Image
 };
 use glib::{
-    clone,
     Object,
     Binding,
-    ControlFlow,
     signal::SignalHandlerId
 };
 

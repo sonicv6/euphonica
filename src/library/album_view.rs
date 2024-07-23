@@ -1,11 +1,9 @@
 use std::{
-    rc::Rc,
-    cell::RefCell
+    rc::Rc
 };
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{
-    prelude::*,
     gio,
     glib,
     CompositeTemplate,

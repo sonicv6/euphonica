@@ -1,7 +1,4 @@
-use core::time::Duration;
-use time::Date;
 use std::cell::RefCell;
-use chrono::NaiveDate;
 use gtk::glib;
 use gtk::gdk::Texture;
 use gtk::prelude::*;

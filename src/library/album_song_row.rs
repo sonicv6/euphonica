@@ -1,19 +1,16 @@
 use std::{
-    cell::{Cell, RefCell},
-    rc::Rc
+    cell::{RefCell}
 };
 use gtk::{
     glib,
     prelude::*,
     subclass::prelude::*,
     CompositeTemplate,
-    Label,
-    Image
+    Label
 };
 use glib::{
     Object,
-    Binding,
-    signal::SignalHandlerId
+    Binding
 };
 
 use crate::common::Song;

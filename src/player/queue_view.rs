@@ -1,9 +1,7 @@
 use std::{
-    rc::Rc,
-    cell::RefCell
+    rc::Rc
 };
 
-use async_channel::Sender;
 
 use adw::subclass::prelude::*;
 use gtk::{
@@ -18,12 +16,10 @@ use gtk::{
 };
 use gdk::Texture;
 use glib::{
-    clone,
-    signal::SignalHandlerId
+    clone
 };
 
 use crate::{
-    client::MpdMessage,
     client::albumart::{AlbumArtCache, strip_filename_linux},
     common::Song
 };

@@ -1,6 +1,5 @@
 use core::time::Duration;
 use std::{
-    fmt::Display,
     path::{Path},
     cell::{Cell, RefCell},
     ffi::OsStr
