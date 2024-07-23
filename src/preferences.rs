@@ -4,17 +4,11 @@ use async_channel::Sender;
 use adw::subclass::prelude::*;
 use adw::prelude::*;
 use gtk::{
-    prelude::*,
-    gio,
     glib,
-    gdk,
     CompositeTemplate
 };
 
-use glib::{
-    clone,
-    signal::SignalHandlerId
-};
+use glib::clone;
 
 use crate::{
     client::{MpdMessage, ClientState, ConnectionState},

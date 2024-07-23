@@ -71,15 +71,21 @@ impl Sidebar {
         stack.set_visible_child_name("albums");
         self.imp().albums_btn.set_active(true);
         // Hook each button to their respective views
-        self.imp().albums_btn.connect_toggled(clone!(@weak self as this, @strong stack as s => move |btn| {
+        self.imp().albums_btn.connect_toggled(clone!(
+            #[weak]
+            stack,
+            move |btn| {
             if btn.is_active() {
-                s.set_visible_child_name("albums");
+                stack.set_visible_child_name("albums");
             }
         }));
 
-        self.imp().queue_btn.connect_toggled(clone!(@weak self as this, @strong stack as s => move |btn| {
+        self.imp().queue_btn.connect_toggled(clone!(
+            #[weak]
+            stack,
+            move |btn| {
             if btn.is_active() {
-                s.set_visible_child_name("queue");
+                stack.set_visible_child_name("queue");
             }
         }));
     }
