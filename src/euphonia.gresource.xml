@@ -31,5 +31,11 @@
 		<file preprocess="xml-stripblanks" alias="music-queue-symbolic.svg">gtk/icons/music-queue-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="user-trash-symbolic.svg">gtk/icons/user-trash-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="server-pick-symbolic.svg">gtk/icons/server-pick-symbolic.svg</file>
+
+		<file preprocess="xml-stripblanks" alias="format-base-symbolic.svg">gtk/icons/format-base-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="format-cd-symbolic.svg">gtk/icons/format-cd-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="format-hires-symbolic.svg">gtk/icons/format-hires-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="format-dsd-symbolic.svg">gtk/icons/format-dsd-symbolic.svg</file>
+
 	</gresource>
 </gresources>

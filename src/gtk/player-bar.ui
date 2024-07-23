@@ -11,7 +11,7 @@
 				</style>
 				<property name="hexpand">true</property>
 				<property name="start-widget">
-					<object class="GtkBox">
+					<object class="GtkBox" id="info_box">
 						<property name="valign">3</property>
 						<property name="spacing">12</property>
 						<!-- Current song info (hidden when in queue view to avoid duplicated info) -->
@@ -33,7 +33,7 @@
 
 						<child>
 							<!-- Textual info box -->
-							<object class="GtkBox" id="info_box">
+							<object class="GtkBox">
 								<property name="valign">center</property>
 								<property name="orientation">1</property>
 								<property name="spacing">6</property>
@@ -83,6 +83,25 @@
 													<class name="caption" />
 												</style>
 												<property name="label">Untitled Album</property>
+											</object>
+										</child>
+									</object>
+								</child>
+								<child>
+									<object class="GtkBox">
+										<property name="spacing">6</property>
+										<child>
+											<object class="GtkImage" id="quality_grade">
+												<property name="icon-name">format-base-symbolic</property>
+												<property name="icon-size">1</property>
+											</object>
+										</child>
+										<child>
+											<object class="GtkLabel" id="format_desc">
+												<property name="label">Unknown format</property>
+												<style>
+													<class name="caption" />
+												</style>
 											</object>
 										</child>
 									</object>
@@ -140,7 +159,7 @@
 
 						<child>
 							<!-- Bottom: seekbar -->
-							<object class="GtkCenterBox">
+							<object class="GtkCenterBox" id="seekbar_box">
 								<!-- TODO: elapsed/duration labels -->
 								<property name="start-widget">
 									<object class="GtkLabel" id="elapsed">
@@ -151,7 +170,7 @@
 										<property name="draw-value">false</property>
 										<property name="hexpand">true</property>
 										<property name="orientation">0</property>
-										<property name="width-request">130</property>
+										<property name="width-request">240</property>
 										<property name="adjustment">
 											<object class="GtkAdjustment">
 												<property name="lower">0</property>

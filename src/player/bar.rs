@@ -4,24 +4,21 @@ use std::{
 };
 use gtk::{
     glib,
-    gio,
+    gdk::Texture,
     prelude::*,
     subclass::prelude::*,
     CompositeTemplate,
 };
 use glib::{
-    Object,
-    Binding,
     clone,
-    signal::SignalHandlerId
 };
 use async_channel::Sender;
 
 use crate::{
     utils::format_secs_as_duration,
     client::MpdMessage,
-    common::Song,
-    player::Player
+    player::Player,
+    common::QualityGrade
 };
 
 use super::PlaybackState;
@@ -36,6 +33,8 @@ mod imp {
         #[template_child]
         pub info_box: TemplateChild<gtk::Box>,
         #[template_child]
+        pub seekbar_box: TemplateChild<gtk::CenterBox>,
+        #[template_child]
         pub albumart: TemplateChild<gtk::Image>,
         #[template_child]
         pub song_name: TemplateChild<gtk::Label>,
@@ -43,6 +42,10 @@ mod imp {
         pub artist: TemplateChild<gtk::Label>,
         #[template_child]
         pub album: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub quality_grade: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub format_desc: TemplateChild<gtk::Label>,
 
         // Centre: playback controls
         #[template_child]
@@ -135,6 +138,19 @@ impl PlayerBar {
             .sync_create()
             .build();
 
+        let seekbar_box = imp.seekbar_box.get();
+        player
+            .bind_property(
+                "playback-state",
+                &seekbar_box,
+                "visible"
+            )
+            .transform_to(|_, state: PlaybackState| {
+                Some(state != PlaybackState::Stopped)
+            })
+            .sync_create()
+            .build();
+
         let song_name = imp.song_name.get();
         player
             .bind_property(
@@ -160,6 +176,27 @@ impl PlayerBar {
             .bind_property(
                 "artist",
                 &artist,
+                "label"
+            )
+            .sync_create()
+            .build();
+
+        let quality_grade = imp.quality_grade.get();
+        player
+            .bind_property(
+                "quality-grade",
+                &quality_grade,
+                "icon-name"
+            )
+            .transform_to(|_, grade: QualityGrade| {Some(grade.to_icon_name())})
+            .sync_create()
+            .build();
+
+        let format_desc = imp.format_desc.get();
+        player
+            .bind_property(
+                "format-desc",
+                &format_desc,
                 "label"
             )
             .sync_create()
@@ -258,6 +295,20 @@ impl PlayerBar {
             .sync_create()
             .build();
 
+        self.update_album_art(player.album_art().as_ref());
+        player.connect_notify_local(
+            Some("album-art"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                #[weak]
+                player,
+                move |_, _| {
+                    this.update_album_art(player.album_art().as_ref());
+                }
+            )
+        );
+
         self.imp().prev_btn.connect_clicked(
             clone!(
                 #[strong]
@@ -285,6 +336,18 @@ impl PlayerBar {
                 }
             )
         );
+    }
+
+    fn update_album_art(&self, tex: Option<&Texture>) {
+        // Use high-resolution version here
+        if tex.is_some() {
+            self.imp().albumart.set_paintable(tex);
+        }
+        else {
+            self.imp().albumart.set_resource(
+                Some("/org/euphonia/Euphonia/albumart-placeholder.png")
+            );
+        }
     }
 
     fn setup_seekbar(&self, player: Rc<Player>,  sender: Sender<MpdMessage>) {

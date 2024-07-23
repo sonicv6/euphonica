@@ -3,14 +3,14 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     vec::Vec,
-    path::PathBuf
 };
 use async_channel::Sender;
-use mpd::status::{State, Status};
+use mpd::status::{State, Status, AudioFormat};
 use crate::{
-    common::Song,
+    common::{Song, QualityGrade},
     client::albumart::{AlbumArtCache, strip_filename_linux},
-    client::MpdMessage
+    client::MpdMessage,
+    utils::prettify_audio_format
 };
 use gtk::{
     glib,
@@ -48,6 +48,7 @@ mod imp {
         pub position: Cell<f64>,
         pub current_song: RefCell<Option<Song>>,
         pub queue: RefCell<gio::ListStore>,
+        pub format: RefCell<Option<AudioFormat>>,
         pub albumart: RefCell<Option<Rc<AlbumArtCache>>>,
         pub sender: RefCell<Option<Sender<MpdMessage>>>
     }
@@ -64,6 +65,7 @@ mod imp {
                 position: Cell::new(0.0),
                 current_song: RefCell::new(None),
                 queue,
+                format: RefCell::new(None),
                 albumart: RefCell::new(None),
                 sender: RefCell::new(None)
             }
@@ -82,6 +84,8 @@ mod imp {
                     ParamSpecObject::builder::<Texture>("album-art").read_only().build(), // Will use high-resolution version
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").read_only().build(),
+                    ParamSpecEnum::builder::<QualityGrade>("quality-grade").read_only().build(),
+                    ParamSpecString::builder("format-desc").read_only().build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
                     //     .read_only()
                     //     .build(),
@@ -102,6 +106,8 @@ mod imp {
                 "album-art" => obj.album_art().to_value(), // High-res version
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
+                "quality-grade" => obj.quality_grade().to_value(),
+                "format-desc" => obj.format_desc().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -155,6 +161,12 @@ impl Player {
             // These properties are affected by the "state" field.
             self.notify("playback-state");
         }
+
+        let old_format = self.imp().format.replace(status.audio);
+        if old_format != status.audio {
+            self.notify("format-desc");
+        }
+
         // If stopped, remove playing indicator
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if new_state == PlaybackState::Stopped {
@@ -197,12 +209,15 @@ impl Player {
                 for maybe_song in self.queue().iter::<Song>() {
                     let song = maybe_song.unwrap();
                     if song.get_queue_id() == new_queue_place.id.0 {
+                        println!("{:?}", song.get_quality_grade());
                         let _ = self.imp().current_song.replace(Some(song.clone()));
                         self.notify("title");
                         self.notify("artist");
                         self.notify("album");
                         self.notify("album-art");
                         self.notify("duration");
+                        self.notify("quality-grade");
+                        self.notify("format-desc");
                         break;
                     }
                 }
@@ -227,14 +242,15 @@ impl Player {
         }
     }
 
-    pub fn update_queue(&self, new_queue: &[mpd::song::Song]) {
+    pub fn update_queue(&self, new_queue: &mut Vec<mpd::song::Song>) {
         // TODO: use diffs instead of refreshing the whole queue
         let queue = self.imp().queue.borrow();
         queue.remove_all();
         // Convert to our internal Song GObjects
+        // We have to clone here since we can't dis
         let songs: Vec<Song> = new_queue
-                .iter()
-                .map(Song::from_mpd_song)
+                .iter_mut()
+                .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
                 .collect();
         // Ensure we have local copies of all the album arts.
         // This does not load them into memory yet. That only happens when QueueRow is displayed.
@@ -310,6 +326,20 @@ impl Player {
                 return albumart.get_for(folder_uri, false);
             }
             return None;
+        }
+        None
+    }
+
+    pub fn quality_grade(&self) -> QualityGrade {
+        if let Some(song) = &*self.imp().current_song.borrow() {
+            return song.get_quality_grade();
+        }
+        QualityGrade::Unknown
+    }
+
+    pub fn format_desc(&self) -> Option<String> {
+        if let Some(format) = &*self.imp().format.borrow() {
+            return Some(prettify_audio_format(format));
         }
         None
     }

@@ -252,13 +252,13 @@ impl MpdWrapper {
                                     // Will block child thread until info for all albums have been retrieved.
                                     if let Ok(tag_list) = client.list(&Term::Tag(Cow::Borrowed("album")), &Query::new()) {
                                         for tag in &tag_list {
-                                            if let Ok(songs) = client.find(
+                                            if let Ok(mut songs) = client.find(
                                                 Query::new()
                                                     .and(Term::Tag(Cow::Borrowed("album")), tag),
                                                 Window::from((0, 1))
                                             ) {
                                                 if !songs.is_empty() {
-                                                    let first_song = Song::from_mpd_song(&songs[0]);
+                                                    let first_song = Song::from(std::mem::take(&mut songs[0]));
                                                     let _ = sender_to_fg.send_blocking(MpdMessage::AlbumInfo(
                                                         AlbumInfo::new(
                                                             strip_filename_linux(&first_song.get_uri()),
@@ -538,8 +538,8 @@ impl MpdWrapper {
 
     pub fn get_current_queue(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(queue) = client.queue() {
-                self.player.update_queue(&queue);
+            if let Ok(mut queue) = client.queue() {
+                self.player.update_queue(&mut queue);
             }
         }
     }
@@ -549,7 +549,7 @@ impl MpdWrapper {
             let songs: Vec<Song> = client.find(
                 Query::new().and(Term::Tag(Cow::Borrowed("album")), info.title()),
                 Window::from((0, 4096))
-            ).unwrap().iter().map(Song::from_mpd_song).collect();
+            ).unwrap().iter_mut().map(|mpd_song| {Song::from(std::mem::take(mpd_song))}).collect();
 
             if !songs.is_empty() {
                 // Notify library to push new nav page

@@ -130,7 +130,6 @@ mod imp {
 
             // Start attempting to connect to the daemon once the window has been displayed.
             // This avoids delaying the presentation until the connection process concludes.
-            let client_info = utils::settings_manager().child("client");
             let _ = application.imp().sender.send_blocking(MpdMessage::Connect);
         }
     }

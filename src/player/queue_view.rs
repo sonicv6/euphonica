@@ -53,9 +53,7 @@ mod imp {
         #[template_child]
         pub current_album_name: TemplateChild<gtk::Label>,
         #[template_child]
-        pub clear_queue: TemplateChild<gtk::Button>,
-
-        pub signal_ids: RefCell<Vec<SignalHandlerId>>,
+        pub clear_queue: TemplateChild<gtk::Button>
     }
 
     #[glib::object_subclass]
@@ -197,28 +195,6 @@ impl QueueView {
         });
     }
 
-    fn update_info_visibility(&self, is_playing: bool) {
-        self.imp().song_info_box.set_visible(is_playing);
-    }
-
-    fn update_song_name(&self, song_name: Option<&String>) {
-        if let Some(name) = song_name {
-            self.imp().current_song_name.set_label(name);
-        }
-    }
-
-    fn update_artist_name(&self, artist_name: Option<&String>) {
-        if let Some(name) = artist_name {
-            self.imp().current_artist_name.set_label(name);
-        }
-    }
-
-    fn update_album_name(&self, album_name: Option<&String>) {
-        if let Some(name) = album_name {
-            self.imp().current_album_name.set_label(name);
-        }
-    }
-
     fn update_album_art(&self, tex: Option<&Texture>) {
         // Use high-resolution version here
         if tex.is_some() {
@@ -230,85 +206,61 @@ impl QueueView {
     }
 
     pub fn bind_state(&self, player: Rc<Player>) {
-        let mut ids = self.imp().signal_ids.borrow_mut();
-        // We'll first need to sync with the state initially; afterwards the binding will do it for us.
-        self.update_info_visibility(player.playback_state() != PlaybackState::Stopped);
-        ids.push(
-            player.connect_notify_local(
-                Some("playback-state"),
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    #[weak]
-                    player,
-                    move |_, _| {
-                        this.update_info_visibility(player.playback_state() != PlaybackState::Stopped);
-                    }
-                )
-            )  
-        );
-
-        self.update_song_name(player.title().as_ref());
-        ids.push(
-            player.connect_notify_local(
-                Some("title"),
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    #[weak]
-                    player,
-                    move |_, _| {
-                        this.update_song_name(player.title().as_ref());
-                    }
-                )
+        let imp = self.imp();
+        let info_box = imp.song_info_box.get();
+        player
+            .bind_property(
+                "playback-state",
+                &info_box,
+                "visible"
             )
-        );
+            .transform_to(|_, state: PlaybackState| {
+                Some(state != PlaybackState::Stopped)
+            })
+            .sync_create()
+            .build();
 
-        self.update_album_name(player.album().as_ref());
-        ids.push(
-            player.connect_notify_local(
-                Some("album"),
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    #[weak]
-                    player,
-                    move |_, _| {
-                        this.update_album_name(player.album().as_ref());
-                    }
-                )
+        let song_name = imp.current_song_name.get();
+        player
+            .bind_property(
+                "title",
+                &song_name,
+                "label"
             )
-        );
+            .sync_create()
+            .build();
 
-        self.update_artist_name(player.artist().as_ref());
-        ids.push(
-            player.connect_notify_local(
-                Some("artist"),
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    #[weak]
-                    player,
-                    move |_, _| {
-                        this.update_artist_name(player.artist().as_ref());
-                    }
-                )
+        let album = imp.current_album_name.get();
+        player
+            .bind_property(
+                "album",
+                &album,
+                "label"
             )
-        );
+            .sync_create()
+            .build();
+
+        let artist = imp.current_artist_name.get();
+        player
+            .bind_property(
+                "artist",
+                &artist,
+                "label"
+            )
+            .sync_create()
+            .build();
 
         self.update_album_art(player.album_art().as_ref());
-        ids.push(
-            player.connect_notify_local(
-                Some("album-art"),
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    #[weak]
-                    player,
-                    move |_, _| {
-                        this.update_album_art(player.album_art().as_ref());
-                    }
-                )
+        player.connect_notify_local(
+            Some("album-art"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                #[weak]
+                player,
+                move |_, _| {
+                    this.update_album_art(player.album_art().as_ref());
+                }
             )
         );
 

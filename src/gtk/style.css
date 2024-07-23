@@ -35,5 +35,6 @@
 }
 
 .player-bar {
+    border-top: 1px solid @borders;
     padding: 12pt;
 }

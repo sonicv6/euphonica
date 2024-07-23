@@ -1,14 +1,42 @@
 use core::time::Duration;
-use time::Date;
 use std::{
-    path::{Path, PathBuf},
-    cell::{Cell, RefCell}
+    fmt::Display,
+    path::{Path},
+    cell::{Cell, RefCell},
+    ffi::OsStr
 };
-use chrono::NaiveDate;
 use gtk::glib;
 use gtk::gdk::Texture;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
+use mpd::status::AudioFormat;
+
+// Mostly for eyecandy
+#[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
+#[enum_type(name = "EuphoniaQualityGrade")]
+pub enum QualityGrade {
+    #[default]
+    Unknown, // Catch-all
+    Lossy,  // Anything not meeting the below
+    CD,  // Lossless codec (FLAC, WavPack & Monkey's Audio for now) 44100-48000Hz 16bit.
+    // While 48000Hz isn't technically Red Book, the "quality" should
+    // be the same (unless resampled from 44100Hz CD).
+    HiRes, // Lossless codec above 48000Hz and at least 24 bit depth.
+    DSD // 150MB song files go brrr
+}
+
+impl QualityGrade {
+    pub fn to_icon_name(self) -> Option<&'static str> {
+        match self {
+            Self::Unknown => None,
+            Self::Lossy => None,
+            Self::CD => Some("format-cd-symbolic"),
+            Self::HiRes => Some("format-hires-symbolic"),
+            Self::DSD => Some("format-dsd-symbolic")
+        }
+    }
+}
+
 
 // fn parse_date(datestr: &str) -> Option<NaiveDate> {
 //     let mut comps = datestr.split("-");
@@ -52,41 +80,13 @@ pub struct SongInfo {
     // pub release_date: RefCell<Option<u64>>,
     // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
     is_playing: Cell<bool>,
-    thumbnail: Option<Texture>
+    thumbnail: Option<Texture>,
+    quality_grade: QualityGrade
 }
 
 impl SongInfo {
-    pub fn from_mpd_song(
-        song: &mpd::song::Song
-    ) -> Self {
-        let mut res = Self {
-            // TODO: Cow
-            uri: song.file.clone(),
-            title: song.title.clone(),
-            artist: song.artist.clone(),
-            album_artist: None,
-            duration: song.duration,
-            queue_id: None,
-            album: None,
-            is_playing: Cell::new(false),
-            thumbnail: None
-        };
-        if let Some(place) = song.place {
-            let _ = res.queue_id.replace(place.id.0);
-        }
-
-        // Search tags vector for additional fields we can use.
-        // Again we're using iter() here to avoid cloning everything.
-        for (tag, val) in song.tags.iter() {
-            match tag.as_str() {
-                "Album" => {let _ = res.album.replace(val.clone());},
-                "AlbumArtist" => {let _ = res.album_artist.replace(val.clone());},
-                // "date" => res.imp().release_date.replace(Some(val.clone())),
-                "Format" => {println!("{}", val.clone());},
-                _ => {}
-            }
-        }
-        res
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -101,7 +101,8 @@ impl Default for SongInfo {
             queue_id: None,
             album: None,
             is_playing: Cell::new(false),
-            thumbnail: None
+            thumbnail: None,
+            quality_grade: QualityGrade::Unknown
         }
     }
 }
@@ -149,6 +150,7 @@ mod imp {
                     ParamSpecUInt::builder("queue-id").build(),
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
                     ParamSpecString::builder("album").build(),
+                    ParamSpecString::builder("quality-grade").read_only().build(),
                     // ParamSpecString::builder("release_date").build(),
                     ParamSpecBoolean::builder("is-playing").build(),
                     ParamSpecObject::builder::<Texture>("thumbnail")
@@ -173,6 +175,7 @@ mod imp {
                 "album" => obj.get_album().to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
                 "is-playing" => obj.is_playing().to_value(),
+                "quality-grade" => obj.get_quality_grade().to_value(),
                 "thumbnail" => obj.get_thumbnail().to_value(),
                 _ => unimplemented!(),
             }
@@ -218,16 +221,9 @@ glib::wrapper! {
 }
 
 impl Song {
-    // TODO: Might want a new() constructor too
-    pub fn from_mpd_song(song: &mpd::song::Song) -> Self {
-        // We don't want to clone the whole mpd Song object since there might
-        // be fields that we won't ever use.
-        let info = SongInfo::from_mpd_song(song);
-        let res = glib::Object::new::<Self>();
-        res.imp().info.replace(info);
-        res
+    pub fn new() -> Self {
+        Self::default()
     }
-
     pub fn get_uri(&self) -> String {
         self.imp().info.borrow().uri.clone()
     }
@@ -300,10 +296,84 @@ impl Song {
             self.notify("is-playing");
         }
     }
+
+    pub fn get_quality_grade(&self) -> QualityGrade {
+        self.imp().info.borrow().quality_grade
+    }
 }
 
 impl Default for Song {
     fn default() -> Self {
         glib::Object::new()
+    }
+}
+
+impl From<mpd::song::Song> for SongInfo {
+    fn from(song: mpd::song::Song) -> Self {
+        let mut res = Self {
+            uri: song.file,
+            title: song.title,
+            artist: song.artist,
+            album_artist: None,
+            duration: song.duration,
+            queue_id: None,
+            album: None,
+            is_playing: Cell::new(false),
+            thumbnail: None,
+            quality_grade: QualityGrade::Unknown
+        };
+        if let Some(place) = song.place {
+            let _ = res.queue_id.replace(place.id.0);
+        }
+
+        // Search tags vector for additional fields we can use.
+        // Again we're using iter() here to avoid cloning everything.
+        // Limitation: MPD cannot parse DSD song format UNTIL PLAYED.
+        // As such, DSD format description must be handled by the player controller,
+        // working off the "format" attribute of the Status object.
+        // The bits == 1 check only works with htkhiem's fork of rust-mpd with DSD correction
+        let maybe_extension = Path::new(&res.uri).extension().and_then(OsStr::to_str);
+        if let Some(extension) = maybe_extension {
+            if ["dsf", "dff", "wsd"].contains(&extension) {
+                // Is probably DSD
+                res.quality_grade = QualityGrade::DSD;
+            }
+        }
+        for (tag, val) in song.tags.into_iter() {
+            match tag.as_str() {
+                "Album" => {let _ = res.album.replace(val);},
+                "AlbumArtist" => {let _ = res.album_artist.replace(val);},
+                // "date" => res.imp().release_date.replace(Some(val.clone())),
+                "Format" => {
+                    if let Some(extension) = maybe_extension {
+                        if let Ok(format) = val.parse::<AudioFormat>() {
+                            if ["flac", "alac", "wv", "ape"].contains(&extension) {
+                                // Is probably lossless PCM
+                                if format.rate > 48000 && format.bits >= 24 {
+                                    res.quality_grade = QualityGrade::HiRes;
+                                }
+                                else {
+                                    res.quality_grade = QualityGrade::CD;
+                                }
+                            }
+                            else {
+                                res.quality_grade = QualityGrade::Lossy;
+                            }
+                        }
+                    }
+                },
+                _ => {}
+            }
+        }
+        res
+    }
+}
+
+impl From<mpd::song::Song> for Song {
+    fn from(song: mpd::song::Song) -> Self {
+        let info = SongInfo::from(song);
+        let res = glib::Object::new::<Self>();
+        res.imp().info.replace(info);
+        res
     }
 }

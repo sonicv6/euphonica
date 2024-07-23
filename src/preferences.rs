@@ -86,7 +86,7 @@ impl Preferences {
         // As such we won't bind the widgets directly to the settings.
         let conn_settings = settings.child("client");
         imp.mpd_host.set_text(&conn_settings.string("mpd-host"));
-        imp.mpd_port.set_text(&conn_settings.uint("mpd-port").to_string());
+        imp.mpd_port.set_text(&conn_settings.int("mpd-port").to_string());
 
         // TODO: more input validation
         // Prevent entering anything other than digits into the port entry row
