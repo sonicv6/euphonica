@@ -163,8 +163,8 @@ enum BackgroundTask {
 #[derive(Debug)]
 pub struct MpdWrapper {
     // References to controllers
-    player: Rc<Player>,
-    library: Rc<Library>,
+    player: Player,
+    library: Library,
     // For receiving user commands from UI or child thread
     receiver: RefCell<Option<Receiver<MpdMessage>>>,
     // Corresponding sender, for cloning into child thread.
@@ -183,8 +183,8 @@ pub struct MpdWrapper {
 
 impl MpdWrapper {
     pub fn new(
-        player: Rc<Player>,
-        library: Rc<Library>,
+        player: Player,
+        library: Library,
         sender: Sender<MpdMessage>,
         receiver: RefCell<Option<Receiver<MpdMessage>>>,
         albumart: Rc<AlbumArtCache>
@@ -226,7 +226,7 @@ impl MpdWrapper {
                     if !bg_receiver.is_empty() {
                         // TODO: Take one task for each loop
                         if let Ok(task) = bg_receiver.recv_blocking() {
-                            println!("Got task: {:?}", task);
+                            // println!("Got task: {:?}", task);
                             match task {
                                 BackgroundTask::DownloadAlbumArt(uri, cache_path, thumb_cache_path) => {
                                     // Check if already cached. This usually happens when

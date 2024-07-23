@@ -1,7 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc
-};
+use std::cell::{Cell, RefCell};
 use gtk::{
     glib,
     gdk::Texture,
@@ -118,12 +115,12 @@ impl PlayerBar {
         Self::default()
     }
 
-    pub fn setup(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
+    pub fn setup(&self, player: Player, sender: Sender<MpdMessage>) {
         self.bind_state(player.clone(), sender.clone());
         self.setup_seekbar(player, sender);
     }
 
-    fn bind_state(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
+    fn bind_state(&self, player: Player, sender: Sender<MpdMessage>) {
         let imp = self.imp();
         let info_box = imp.info_box.get();
         player
@@ -236,7 +233,7 @@ impl PlayerBar {
                 sender,
                 move |player, _| {
                     if player.playback_state() == PlaybackState::Playing {
-                        this.maybe_start_polling(Rc::new(player.clone()), sender.clone());
+                        this.maybe_start_polling(player.clone(), sender.clone());
                     }
                 }
             )
@@ -350,7 +347,7 @@ impl PlayerBar {
         }
     }
 
-    fn setup_seekbar(&self, player: Rc<Player>,  sender: Sender<MpdMessage>) {
+    fn setup_seekbar(&self, player: Player,  sender: Sender<MpdMessage>) {
         // Capture mouse button release action for seekbar
         // Funny story: gtk::Scale has its own GestureClick controller which will eat up mouse button events.
         // Workaround: capture mouse button release event at window level in capture phase, using a bool
@@ -399,7 +396,7 @@ impl PlayerBar {
         self.add_controller(seekbar_gesture);
     }
 
-    fn maybe_start_polling(&self, player: Rc<Player>, sender: Sender<MpdMessage>) {
+    fn maybe_start_polling(&self, player: Player, sender: Sender<MpdMessage>) {
         // Periodically poll for player progress to update seekbar
         // Won't start a new loop if there is already one
         let poller_handle = glib::MainContext::default().spawn_local(async move {

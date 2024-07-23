@@ -44,8 +44,8 @@ mod imp {
 
     #[derive(Debug)]
     pub struct EuphoniaApplication {
-        pub player: Rc<Player>,
-        pub library: Rc<Library>,
+        pub player: Player,
+        pub library: Library,
         pub albumart: Rc<AlbumArtCache>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
@@ -73,9 +73,10 @@ mod imp {
                 receiver
             ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::unbounded();
 
-            // Create controllers (Rc pointers)
-            let player = Rc::new(Player::default());
-            let library = Rc::new(Library::default());
+            // Create controllers
+            // These two are GObjects (already refcounted by GLib)
+            let player = Player::default();
+            let library = Library::default();
             let albumart = Rc::new(AlbumArtCache::new(&cache_path));
             player.setup(sender.clone(), albumart.clone());
             library.setup(sender.clone(), albumart.clone());
@@ -151,11 +152,11 @@ impl EuphoniaApplication {
             .build()
     }
 
-    pub fn get_player(&self) -> Rc<Player> {
+    pub fn get_player(&self) -> Player {
         self.imp().player.clone()
     }
 
-    pub fn get_library(&self) -> Rc<Library> {
+    pub fn get_library(&self) -> Library {
         self.imp().library.clone()
     }
 

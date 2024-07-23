@@ -242,7 +242,7 @@ impl Player {
         }
     }
 
-    pub fn update_queue(&self, new_queue: &mut Vec<mpd::song::Song>) {
+    pub fn update_queue(&self, new_queue: &mut [mpd::song::Song]) {
         // TODO: use diffs instead of refreshing the whole queue
         let queue = self.imp().queue.borrow();
         queue.remove_all();

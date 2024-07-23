@@ -103,7 +103,7 @@ impl QueueView {
         Self::default()
     }
 
-    pub fn setup_listview(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {
+    pub fn setup_listview(&self, player: Player, albumart: Rc<AlbumArtCache>) {
         // Enable/disable clear queue button depending on whether the queue is empty or not
         // Set selection mode
         // TODO: Allow click to jump to song
@@ -201,7 +201,7 @@ impl QueueView {
         }
     }
 
-    pub fn bind_state(&self, player: Rc<Player>) {
+    pub fn bind_state(&self, player: Player) {
         let imp = self.imp();
         let info_box = imp.song_info_box.get();
         player
@@ -277,7 +277,7 @@ impl QueueView {
         }));
     }
 
-    pub fn setup(&self, player: Rc<Player>, albumart: Rc<AlbumArtCache>) {
+    pub fn setup(&self, player: Player, albumart: Rc<AlbumArtCache>) {
         self.setup_listview(player.clone(), albumart);
         self.bind_state(player);
     }

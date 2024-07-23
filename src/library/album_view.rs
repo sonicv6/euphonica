@@ -93,7 +93,7 @@ impl AlbumView {
         Self::default()
     }
 
-    pub fn setup(&self, library: Rc<Library>, albumart: Rc<AlbumArtCache>) {
+    pub fn setup(&self, library: Library, albumart: Rc<AlbumArtCache>) {
         self.setup_gridview(library.clone(), albumart);
         let content_view = self.imp().content_view.get();
         content_view.setup(library.clone());
@@ -104,7 +104,7 @@ impl AlbumView {
         self.bind_state(library);
     }
 
-    pub fn bind_state(&self, library: Rc<Library>) {
+    pub fn bind_state(&self, library: Library) {
         // Here we will listen to the album-clicked signal of Library.
         // Upon receiving that signal, create a new AlbumContentView page and push it onto the stack.
         // The view (AlbumView):
@@ -144,7 +144,7 @@ impl AlbumView {
         );
     }
 
-    pub fn setup_gridview(&self, library: Rc<Library>, albumart: Rc<AlbumArtCache>) {
+    pub fn setup_gridview(&self, library: Library, albumart: Rc<AlbumArtCache>) {
         // Set selection mode
         // TODO: Click to enter album
         let sel_model = SingleSelection::new(Some(library.albums()));

@@ -1,7 +1,4 @@
-use std::{
-    rc::Rc,
-    cell::RefCell
-};
+use std::cell::RefCell;
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
@@ -96,7 +93,7 @@ impl Default for AlbumContentView {
 }
 
 impl AlbumContentView {
-    pub fn setup(&self, library: Rc<Library>) {
+    pub fn setup(&self, library: Library) {
         let replace_queue_btn = self.imp().replace_queue.get();
         replace_queue_btn.connect_clicked(
             clone!(

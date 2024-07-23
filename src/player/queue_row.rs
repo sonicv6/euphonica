@@ -18,9 +18,9 @@ use glib::{
 
 use crate::common::Song;
 
-fn ease_in_out_sine(progress: f64) -> f64 {
-    (1.0 - (progress * PI).cos()) / 2.0
-}
+// fn ease_in_out_sine(progress: f64) -> f64 {
+//     (1.0 - (progress * PI).cos()) / 2.0
+// }
 
 mod imp {
     use super::*;
