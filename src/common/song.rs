@@ -182,7 +182,6 @@ mod imp {
 
         fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
             let obj = self.obj();
-            println!("Song: setting property {}", pspec.name());
             match pspec.name() {
                 "name" => {
                     // Always set to title tag

@@ -162,7 +162,11 @@ impl AlbumView {
                 .set_child(Some(&album_cell));
         });
         // Tell factory how to bind `AlbumCell` to one of our Album GObjects
-        factory.connect_bind(clone!(@weak albumart as cache => move |_, list_item| {
+        factory.connect_bind(
+            clone!(
+                #[weak]
+                albumart,
+                move |_, list_item| {
             // Get `Song` from `ListItem` (that is, the data side)
             let item: Album = list_item
                 .downcast_ref::<ListItem>()

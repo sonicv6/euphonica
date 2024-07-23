@@ -98,12 +98,20 @@ impl Default for AlbumContentView {
 impl AlbumContentView {
     pub fn setup(&self, library: Rc<Library>) {
         let replace_queue_btn = self.imp().replace_queue.get();
-        replace_queue_btn.connect_clicked(clone!(@strong self as this, @weak library as lib => move |_| {
-            if let Some(album) = this.imp().album.borrow().as_ref() {
-                println!("Replace queue button clicked");
-                lib.queue_album(album.clone(), true);
-            }
-        }));
+        replace_queue_btn.connect_clicked(
+            clone!(
+                #[strong(rename_to = this)]
+                self,
+                #[weak]
+                library,
+                move |_| {
+                    if let Some(album) = this.imp().album.borrow().as_ref() {
+                        println!("Replace queue button clicked");
+                        library.queue_album(album.clone(), true);
+                    }
+                }
+            )
+        );
 
         // Set up factory
         let factory = SignalListItemFactory::new();
@@ -188,11 +196,17 @@ impl AlbumContentView {
 
         self.update_cover(album.get_cover().as_ref());
         self.imp().cover_signal_id.replace(Some(
-           album.connect_notify_local(
+            album.connect_notify_local(
                 Some("cover"),
-                clone!(@weak self as this, @weak album as a => move |_, _| {
-                    this.update_cover(a.get_cover().as_ref());
-                })
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    album,
+                    move |_, _| {
+                        this.update_cover(album.get_cover().as_ref());
+                    }
+                )
             )
         ));
 
