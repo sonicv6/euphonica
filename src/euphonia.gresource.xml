@@ -14,6 +14,7 @@
 		<file preprocess="xml-stripblanks">gtk/sidebar.ui</file>
 		<file preprocess="xml-stripblanks">gtk/player-bar.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences.ui</file>
+		<file preprocess="xml-stripblanks">gtk/volume-knob.ui</file>
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
@@ -31,11 +32,10 @@
 		<file preprocess="xml-stripblanks" alias="music-queue-symbolic.svg">gtk/icons/music-queue-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="user-trash-symbolic.svg">gtk/icons/user-trash-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="server-pick-symbolic.svg">gtk/icons/server-pick-symbolic.svg</file>
-
 		<file preprocess="xml-stripblanks" alias="format-base-symbolic.svg">gtk/icons/format-base-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-cd-symbolic.svg">gtk/icons/format-cd-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-hires-symbolic.svg">gtk/icons/format-hires-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-dsd-symbolic.svg">gtk/icons/format-dsd-symbolic.svg</file>
-
+		<file preprocess="xml-stripblanks" alias="knob-ticks-symbolic.svg">gtk/icons/knob-ticks-symbolic.svg</file>
 	</gresource>
 </gresources>

@@ -18,7 +18,7 @@ use crate::{
     common::QualityGrade
 };
 
-use super::PlaybackState;
+use super::{PlaybackState, VolumeKnob};
 
 mod imp {
     use super::*;
@@ -61,6 +61,8 @@ mod imp {
         pub duration: TemplateChild<gtk::Label>,
 
         // TODO: Right side: output info
+        #[template_child]
+        pub vol_knob: TemplateChild<VolumeKnob>,
 
         // Handle to seekbar polling task
         pub seekbar_poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
@@ -116,6 +118,7 @@ impl PlayerBar {
     }
 
     pub fn setup(&self, player: Player, sender: Sender<MpdMessage>) {
+        self.imp().vol_knob.setup();
         self.bind_state(player.clone(), sender.clone());
         self.setup_seekbar(player, sender);
     }

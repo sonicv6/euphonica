@@ -188,6 +188,14 @@
 						</child>
 					</object>
 				</property>
+
+				<property name="end-widget">
+					<object class="GtkBox">
+						<child>
+							<object class="EuphoniaVolumeKnob" id="vol_knob"/>
+						</child>
+					</object>
+				</property>
 			</object>
 		</child>
 	</template>
