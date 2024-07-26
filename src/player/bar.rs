@@ -320,10 +320,10 @@ impl PlayerBar {
         );
         self.imp().play_pause_btn.connect_clicked(
             clone!(
-                #[strong]
-                sender,
+                #[weak]
+                player,
                 move |_| {
-                    let _ = sender.send_blocking(MpdMessage::Toggle);
+                    player.toggle_playback()
                 }
             )
         );

@@ -98,8 +98,9 @@ impl<'a> Into<Term<'a>> for QueryTerm {
 pub enum MpdMessage {
     Connect, // Host and port are always read from gsettings
 	Play,
+    Pause,
+    PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
-	Toggle, // The "pause" command but renamed since it's a misnomer
     Clear, // Clear queue
     Prev,
     Next,
@@ -352,10 +353,13 @@ impl MpdWrapper {
         match request {
             MpdMessage::Connect => self.connect().await,
             MpdMessage::Status => self.get_status(),
-            MpdMessage::Toggle => self.set_playback(),
-            MpdMessage::Prev => self.set_prev(),
-            MpdMessage::Next => self.set_next(),
-            MpdMessage::PlayId(id) => self.play_id(id),
+            MpdMessage::Play => self.pause(false),
+            MpdMessage::PlayId(id) => self.play_at(id, true),
+            MpdMessage::PlayPos(pos) => self.play_at(pos, false),
+            MpdMessage::Pause => self.pause(true),
+            MpdMessage::Prev => self.prev(),
+            MpdMessage::Next => self.next(),
+
             MpdMessage::Clear => self.clear_queue(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
@@ -475,17 +479,17 @@ impl MpdWrapper {
             // TODO: handle error
         }
     }
-    pub fn set_playback(self: Rc<Self>) {
+    pub fn pause(self: Rc<Self>, is_pause: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
-            let _ = client.toggle_pause();
+            let _ = client.pause(is_pause);
             // TODO: handle error
         }
         else {
             // TODO: handle error
         }
     }
-    pub fn set_prev(self: Rc<Self>) {
+    pub fn prev(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
             let _ = client.prev();
@@ -496,7 +500,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn set_next(self: Rc<Self>) {
+    pub fn next(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
             let _ = client.next();
@@ -507,14 +511,15 @@ impl MpdWrapper {
         }
     }
 
-    pub fn play_id(self: Rc<Self>, id: u32) {
+    pub fn play_at(self: Rc<Self>, id_or_pos: u32, is_id: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
-            client.switch(Id(id)).expect("Could not switch song");
-            // TODO: handle error
-        }
-        else {
-            // TODO: handle error
+            if is_id {
+                client.switch(Id(id_or_pos)).expect("Could not switch song");
+            }
+            else {
+                client.switch(id_or_pos).expect("Could not switch song");
+            }
         }
     }
 

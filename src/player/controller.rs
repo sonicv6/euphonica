@@ -130,6 +130,19 @@ impl Player {
         self.imp().albumart.replace(Some(albumart));
         self.imp().sender.replace(Some(sender));
     }
+
+    // Utility functions
+    fn send(&self, msg: MpdMessage) -> Result<(), &str> {
+        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+            let res = sender.send_blocking(msg);
+            if res.is_err() {
+                return Err("Sender error");
+            }
+            return Ok(());
+        }
+        Err("Could not borrow sender")
+    }
+
     // Update functions
     // These all have side-effects of notifying listeners of changes to the
     // GObject properties, which in turn are read from this struct's fields.
@@ -247,7 +260,6 @@ impl Player {
         let queue = self.imp().queue.borrow();
         queue.remove_all();
         // Convert to our internal Song GObjects
-        // We have to clone here since we can't dis
         let songs: Vec<Song> = new_queue
                 .iter_mut()
                 .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
@@ -371,15 +383,47 @@ impl Player {
         self.imp().queue.borrow().clone()
     }
 
+    pub fn toggle_playback(&self) {
+        // If state is stopped, there won't be a "current song".
+        // To start playing, instead of using the "pause" command to toggle,
+        // we need to explicitly tell MPD to start playing the first song in
+        // the queue.
+
+        match self.playback_state() {
+            PlaybackState::Stopped => {
+                // Check if queue is not empty
+                if self.queue().n_items() > 0 {
+                    // Start playing first song in queue.
+                    if let Err(msg) = self.send(MpdMessage::PlayPos(0)) {
+                        println!("{}", msg);
+                    }
+                }
+                else {
+                    println!("Queue is empty; nothing to play");
+                }
+            },
+            PlaybackState::Playing => {
+                if let Err(msg) = self.send(MpdMessage::Pause) {
+                    println!("{}", msg);
+                }
+            },
+            PlaybackState::Paused => {
+                if let Err(msg) = self.send(MpdMessage::Play) {
+                    println!("{}", msg);
+                }
+            }
+        }
+    }
+
     pub fn clear_queue(&self) {
-        if let Some(sender) = self.imp().sender.borrow().as_ref() {
-            let _ = sender.send_blocking(MpdMessage::Clear);
+        if let Err(msg) = self.send(MpdMessage::Clear) {
+            println!("{}", msg);
         }
     }
 
     pub fn on_song_clicked(&self, song: Song) {
-        if let Some(sender) = self.imp().sender.borrow().as_ref() {
-            let _ = sender.send_blocking(MpdMessage::PlayId(song.get_queue_id()));
+        if let Err(msg) = self.send(MpdMessage::PlayId(song.get_queue_id())) {
+            println!("{}", msg);
         }
     }
 }
