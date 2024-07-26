@@ -3,11 +3,12 @@ use std::{
     rc::Rc,
     vec::Vec,
     sync::OnceLock,
+    borrow::Cow
 };
 use async_channel::Sender;
 use crate::{
     common::{Album, AlbumInfo, Song},
-    client::{MpdMessage, QueryTerm, AlbumArtCache}
+    client::{MpdMessage, AlbumArtCache}
 };
 use gtk::{
     glib,
@@ -17,6 +18,8 @@ use gtk::{
 use glib::subclass::Signal;
 
 use adw::subclass::prelude::*;
+
+use mpd::{Query, Term};
 
 mod imp {
     use glib::{
@@ -176,11 +179,9 @@ impl Library {
             if replace {
                 let _ = sender.send_blocking(MpdMessage::Clear);
             }
-            let _ = sender.send_blocking(MpdMessage::FindAdd(
-                vec!(
-                    (QueryTerm::Album, album.get_title())
-                )
-            ));
+            let mut query = Query::new();
+            query.and(Term::Tag(Cow::Borrowed("album")), album.get_title());
+            let _ = sender.send_blocking(MpdMessage::FindAdd(query));
             // if replace {
             //     let _ = sender.send_blocking(MpdMessage::Clear);
             // }

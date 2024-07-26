@@ -3,8 +3,7 @@ use std::{
     io::Cursor,
     cell::RefCell,
     rc::Rc,
-    path::PathBuf,
-    convert::Into
+    path::PathBuf
 };
 use gtk::gio::prelude::*;
 use futures::executor;
@@ -66,35 +65,8 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
     None
 }
 
-// A non-Cow alternative to mpd::search::Term, for sending into async
-// loops or across thread boundaries.
-#[derive(Clone, Debug, Copy)]
-pub enum QueryTerm {
-    Any,
-    File,
-    Base,
-    LastMod,
-    // Defined directly here for convenience
-    Album,
-    Artist
-}
-
-impl<'a> Into<Term<'a>> for QueryTerm {
-    fn into(self) -> Term<'a> {
-        match self {
-            QueryTerm::Any => Term::Any,
-            QueryTerm::File => Term::File,
-            QueryTerm::Base => Term::Base,
-            QueryTerm::LastMod => Term::LastMod,
-            QueryTerm::Album => Term::Tag(Cow::Borrowed("Album")),
-            QueryTerm::Artist => Term::Tag(Cow::Borrowed("Artist"))
-        }
-    }
-}
-
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
-#[derive(Debug)]
 pub enum MpdMessage {
     Connect, // Host and port are always read from gsettings
 	Play,
@@ -107,7 +79,7 @@ pub enum MpdMessage {
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
 	AlbumArt(String),
-    FindAdd(Vec<(QueryTerm, String)>),
+    FindAdd(Query<'static>),
 	Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
     Album(AlbumInfo), // Get list of songs in album with given tag name
@@ -563,14 +535,14 @@ impl MpdWrapper {
         }
     }
 
-    pub fn find_add(&self, terms: Vec<(QueryTerm, String)>) {
+    pub fn find_add(&self, query: Query) {
         // Convert back to mpd::search::Query
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // println!("Running findadd query: {:?}", &terms);
-            let mut query = Query::new();
-            for term in terms.into_iter() {
-                query.and(term.0.into(), term.1);
-            }
+            // let mut query = Query::new();
+            // for term in terms.into_iter() {
+            //     query.and(term.0.into(), term.1);
+            // }
             client.findadd(&query).expect("Failed to run query!");
         }
     }
