@@ -113,17 +113,17 @@
       <attribute name="label" translatable="yes">Sort by</attribute>
       <item>
         <attribute name="label" translatable="yes">_Album title</attribute>
-        <attribute name="action">albumview.sort-mode</attribute>
-        <attribute name="target">alphabetical-title</attribute>
+        <attribute name="action">albumview.sort-by</attribute>
+        <attribute name="target">album-title</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">_AlbumArtist</attribute>
-        <attribute name="action">albumview.sort-mode</attribute>
-        <attribute name="target">alphabetical-artist</attribute>
+        <attribute name="action">albumview.sort-by</attribute>
+        <attribute name="target">album-artist</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">_Release date</attribute>
-        <attribute name="action">albumview.sort-mode</attribute>
+        <attribute name="action">albumview.sort-by</attribute>
         <attribute name="target">release-date</attribute>
       </item>
     </section>
@@ -132,12 +132,12 @@
       <item>
         <attribute name="label" translatable="yes">_Ascending</attribute>
         <attribute name="action">albumview.sort-direction</attribute>
-        <attribute name="target">ascending</attribute>
+        <attribute name="target">asc</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">_Descending</attribute>
         <attribute name="action">albumview.sort-direction</attribute>
-        <attribute name="target">descending</attribute>
+        <attribute name="target">desc</attribute>
       </item>
     </section>
   </menu>

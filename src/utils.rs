@@ -1,4 +1,5 @@
 use gtk::gio;
+use gtk::Ordering;
 use crate::config::APPLICATION_ID;
 use mpd::status::AudioFormat;
 
@@ -16,20 +17,20 @@ pub fn format_secs_as_duration(seconds: f64) -> String {
     let seconds = total_seconds % 60;
 
     if days > 0 {
-        return format!(
+        format!(
             "{} days {:02}:{:02}:{:02}",
             days, hours, minutes, seconds
-        );
+        )
     } else if hours > 0 {
-        return format!(
+        format!(
             "{:02}:{:02}:{:02}",
             hours, minutes, seconds
-        );
+        )
     } else {
-        return format!(
+        format!(
             "{:02}:{:02}",
             minutes, seconds
-        );
+        )
     }
 }
 
@@ -52,5 +53,67 @@ pub fn prettify_audio_format(format: &AudioFormat) -> String {
         format.bits,
         (format.rate as f64) / 1e3,
         format.chans
+    )
+}
+
+pub fn g_cmp_options<T: Ord>(s1: Option<&T>, s2: Option<&T>, nulls_first: bool, asc: bool) -> Ordering {
+    if s1.is_none() && s2.is_none() {
+        return Ordering::Equal;
+    }
+    else if s1.is_none() {
+        if nulls_first {
+            return Ordering::Larger;
+        }
+        return Ordering::Smaller;
+    }
+    else if s2.is_none() {
+        if nulls_first {
+            return Ordering::Smaller;
+        }
+        return Ordering::Larger;
+    }
+    if asc {
+        return Ordering::from(s1.unwrap().cmp(s2.unwrap()));
+    }
+    Ordering::from(s2.unwrap().cmp(s1.unwrap()))
+}
+
+pub fn g_cmp_str_options(
+    s1: Option<&str>, s2: Option<&str>,
+    nulls_first: bool, asc: bool,
+    case_sensitive: bool
+) -> Ordering {
+    if s1.is_none() && s2.is_none() {
+        return Ordering::Equal;
+    }
+    else if s1.is_none() {
+        if nulls_first {
+            return Ordering::Larger;
+        }
+        return Ordering::Smaller;
+    }
+    else if s2.is_none() {
+        if nulls_first {
+            return Ordering::Smaller;
+        }
+        return Ordering::Larger;
+    }
+    if asc {
+        if case_sensitive {
+            return Ordering::from(s1.unwrap().cmp(s2.unwrap()));
+        }
+        return Ordering::from(
+            s1.unwrap().to_lowercase().cmp(
+                &s2.unwrap().to_lowercase()
+            )
+        );
+    }
+    if case_sensitive {
+        return Ordering::from(s2.unwrap().cmp(s1.unwrap()));
+    }
+    Ordering::from(
+        s2.unwrap().to_lowercase().cmp(
+            &s1.unwrap().to_lowercase()
+        )
     )
 }

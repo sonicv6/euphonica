@@ -1,8 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="euphonia">
+	<enum id="org.euphonia.Euphonia.sortby">
+		<value nick="song-title" value="1"/>
+		<value nick="artist" value="2"/>
+		<value nick="album-title" value="3"/>
+		<value nick="album-artist" value="4"/>
+		<value nick="release-date" value="5"/>
+	</enum>
+
+	<enum id="org.euphonia.Euphonia.sortdir">
+		<value nick="asc" value="1"/>
+		<value nick="desc" value="0"/>  <!-- Works as boolean too -->
+	</enum>
 
 	<schema id="org.euphonia.Euphonia" path="/org/euphonia/Euphonia/">
 		<child schema="org.euphonia.Euphonia.state" name="state"/>
+		<child schema="org.euphonia.Euphonia.library" name="library"/>
 		<child schema="org.euphonia.Euphonia.client" name="client"/>
 	</schema>
 
@@ -27,6 +40,18 @@
 		</key>
 	</schema>
 
+	<schema id="org.euphonia.Euphonia.library" path="/org/euphonia/Euphonia/library/">
+		<key name="sort-nulls-first" type="b">
+			<default>false</default>
+		</key>
+		<key name="search-case-sensitive" type="b">
+			<default>false</default>
+		</key>
+		<key name="sort-case-sensitive" type="b">
+			<default>false</default>
+		</key>
+	</schema>
+
 	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">
 		<child schema="org.euphonia.Euphonia.state.albumview" name="albumview"/>
 
@@ -41,22 +66,13 @@
 
 	<schema id="org.euphonia.Euphonia.state.albumview" path="/org/euphonia/Euphonia/state/albumview/">
 		<!-- Album view state -->
-		<key name="sort-mode" type="s">
-			<choices>
-				<choice value='alphabetical-title'/>
-				<choice value='alphabetical-artist'/>
-				<choice value='release-date'/>
-			</choices>
-			<default>'alphabetical-title'</default>
-			<summary>Album view sort criterion</summary>
+		<key name='sort-by' enum='org.euphonia.Euphonia.sortby'>
+			<default>'album-title'</default>
+			<summary>Album View sort criterion</summary>
 		</key>
 
-		<key name="sort-direction" type="s">
-			<choices>
-				<choice value='ascending'/>
-				<choice value='descending'/>
-			</choices>
-			<default>'ascending'</default>
+		<key name="sort-direction" enum='org.euphonia.Euphonia.sortdir'>
+			<default>'asc'</default>
 			<summary>Album View sort direction</summary>
 		</key>
 	</schema>

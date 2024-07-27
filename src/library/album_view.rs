@@ -27,7 +27,7 @@ use super::{
 use crate::{
     common::Album,
     client::albumart::AlbumArtCache,
-    utils::settings_manager
+    utils::{settings_manager, g_cmp_str_options}
 };
 
 mod imp {
@@ -63,6 +63,7 @@ mod imp {
 
         // Search & filter models
         pub search_filter: gtk::CustomFilter,
+        pub sorter: gtk::CustomSorter,
         // Keep last length to optimise search
         // If search term is now longer, only further filter still-matching
         // items.
@@ -125,12 +126,27 @@ impl AlbumView {
     }
 
     pub fn setup(&self, library: Library, albumart: Rc<AlbumArtCache>) {
+        self.setup_sort();
+        self.setup_search();
+        self.setup_gridview(library.clone(), albumart);
+        let content_view = self.imp().content_view.get();
+        content_view.setup(library.clone());
+        self.imp().content_page.connect_hidden(move |_| {
+            content_view.unbind();
+            content_view.clear_content();
+        });
+        self.bind_state(library);
+    }
+
+    fn setup_sort(&self) {
+        // TODO: use albumsort & albumartistsort tags where available
         // Setup sort widget & actions
         let settings = settings_manager();
         let state = settings.child("state").child("albumview");
+        let library_settings = settings.child("library");
         let actions = gio::SimpleActionGroup::new();
         actions.add_action(
-            &state.create_action("sort-mode")
+            &state.create_action("sort-by")
         );
         actions.add_action(
             &state.create_action("sort-direction")
@@ -144,19 +160,17 @@ impl AlbumView {
                 "icon-name"
             )
             .get_only()
-            .mapping(|val, _| {
-                match val.get::<String>().unwrap().as_ref() {
-                    "ascending" => Some("view-sort-ascending-symbolic".to_value()),
-                    "descending" => Some("view-sort-descending-symbolic".to_value()),
-                    _ => unreachable!()
+            .mapping(|dir, _| {
+                match dir.get::<String>().unwrap().as_ref() {
+                    "asc" => Some("view-sort-ascending-symbolic".to_value()),
+                    _ => Some("view-sort-descending-symbolic".to_value())
                 }
             })
             .build();
-
         let sort_mode = self.imp().sort_mode.get();
         state
             .bind(
-                "sort-mode",
+                "sort-by",
                 &sort_mode,
                 "label",
             )
@@ -164,14 +178,95 @@ impl AlbumView {
             .mapping(|val, _| {
                 // TODO: i18n
                 match val.get::<String>().unwrap().as_ref() {
-                    "alphabetical-title" => Some("Album title".to_value()),
-                    "alphabetical-artist" => Some("AlbumArtist".to_value()),
+                    "album-title" => Some("Album title".to_value()),
+                    "album-artist" => Some("AlbumArtist".to_value()),
                     "release-date" => Some("Release date".to_value()),
                     _ => unreachable!()
                 }
             })
             .build();
+        self.imp().sorter.set_sort_func(
+            clone!(
+                #[strong]
+                library_settings,
+                #[strong]
+                state,
+                move |obj1, obj2| {
+                    let album1 = obj1
+                        .downcast_ref::<Album>()
+                        .expect("Sort obj has to be a common::Album.");
 
+                    let album2 = obj2
+                        .downcast_ref::<Album>()
+                        .expect("Sort obj has to be a common::Album.");
+
+                    // Should we sort ascending?
+                    let asc = state.enum_("sort-direction") > 0;
+                    // Should the sorting be case-sensitive, i.e. uppercase goes first?
+                    let case_sensitive = library_settings.boolean("sort-case-sensitive");
+                    // Should nulls be put first or last?
+                    let nulls_first = library_settings.boolean("sort-nulls-first");
+
+                    // Vary behaviour depending on sort menu
+                    match state.enum_("sort-by") {
+                        // Refer to the org.euphonia.Euphonia.sortby enum the gschema
+                        3 => {
+                            // Album title
+                            g_cmp_str_options(
+                                Some(album1.get_title()).as_deref(),
+                                Some(album2.get_title()).as_deref(),
+                                nulls_first,
+                                asc,
+                                case_sensitive
+                            )
+                        }
+                        4 => {
+                            // AlbumArtist
+                            g_cmp_str_options(
+                                album1.get_artist().as_deref(),
+                                album2.get_artist().as_deref(),
+                                nulls_first,
+                                asc,
+                                case_sensitive
+                            )
+                        }
+                        5 => {
+                            // Release date
+                            unimplemented!()
+                        }
+                        _ => unreachable!()
+                    }
+                }
+            )
+        );
+
+        // Update when changing sort settings
+        state.connect_changed(
+            Some("sort-by"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, _| {
+                    println!("Updating sort...");
+                    this.imp().sorter.changed(gtk::SorterChange::Different);
+                }
+            )
+        );
+        state.connect_changed(
+            Some("sort-direction"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, _| {
+                    println!("Flipping sort...");
+                    // Don't actually sort, just flip the results :)
+                    this.imp().sorter.changed(gtk::SorterChange::Inverted);
+                }
+            )
+        );
+    }
+
+    fn setup_search(&self) {
         // Set up search filter
         self.imp().search_filter.set_filter_func(
             clone!(
@@ -223,14 +318,45 @@ impl AlbumView {
             )
         );
 
-        self.setup_gridview(library.clone(), albumart);
-        let content_view = self.imp().content_view.get();
-        content_view.setup(library.clone());
-        self.imp().content_page.connect_hidden(move |_| {
-            content_view.unbind();
-            content_view.clear_content();
-        });
-        self.bind_state(library);
+        // TODO: Maybe let user choose case-sensitivity too (too verbose?)
+        // Connect search entry to filter. Filter will later be put in GtkSearchModel.
+        // That GtkSearchModel will listen to the filter's changed signal.
+        let search_entry = self.imp().search_entry.get();
+        search_entry.connect_search_changed(
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |entry| {
+                    let text = entry.text();
+                    let new_len = text.len();
+                    let old_len = this.imp().last_search_len.replace(new_len);
+                    match new_len.cmp(&old_len) {
+                        Ordering::Greater => {
+                            this.imp().search_filter.changed(gtk::FilterChange::MoreStrict);
+                        }
+                        Ordering::Less => {
+                            this.imp().search_filter.changed(gtk::FilterChange::LessStrict);
+                        }
+                        Ordering::Equal => {
+                            this.imp().search_filter.changed(gtk::FilterChange::Different);
+                        }
+                    }
+                }
+            )
+        );
+
+        let search_mode = self.imp().search_mode.get();
+        search_mode.connect_notify_local(
+            Some("selected"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, _| {
+                    println!("Changed search mode");
+                    this.imp().search_filter.changed(gtk::FilterChange::Different);
+                }
+            )
+        );
     }
 
     pub fn bind_state(&self, library: Library) {
@@ -289,36 +415,12 @@ impl AlbumView {
             .sync_create()
             .build();
 
-        // Wrap in search model
-        // TODO: Maybe let user choose case-sensitivity too (too verbose?)
-        // Connect search entry to model
-        search_entry.connect_search_changed(
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |entry| {
-                    let text = entry.text();
-                    let new_len = text.len();
-                    let old_len = this.imp().last_search_len.replace(new_len);
-                    match new_len.cmp(&old_len) {
-                        Ordering::Greater => {
-                            this.imp().search_filter.changed(gtk::FilterChange::MoreStrict);
-                        }
-                        Ordering::Less => {
-                            this.imp().search_filter.changed(gtk::FilterChange::LessStrict);
-                        }
-                        Ordering::Equal => {
-                            this.imp().search_filter.changed(gtk::FilterChange::Different);
-                        }
-                    }
-                }
-            )
-        );
+        // Chain search & sort. Put sort after search to reduce number of sort items.
         let search_model = gtk::FilterListModel::new(Some(library.albums()), Some(self.imp().search_filter.clone()));
         search_model.set_incremental(true);
-        // TODO: Sort after search
-        // Set selection mode
-        let sel_model = SingleSelection::new(Some(search_model));
+        let sort_model = gtk::SortListModel::new(Some(search_model), Some(self.imp().sorter.clone()));
+        sort_model.set_incremental(true);
+        let sel_model = SingleSelection::new(Some(sort_model));
 
         self.imp().grid_view.set_model(Some(&sel_model));
 
