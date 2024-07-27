@@ -6,7 +6,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use crate::utils::strip_filename_linux;
-use super::Song;
+use super::{Song, QualityGrade};
 
 // This is a model class for queue view displays.
 // It does not contain any actual song in terms of data.
@@ -19,7 +19,8 @@ pub struct AlbumInfo {
     uri: String,
     artist: Option<String>,  // use AlbumArtist tag
     cover: Option<Texture>,
-    release_date: Option<Date>
+    release_date: Option<Date>,
+    quality_grade: QualityGrade
 }
 
 impl AlbumInfo {
@@ -29,7 +30,8 @@ impl AlbumInfo {
             artist: artist.map(str::to_string),
             title: title.to_owned(),
             cover: None,
-            release_date: None
+            release_date: None,
+            quality_grade: QualityGrade::Unknown
         }
     }
 
@@ -59,7 +61,8 @@ impl Default for AlbumInfo {
             uri: "".to_owned(),
             artist: None,
             cover: None,
-            release_date: None
+            release_date: None,
+            quality_grade: QualityGrade::Unknown
         }
     }
 }
@@ -101,6 +104,7 @@ mod imp {
                     ParamSpecString::builder("title").build(),
                     ParamSpecString::builder("artist").build(),
                     ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").build(),
+                    ParamSpecString::builder("quality-grade").read_only().build(),
                     ParamSpecObject::builder::<Texture>("cover")
                         .read_only()
                         .build(),
@@ -116,6 +120,7 @@ mod imp {
                 "title" => obj.get_title().to_value(),
                 "artist" => obj.get_artist().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
+                "quality-grade" => obj.get_quality_grade().to_value(),
                 "cover" => obj.get_cover().to_value(),
                 _ => unimplemented!(),
             }
@@ -177,6 +182,10 @@ impl Album {
         self.imp().info.borrow().release_date
     }
 
+    pub fn get_quality_grade(&self) -> QualityGrade {
+        self.imp().info.borrow().quality_grade
+    }
+
     pub fn set_cover(&self, maybe_tex: Option<Texture>) {
         if let Some(tex) = maybe_tex {
             self.imp().info.borrow_mut().cover.replace(tex);
@@ -201,7 +210,8 @@ impl From<Song> for AlbumInfo {
             uri: strip_filename_linux(&song.get_uri()).to_owned(),
             artist: song.get_album_artist(),
             cover: None,
-            release_date: song.get_release_date()
+            release_date: song.get_release_date(),
+            quality_grade: song.get_quality_grade()
         }
     }
 }

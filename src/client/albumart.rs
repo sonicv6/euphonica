@@ -10,6 +10,7 @@
 // the cache (slow & cumbersome).
 // For simplicity cached album arts will be in PNG format regardless or their original ones.
 extern crate fasthash;
+use once_cell::sync::Lazy;
 use std::{
     path::PathBuf,
     fs::create_dir_all,
@@ -18,7 +19,11 @@ use std::{
 use gtk::gdk::Texture;
 use stretto::Cache;
 use fasthash::murmur2;
-use crate::utils::strip_filename_linux;
+
+pub static ALBUMART_PLACEHOLDER: Lazy<Texture> = Lazy::new(|| {
+    println!("Loading placeholder texture...");
+    Texture::from_resource("/org/euphonia/Euphonia/albumart-placeholder.png")
+});
 
 pub struct AlbumArtCache {
     // Path to where the downloaded copies are stored

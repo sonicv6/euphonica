@@ -27,6 +27,12 @@ mod imp {
         pub mpd_port: TemplateChild<adw::EntryRow>,
         #[template_child]
         pub reconnect: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub sort_nulls_first: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub sort_case_sensitive: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub search_case_sensitive: TemplateChild<adw::SwitchRow>,
 
         // pub signal_ids: RefCell<Vec<SignalHandlerId>>,
     }
@@ -80,7 +86,7 @@ impl Preferences {
         // As such we won't bind the widgets directly to the settings.
         let conn_settings = settings.child("client");
         imp.mpd_host.set_text(&conn_settings.string("mpd-host"));
-        imp.mpd_port.set_text(&conn_settings.int("mpd-port").to_string());
+        imp.mpd_port.set_text(&conn_settings.uint("mpd-port").to_string());
 
         // TODO: more input validation
         // Prevent entering anything other than digits into the port entry row
@@ -159,6 +165,32 @@ impl Preferences {
             }
         ));
 
+        // Set up library settings
+        let library_settings = settings.child("library");
+        let sort_nulls_first = imp.sort_nulls_first.get();
+        library_settings
+            .bind(
+                "sort-nulls-first",
+                &sort_nulls_first,
+                "active"
+            )
+            .build();
+        let sort_case_sensitive = imp.sort_case_sensitive.get();
+        library_settings
+            .bind(
+                "sort-case-sensitive",
+                &sort_case_sensitive,
+                "active"
+            )
+            .build();
+        let search_case_sensitive = imp.search_case_sensitive.get();
+        library_settings
+            .bind(
+                "search-case-sensitive",
+                &search_case_sensitive,
+                "active"
+            )
+            .build();
         res
     }
 }

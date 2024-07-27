@@ -62,15 +62,15 @@ pub fn g_cmp_options<T: Ord>(s1: Option<&T>, s2: Option<&T>, nulls_first: bool, 
     }
     else if s1.is_none() {
         if nulls_first {
-            return Ordering::Larger;
-        }
-        return Ordering::Smaller;
-    }
-    else if s2.is_none() {
-        if nulls_first {
             return Ordering::Smaller;
         }
         return Ordering::Larger;
+    }
+    else if s2.is_none() {
+        if nulls_first {
+            return Ordering::Larger;
+        }
+        return Ordering::Smaller;
     }
     if asc {
         return Ordering::from(s1.unwrap().cmp(s2.unwrap()));
@@ -88,15 +88,15 @@ pub fn g_cmp_str_options(
     }
     else if s1.is_none() {
         if nulls_first {
-            return Ordering::Larger;
-        }
-        return Ordering::Smaller;
-    }
-    else if s2.is_none() {
-        if nulls_first {
             return Ordering::Smaller;
         }
         return Ordering::Larger;
+    }
+    else if s2.is_none() {
+        if nulls_first {
+            return Ordering::Larger;
+        }
+        return Ordering::Smaller;
     }
     if asc {
         if case_sensitive {
@@ -118,10 +118,29 @@ pub fn g_cmp_str_options(
     )
 }
 
+pub fn g_search_substr(
+    text: Option<&str>, term: &str,
+    case_sensitive: bool
+) -> bool {
+    if text.is_none() && term.is_empty() {
+        return true;
+    }
+    else if text.is_some() && !term.is_empty() {
+        if case_sensitive {
+            return text.unwrap().contains(term);
+        }
+        return text.unwrap().to_lowercase().contains(
+            &term.to_lowercase()
+        );
+    }
+    false
+}
+
+
 pub fn strip_filename_linux(path: &str) -> &str {
     // MPD insists on having a trailing slash so here we go
     if let Some(last_slash) = path.rfind('/') {
         return &path[..last_slash + 1];
     }
-    &path[..]
+    path
 }

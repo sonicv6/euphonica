@@ -1,21 +1,34 @@
-use std::{
-    cell::RefCell,
-};
+use std::cell::RefCell;
 use gtk::{
     glib,
+    gdk,
     prelude::*,
     subclass::prelude::*,
     CompositeTemplate,
     Label,
     Image
 };
+use gdk::Texture;
 use glib::{
     Object,
     Binding,
     signal::SignalHandlerId
 };
 
-use crate::common::Album;
+use crate::{
+    common::{
+        Album,
+        QualityGrade
+    },
+    client::ALBUMART_PLACEHOLDER
+};
+
+fn maybe_get_cover(album: &Album) -> Option<Texture> {
+    if let Some(cover) = album.get_cover() {
+        return Some(cover);
+    }
+    Some(ALBUMART_PLACEHOLDER.clone())
+}
 
 mod imp {
     use super::*;
@@ -24,9 +37,13 @@ mod imp {
     #[template(resource = "/org/euphonia/Euphonia/gtk/album-cell.ui")]
     pub struct AlbumCell {
         #[template_child]
-        pub cover: TemplateChild<Image>,  // Use high-resolution version
+        pub cover: TemplateChild<gtk::Picture>,  // Use high-resolution version
         #[template_child]
         pub title: TemplateChild<Label>,
+        #[template_child]
+        pub artist: TemplateChild<Label>,
+        #[template_child]
+        pub quality_grade: TemplateChild<Image>,
         // Vector holding the bindings to properties of the Album GObject
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
@@ -80,34 +97,60 @@ impl AlbumCell {
         // Get state
         let cover_image = self.imp().cover.get();
         let title_label = self.imp().title.get();
+        let artist_label = self.imp().artist.get();
+        let quality_grade = self.imp().quality_grade.get();
         let mut bindings = self.imp().bindings.borrow_mut();
 
         // Set once first (like sync_create)
-        let cover = album.get_cover();
-
-        if cover.is_some() {
-            // Don't set to None as that will still override the placeholder resource.
-            cover_image.set_paintable(cover.as_ref());
-        }
+        cover_image.set_paintable(maybe_get_cover(album).as_ref());
         let cover_binding = album
             .connect_notify_local(
                 Some("cover"),
                 move |this_album, _| {
-                    let cover = this_album.get_cover();
-                    if cover.is_some() {
-                        // Don't set to None as that will still override the placeholder resource.
-                        cover_image.set_paintable(cover.as_ref());
-                    }
+                    cover_image.set_paintable(maybe_get_cover(this_album).as_ref());
                 },
             );
         self.imp().cover_signal_id.replace(Some(cover_binding));
 
         let title_binding = album
             .bind_property("title", &title_label, "label")
+            .transform_to(|_, val: Option<String>| {
+                if val.is_some() {
+                    return val;
+                }
+                Some("(untagged)".to_string())
+            })
             .sync_create()
             .build();
         // Save binding
         bindings.push(title_binding);
+
+        let artist_binding = album
+            .bind_property("artist", &artist_label, "label")
+            .transform_to(|_, val: Option<String>| {
+                if val.is_some() {
+                    return val;
+                }
+                Some("Unknown Artist".to_string())
+            })
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(artist_binding);
+
+        let quality_grade_binding = album
+            .bind_property(
+                "quality-grade",
+                &quality_grade,
+                "icon-name"
+            )
+            .transform_to(|_, grade: QualityGrade| {
+                Some(grade.to_icon_name())}
+            )
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(quality_grade_binding);
     }
 
     pub fn unbind(&self, album: &Album) {

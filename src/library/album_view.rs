@@ -27,7 +27,7 @@ use super::{
 use crate::{
     common::Album,
     client::albumart::AlbumArtCache,
-    utils::{settings_manager, g_cmp_str_options, g_cmp_options}
+    utils::{settings_manager, g_cmp_str_options, g_cmp_options, g_search_substr}
 };
 
 mod imp {
@@ -179,7 +179,7 @@ impl AlbumView {
             .mapping(|val, _| {
                 // TODO: i18n
                 match val.get::<String>().unwrap().as_ref() {
-                    "album-title" => Some("Album title".to_value()),
+                    "album-title" => Some("Title".to_value()),
                     "album-artist" => Some("AlbumArtist".to_value()),
                     "release-date" => Some("Release date".to_value()),
                     _ => unreachable!()
@@ -273,52 +273,61 @@ impl AlbumView {
     }
 
     fn setup_search(&self) {
+        let settings = settings_manager();
+        let library_settings = settings.child("library");
         // Set up search filter
         self.imp().search_filter.set_filter_func(
             clone!(
                 #[weak(rename_to = this)]
                 self,
+                #[strong]
+                library_settings,
                 #[upgrade_or]
-                false,
+                true,
                 move |obj| {
                     let album = obj
                         .downcast_ref::<Album>()
                         .expect("Search obj has to be a common::Album.");
 
-                    let search_term = this.imp().search_entry.text().to_lowercase();
+                    let search_term = this.imp().search_entry.text();
                     if search_term.is_empty() {
                         return true;
                     }
 
+                    // Should the searching be case-sensitive?
+                    let case_sensitive = library_settings.boolean("search-case-sensitive");
                     // Vary behaviour depending on dropdown
                     match this.imp().search_mode.selected() {
                         // Keep these indices in sync with the GtkStringList in the UI file
                         0 => {
                             // Match either album title or AlbumArtist (not artist tag)
-                            if album.get_title().to_lowercase().contains(&search_term) {
-                                return true;
-                            }
-                            if let Some(artist) = album.get_artist() {
-                                return artist
-                                    .to_lowercase()
-                                    .contains(&search_term);
-                            }
-                            false
+                            g_search_substr(
+                                Some(album.get_title()).as_deref(),
+                                &search_term,
+                                case_sensitive
+                            ) || g_search_substr(
+                                album.get_artist().as_deref(),
+                                &search_term,
+                                case_sensitive
+                            )
                         }
                         1 => {
                             // Match only album title
-                            album.get_title().to_lowercase().contains(&search_term)
+                            g_search_substr(
+                                Some(album.get_title()).as_deref(),
+                                &search_term,
+                                case_sensitive
+                            )
                         }
                         2 => {
                             // Match only AlbumArtist (albums without such tag will never match)
-                            if let Some(artist) = album.get_artist() {
-                                return artist
-                                    .to_lowercase()
-                                    .contains(&search_term);
-                            }
-                            false
+                            g_search_substr(
+                                album.get_artist().as_deref(),
+                                &search_term,
+                                case_sensitive
+                            )
                         }
-                        _ => unreachable!()
+                        _ => true
                     }
                 }
             )

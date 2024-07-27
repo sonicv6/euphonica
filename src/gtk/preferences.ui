@@ -38,5 +38,33 @@
 				</child>
 			</object>
 		</child>
+		<child>
+			<object class="AdwPreferencesPage" id="library_page">
+				<property name="title" translatable="true">Library</property>
+				<property name="icon-name">library-music-symbolic</property>
+				<child>
+					<object class="AdwPreferencesGroup">
+						<property name="title" translatable="true">Searching and Sorting</property>
+						<child>
+							<object class="AdwSwitchRow" id="sort_nulls_first">
+								<property name="title" translatable="true">Sort nulls first</property>
+								<property name="subtitle" translatable="true">Where to place untagged entries when sorting by that tag. For example, sorting albums by AlbumArtist with this setting on will place albums without AlbumArtist specified at the beginning of the list.</property>
+							</object>
+						</child>
+						<child>
+							<object class="AdwSwitchRow" id="sort_case_sensitive">
+								<property name="title" translatable="true">Case-sensitive sorting</property>
+								<property name="subtitle" translatable="true">When enabled, uppercase letters will be sorted before lowercase ones. This only affects bicameral scripts, i.e., names in Chinese or Japanese are not affected.</property>
+							</object>
+						</child>
+						<child>
+							<object class="AdwSwitchRow" id="search_case_sensitive">
+								<property name="title" translatable="true">Case-sensitive searching</property>
+							</object>
+						</child>
+					</object>
+				</child>
+			</object>
+		</child>
 	</template>
 </interface>
