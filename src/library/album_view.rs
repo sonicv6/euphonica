@@ -25,7 +25,9 @@ use super::{
     AlbumContentView
 };
 use crate::{
-    common::Album, client::albumart::AlbumArtCache
+    common::Album,
+    client::albumart::AlbumArtCache,
+    utils::settings_manager
 };
 
 mod imp {
@@ -38,6 +40,10 @@ mod imp {
         pub nav_view: TemplateChild<adw::NavigationView>,
 
         // Search & filter widgets
+        #[template_child]
+        pub sort_dir: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub sort_mode: TemplateChild<gtk::Label>,
         #[template_child]
         pub search_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
@@ -62,7 +68,7 @@ mod imp {
         // items.
         // If search term is now shorter, only check non-matching items to see
         // if they now match.
-        pub last_search_len: Cell<usize>
+        pub last_search_len: Cell<usize>,
     }
 
     #[glib::object_subclass]
@@ -119,7 +125,54 @@ impl AlbumView {
     }
 
     pub fn setup(&self, library: Library, albumart: Rc<AlbumArtCache>) {
-        println!("Setting up search filter");
+        // Setup sort widget & actions
+        let settings = settings_manager();
+        let state = settings.child("state").child("albumview");
+        let actions = gio::SimpleActionGroup::new();
+        actions.add_action(
+            &state.create_action("sort-mode")
+        );
+        actions.add_action(
+            &state.create_action("sort-direction")
+        );
+        self.insert_action_group("albumview", Some(&actions));
+        let sort_dir = self.imp().sort_dir.get();
+        state
+            .bind(
+                "sort-direction",
+                &sort_dir,
+                "icon-name"
+            )
+            .get_only()
+            .mapping(|val, _| {
+                match val.get::<String>().unwrap().as_ref() {
+                    "ascending" => Some("view-sort-ascending-symbolic".to_value()),
+                    "descending" => Some("view-sort-descending-symbolic".to_value()),
+                    _ => unreachable!()
+                }
+            })
+            .build();
+
+        let sort_mode = self.imp().sort_mode.get();
+        state
+            .bind(
+                "sort-mode",
+                &sort_mode,
+                "label",
+            )
+            .get_only()
+            .mapping(|val, _| {
+                // TODO: i18n
+                match val.get::<String>().unwrap().as_ref() {
+                    "alphabetical-title" => Some("Album title".to_value()),
+                    "alphabetical-artist" => Some("AlbumArtist".to_value()),
+                    "release-date" => Some("Release date".to_value()),
+                    _ => unreachable!()
+                }
+            })
+            .build();
+
+        // Set up search filter
         self.imp().search_filter.set_filter_func(
             clone!(
                 #[weak(rename_to = this)]
@@ -164,7 +217,7 @@ impl AlbumView {
                             }
                             false
                         }
-                        _ => unimplemented!()
+                        _ => unreachable!()
                     }
                 }
             )
@@ -237,20 +290,7 @@ impl AlbumView {
             .build();
 
         // Wrap in search model
-        // TODO: Also allow searching by artist name and other criteria.
-        // TODO: Add an checkbox list popup widget to the left of SearchEntry to choose search mode
         // TODO: Maybe let user choose case-sensitivity too (too verbose?)
-        // (album, artist, etc)
-        // let album_name_expression = gtk::PropertyExpression
-        //     ::new(
-        //         Album::static_type(),
-        //         Option::<gtk::PropertyExpression>::None,
-        //         "title"
-        //     );
-
-        // let string_filter = gtk::StringFilter::builder()
-        //     .expression(album_name_expression)
-        //     .build();
         // Connect search entry to model
         search_entry.connect_search_changed(
             clone!(

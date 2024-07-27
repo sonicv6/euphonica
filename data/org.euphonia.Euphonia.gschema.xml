@@ -25,10 +25,11 @@
 			</description>
 			<default>15</default>
 		</key>
-
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">
+		<child schema="org.euphonia.Euphonia.state.albumview" name="albumview"/>
+
 		<!-- Remember last window size -->
 		<key name="last-window-width" type="i">
 			<default>600</default>
@@ -36,6 +37,27 @@
 		<key name="last-window-height" type="i">
 			<default>400</default>
 		</key>
+	</schema>
 
+	<schema id="org.euphonia.Euphonia.state.albumview" path="/org/euphonia/Euphonia/state/albumview/">
+		<!-- Album view state -->
+		<key name="sort-mode" type="s">
+			<choices>
+				<choice value='alphabetical-title'/>
+				<choice value='alphabetical-artist'/>
+				<choice value='release-date'/>
+			</choices>
+			<default>'alphabetical-title'</default>
+			<summary>Album view sort criterion</summary>
+		</key>
+
+		<key name="sort-direction" type="s">
+			<choices>
+				<choice value='ascending'/>
+				<choice value='descending'/>
+			</choices>
+			<default>'ascending'</default>
+			<summary>Album View sort direction</summary>
+		</key>
 	</schema>
 </schemalist>

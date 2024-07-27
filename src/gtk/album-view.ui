@@ -16,8 +16,32 @@
                         <property name="icon-name">edit-find-symbolic</property>
                       </object>
                     </child>
-					        </object>
-				        </child>
+                    <child type="end">
+                      <object class="GtkMenuButton">
+                        <style>
+                          <class name="flat"/>
+                        </style>
+                        <property name="primary">True</property>
+                        <property name="child">
+                          <object class="GtkBox">
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkImage" id="sort_dir">
+                                <property name="icon-name">view-sort-ascending-symbolic</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="sort_mode">
+                                <property name="label">Error</property>
+                              </object>
+                            </child>
+                          </object>
+                        </property>
+                        <property name="menu-model">sort_menu</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
                 <child type="top">
                   <object class="GtkSearchBar" id="search_bar">
                     <property name="key-capture-widget">nav_view</property>
@@ -81,6 +105,40 @@
           </object>
         </child>
       </object>
-		</child>
-	</template>
+    </child>
+  </template>
+
+  <menu id="sort_menu">
+    <section>
+      <attribute name="label" translatable="yes">Sort by</attribute>
+      <item>
+        <attribute name="label" translatable="yes">_Album title</attribute>
+        <attribute name="action">albumview.sort-mode</attribute>
+        <attribute name="target">alphabetical-title</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_AlbumArtist</attribute>
+        <attribute name="action">albumview.sort-mode</attribute>
+        <attribute name="target">alphabetical-artist</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Release date</attribute>
+        <attribute name="action">albumview.sort-mode</attribute>
+        <attribute name="target">release-date</attribute>
+      </item>
+    </section>
+    <section>
+      <attribute name="label" translatable="yes">Sort direction</attribute>
+      <item>
+        <attribute name="label" translatable="yes">_Ascending</attribute>
+        <attribute name="action">albumview.sort-direction</attribute>
+        <attribute name="target">ascending</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Descending</attribute>
+        <attribute name="action">albumview.sort-direction</attribute>
+        <attribute name="target">descending</attribute>
+      </item>
+    </section>
+  </menu>
 </interface>
