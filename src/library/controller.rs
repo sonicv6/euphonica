@@ -128,7 +128,7 @@ impl Library {
     }
 
     pub fn add_album_info(&self, info: AlbumInfo) {
-        let album = Album::from_info(info);
+        let album = Album::from(info);
         let folder_uri = album.get_uri();
         if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
             if let Some(sender) = self.imp().sender.borrow().as_ref() {
@@ -149,7 +149,7 @@ impl Library {
             "album-clicked",
             &[
                 // Need to wrap info in an Album GObject again to pass along signal
-                &Album::from_info(info),
+                &Album::from(info),
                 &song_list
             ]
         );

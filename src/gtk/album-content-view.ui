@@ -60,6 +60,11 @@
                                                 <property name="label">Unknown Artist</property>
                                             </object>
                                         </child>
+                                        <child>
+                                            <object class="GtkLabel" id="release_date">
+                                                <property name="label">Unknown Release Date</property>
+                                            </object>
+                                        </child>
                                     </object>
                                 </child>
                             </object>

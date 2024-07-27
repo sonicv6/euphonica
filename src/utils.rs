@@ -117,3 +117,11 @@ pub fn g_cmp_str_options(
         )
     )
 }
+
+pub fn strip_filename_linux(path: &str) -> &str {
+    // MPD insists on having a trailing slash so here we go
+    if let Some(last_slash) = path.rfind('/') {
+        return &path[..last_slash + 1];
+    }
+    &path[..]
+}

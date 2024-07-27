@@ -1,31 +1,12 @@
 use std::cell::RefCell;
+use time::Date;
 use gtk::glib;
 use gtk::gdk::Texture;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-// fn parse_date(datestr: &str) -> Option<NaiveDate> {
-//     let mut comps = datestr.split("-");
-//     if let Some(year_str) = comps.next() {
-//         if let Ok(year) = year_str.parse::<i32>() {
-//             if let Some(month_str) = comps.next() {
-//                 if let Ok(month) = month_str.parse::<u32>() {
-//                     if let Some(day_str) = comps.next() {
-//                         if let Ok(day) = day_str.parse::<u32>() {
-//                             return NaiveDate::from_ymd_opt(year, month, day);
-//                         }
-//                         return NaiveDate::from_ymd_opt(year, month, 1);
-//                     }
-//                     return NaiveDate::from_ymd_opt(year, month, 1);
-//                 }
-//                 return NaiveDate::from_ymd_opt(year, 1, 1);
-//             }
-//             return NaiveDate::from_ymd_opt(year, 1, 1);
-//         }
-//         return None;
-//     }
-//     None
-// }
+use crate::utils::strip_filename_linux;
+use super::Song;
 
 // This is a model class for queue view displays.
 // It does not contain any actual song in terms of data.
@@ -37,7 +18,8 @@ pub struct AlbumInfo {
     // Folder-based URI, acquired from the first song found with this album's tag.
     uri: String,
     artist: Option<String>,  // use AlbumArtist tag
-    cover: Option<Texture>
+    cover: Option<Texture>,
+    release_date: Option<Date>
 }
 
 impl AlbumInfo {
@@ -46,7 +28,8 @@ impl AlbumInfo {
             uri: uri.to_owned(),
             artist: artist.map(str::to_string),
             title: title.to_owned(),
-            cover: None
+            cover: None,
+            release_date: None
         }
     }
 
@@ -75,7 +58,8 @@ impl Default for AlbumInfo {
             title: "Untitled Album".to_owned(),
             uri: "".to_owned(),
             artist: None,
-            cover: None
+            cover: None,
+            release_date: None
         }
     }
 }
@@ -116,6 +100,7 @@ mod imp {
                     ParamSpecString::builder("uri").construct_only().build(),
                     ParamSpecString::builder("title").build(),
                     ParamSpecString::builder("artist").build(),
+                    ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").build(),
                     ParamSpecObject::builder::<Texture>("cover")
                         .read_only()
                         .build(),
@@ -130,6 +115,7 @@ mod imp {
                 "uri" => obj.get_uri().to_value(),
                 "title" => obj.get_title().to_value(),
                 "artist" => obj.get_artist().to_value(),
+                "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 "cover" => obj.get_cover().to_value(),
                 _ => unimplemented!(),
             }
@@ -167,12 +153,6 @@ glib::wrapper! {
 }
 
 impl Album {
-    pub fn from_info(info: AlbumInfo) -> Self {
-        let res = glib::Object::builder::<Self>().build();
-        res.imp().info.replace(info);
-        res
-    }
-
     pub fn get_info(&self) -> AlbumInfo {
         self.imp().info.borrow().clone()
     }
@@ -193,6 +173,10 @@ impl Album {
         self.imp().info.borrow().cover()
     }
 
+    pub fn get_release_date(&self) -> Option<Date> {
+        self.imp().info.borrow().release_date
+    }
+
     pub fn set_cover(&self, maybe_tex: Option<Texture>) {
         if let Some(tex) = maybe_tex {
             self.imp().info.borrow_mut().cover.replace(tex);
@@ -207,5 +191,34 @@ impl Album {
 impl Default for Album {
     fn default() -> Self {
         glib::Object::new()
+    }
+}
+
+impl From<Song> for AlbumInfo {
+    fn from(song: Song) -> Self {
+        Self {
+            title: song.get_album().unwrap_or("".to_owned()),
+            uri: strip_filename_linux(&song.get_uri()).to_owned(),
+            artist: song.get_album_artist(),
+            cover: None,
+            release_date: song.get_release_date()
+        }
+    }
+}
+
+impl From<Song> for Album {
+    fn from(song: Song) -> Self {
+        let res = glib::Object::builder::<Self>().build();
+        let info = AlbumInfo::from(song);
+        res.imp().info.replace(info);
+        res
+    }
+}
+
+impl From<AlbumInfo> for Album {
+    fn from(info: AlbumInfo) -> Self {
+        let res = glib::Object::builder::<Self>().build();
+        res.imp().info.replace(info);
+        res
     }
 }

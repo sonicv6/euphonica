@@ -8,9 +8,9 @@ use async_channel::Sender;
 use mpd::status::{State, Status, AudioFormat};
 use crate::{
     common::{Song, QualityGrade},
-    client::albumart::{AlbumArtCache, strip_filename_linux},
+    client::albumart::AlbumArtCache,
     client::MpdMessage,
-    utils::prettify_audio_format
+    utils::{prettify_audio_format, strip_filename_linux}
 };
 use gtk::{
     glib,

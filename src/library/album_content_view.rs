@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use time::{Date, format_description};
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
@@ -38,6 +39,8 @@ mod imp {
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub release_date: TemplateChild<gtk::Label>,
         #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
 
@@ -175,6 +178,7 @@ impl AlbumContentView {
     pub fn bind(&self, album: Album) {
         let title_label = self.imp().title.get();
         let artist_label = self.imp().artist.get();
+        let release_date_label = self.imp().release_date.get();
         let mut bindings = self.imp().bindings.borrow_mut();
 
         let title_binding = album
@@ -190,6 +194,41 @@ impl AlbumContentView {
             .build();
         // Save binding
         bindings.push(artist_binding);
+
+        let release_date_binding = album
+            .bind_property("release_date", &release_date_label, "label")
+            .transform_to(
+                |_, boxed_date: glib::BoxedAnyObject| {
+                    let format = format_description::parse("[year]-[month]-[day]").ok().unwrap();
+                    if let Some(release_date) = boxed_date.borrow::<Option<Date>>().as_ref() {
+                        return Some(
+                            release_date.format(
+                                &format
+                            ).ok()
+                        );
+                    }
+                    None
+                }
+            )
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(release_date_binding);
+
+        let release_date_viz_binding = album
+            .bind_property("release_date", &release_date_label, "visible")
+            .transform_to(
+                |_, boxed_date: glib::BoxedAnyObject| {
+                    if boxed_date.borrow::<Option<Date>>().is_some() {
+                        return Some(true);
+                    }
+                    Some(false)
+                }
+            )
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(release_date_viz_binding);
 
         self.update_cover(album.get_cover().as_ref());
         self.imp().cover_signal_id.replace(Some(

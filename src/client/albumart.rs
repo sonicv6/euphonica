@@ -18,6 +18,7 @@ use std::{
 use gtk::gdk::Texture;
 use stretto::Cache;
 use fasthash::murmur2;
+use crate::utils::strip_filename_linux;
 
 pub struct AlbumArtCache {
     // Path to where the downloaded copies are stored
@@ -33,14 +34,6 @@ pub struct AlbumArtCache {
     // This cache's keys are the folder-level URIs directly, since there's no risk
     // of reserved characters breaking stuff.
     cache: Cache<(String, bool), Texture>
-}
-
-pub fn strip_filename_linux(path: &String) -> &str {
-    // MPD insists on having a trailing slash so here we go
-    if let Some(last_slash) = path.rfind('/') {
-        return &path[..last_slash + 1];
-    }
-    &path[..]
 }
 
 impl AlbumArtCache {

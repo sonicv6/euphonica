@@ -20,7 +20,8 @@ use glib::{
 };
 
 use crate::{
-    client::albumart::{AlbumArtCache, strip_filename_linux},
+    client::albumart::AlbumArtCache,
+    utils::strip_filename_linux,
     common::Song
 };
 

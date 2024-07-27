@@ -1,3 +1,4 @@
+use time::{Date, Month};
 use core::time::Duration;
 use std::{
     path::{Path},
@@ -37,28 +38,42 @@ impl QualityGrade {
 }
 
 
-// fn parse_date(datestr: &str) -> Option<NaiveDate> {
-//     let mut comps = datestr.split("-");
-//     if let Some(year_str) = comps.next() {
-//         if let Ok(year) = year_str.parse::<i32>() {
-//             if let Some(month_str) = comps.next() {
-//                 if let Ok(month) = month_str.parse::<u32>() {
-//                     if let Some(day_str) = comps.next() {
-//                         if let Ok(day) = day_str.parse::<u32>() {
-//                             return NaiveDate::from_ymd_opt(year, month, day);
-//                         }
-//                         return NaiveDate::from_ymd_opt(year, month, 1);
-//                     }
-//                     return NaiveDate::from_ymd_opt(year, month, 1);
-//                 }
-//                 return NaiveDate::from_ymd_opt(year, 1, 1);
-//             }
-//             return NaiveDate::from_ymd_opt(year, 1, 1);
-//         }
-//         return None;
-//     }
-//     None
-// }
+fn parse_date(datestr: &str) -> Option<Date> {
+    // MPD uses yyyy-MM-dd but the month and day may be optional.
+    let mut comps = datestr.split('-');
+    let mut year_val: Option<i32> = None;
+    let mut month_val: Month = Month::January;
+    let mut day_val: u8 = 1;
+
+    let year_str = comps.next()?;
+    if let Ok(year) = year_str.parse::<i32>() {
+        let _ = year_val.replace(year);
+    }
+    else {
+        return None;
+    }
+
+    if let Some(month_str) = comps.next() {
+        if let Ok(month) = month_str.parse::<u8>() {
+            if let Ok(month_enum) = Month::try_from(month) {
+                month_val = month_enum;
+            }
+        }
+    }
+    if let Some(day_str) = comps.next() {
+        if let Ok(day) = day_str.parse::<u8>() {
+            day_val = day;
+        }
+    }
+    if let Ok(date) = Date::from_calendar_date(
+        year_val.unwrap(),
+        month_val,
+        day_val
+    ) {
+        return Some(date);
+    }
+    None
+}
 
 // We define our own Song struct for more convenient handling, especially with
 // regards to optional fields and tags such as albums.
@@ -76,7 +91,9 @@ pub struct SongInfo {
     // range: Option<Range>,
     album: Option<String>,
     // TODO: add albumsort
-    // pub release_date: RefCell<Option<u64>>,
+    // Store Date instead of string to save a tiny bit of memory.
+    // Also gives us formatting flexibility in the future.
+    release_date: Option<Date>,
     // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
     is_playing: Cell<bool>,
     thumbnail: Option<Texture>,
@@ -99,6 +116,7 @@ impl Default for SongInfo {
             duration: None,
             queue_id: None,
             album: None,
+            release_date: None,
             is_playing: Cell::new(false),
             thumbnail: None,
             quality_grade: QualityGrade::Unknown
@@ -149,6 +167,7 @@ mod imp {
                     ParamSpecUInt::builder("queue-id").build(),
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
                     ParamSpecString::builder("album").build(),
+                    ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").build(),  // boxes Option<time::Date>
                     ParamSpecString::builder("quality-grade").read_only().build(),
                     // ParamSpecString::builder("release_date").build(),
                     ParamSpecBoolean::builder("is-playing").build(),
@@ -172,6 +191,7 @@ mod imp {
                 "queue-id" => obj.get_queue_id().to_value(),
                 "is-queued" => obj.is_queued().to_value(),
                 "album" => obj.get_album().to_value(),
+                "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
                 "is-playing" => obj.is_playing().to_value(),
                 "quality-grade" => obj.get_quality_grade().to_value(),
@@ -298,6 +318,10 @@ impl Song {
     pub fn get_quality_grade(&self) -> QualityGrade {
         self.imp().info.borrow().quality_grade
     }
+
+    pub fn get_release_date(&self) -> Option<Date> {
+        self.imp().info.borrow().release_date
+    }
 }
 
 impl Default for Song {
@@ -316,6 +340,7 @@ impl From<mpd::song::Song> for SongInfo {
             duration: song.duration,
             queue_id: None,
             album: None,
+            release_date: None,
             is_playing: Cell::new(false),
             thumbnail: None,
             quality_grade: QualityGrade::Unknown
@@ -360,6 +385,9 @@ impl From<mpd::song::Song> for SongInfo {
                         }
                     }
                 },
+                "OriginalDate" => {
+                    res.release_date = parse_date(val.as_ref());
+                }
                 _ => {}
             }
         }

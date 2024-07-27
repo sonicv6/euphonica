@@ -27,7 +27,7 @@ use super::{
 use crate::{
     common::Album,
     client::albumart::AlbumArtCache,
-    utils::{settings_manager, g_cmp_str_options}
+    utils::{settings_manager, g_cmp_str_options, g_cmp_options}
 };
 
 mod imp {
@@ -129,6 +129,7 @@ impl AlbumView {
         self.setup_sort();
         self.setup_search();
         self.setup_gridview(library.clone(), albumart);
+
         let content_view = self.imp().content_view.get();
         content_view.setup(library.clone());
         self.imp().content_page.connect_hidden(move |_| {
@@ -232,7 +233,12 @@ impl AlbumView {
                         }
                         5 => {
                             // Release date
-                            unimplemented!()
+                            g_cmp_options(
+                                album1.get_release_date().as_ref(),
+                                album2.get_release_date().as_ref(),
+                                nulls_first,
+                                asc
+                            )
                         }
                         _ => unreachable!()
                     }
@@ -359,7 +365,7 @@ impl AlbumView {
         );
     }
 
-    pub fn bind_state(&self, library: Library) {
+    fn bind_state(&self, library: Library) {
         // Here we will listen to the album-clicked signal of Library.
         // Upon receiving that signal, create a new AlbumContentView page and push it onto the stack.
         // The view (AlbumView):
@@ -399,7 +405,7 @@ impl AlbumView {
         );
     }
 
-    pub fn setup_gridview(&self, library: Library, albumart: Rc<AlbumArtCache>) {
+    fn setup_gridview(&self, library: Library, albumart: Rc<AlbumArtCache>) {
         // Setup search bar
         let search_bar = self.imp().search_bar.get();
         let search_entry = self.imp().search_entry.get();

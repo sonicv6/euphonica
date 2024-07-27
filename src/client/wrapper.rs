@@ -19,8 +19,8 @@ use crate::{
 };
 
 use super::{
-    albumart::{strip_filename_linux, AlbumArtCache},
-    state::{ClientState, ConnectionState}
+    albumart::AlbumArtCache,
+    state::{ClientState, ConnectionState},
 };
 
 use mpd::{
@@ -233,11 +233,7 @@ impl MpdWrapper {
                                                 if !songs.is_empty() {
                                                     let first_song = Song::from(std::mem::take(&mut songs[0]));
                                                     let _ = sender_to_fg.send_blocking(MpdMessage::AlbumInfo(
-                                                        AlbumInfo::new(
-                                                            strip_filename_linux(&first_song.get_uri()),
-                                                            tag.as_str(),
-                                                            first_song.get_album_artist().as_deref()
-                                                        )
+                                                        AlbumInfo::from(first_song)
                                                     ));
                                                 }
                                             }

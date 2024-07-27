@@ -13,7 +13,7 @@ image = "0.25.1"
 librsvg = "2.58.1"
 mpd = { path = "./rust-mpd" }
 once_cell = "1.19.0"
-time = "0.3.36"
+time = { version = "0.3.36", features = ["formatting"] }
 stretto = { version = "0.8", features = ["sync"] }
 
 [dependencies.gtk]
