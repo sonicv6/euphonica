@@ -15,8 +15,9 @@
     padding: 6px;
 }
 
-.gridview {
+.simple-gridview {
     padding: 12px;
+	background-color: unset;
 }
 
 .thumbnail-box {
@@ -28,7 +29,13 @@
     padding-bottom: 12pt;
     padding-left: 6pt;
     padding-right: 6pt;
+    border-right: unset; /* Fixes an annoying visual quirk in dark mode at the top of the sidebar */
 }
+
+windowhandle {
+	border-right: unset; /* Fixes an annoying visual quirk in dark mode at the top of the sidebar */
+}
+
 
 .sidebar-btn label {
     font-weight: regular;

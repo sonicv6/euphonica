@@ -188,7 +188,21 @@ impl PlayerBar {
                 &quality_grade,
                 "icon-name"
             )
-            .transform_to(|_, grade: QualityGrade| {Some(grade.to_icon_name())})
+            .transform_to(|_, grade: QualityGrade| {
+                Some(grade.to_icon_name())}
+            )
+            .sync_create()
+            .build();
+
+        player
+            .bind_property(
+                "quality-grade",
+                &quality_grade,
+                "visible"
+            )
+            .transform_to(|_, grade: QualityGrade| {
+                Some(grade != QualityGrade::Lossy)
+            })
             .sync_create()
             .build();
 

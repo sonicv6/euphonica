@@ -1,5 +1,7 @@
 use std::{
-    rc::Rc
+    rc::Rc,
+    cell::Cell,
+    cmp::Ordering
 };
 use adw::prelude::*;
 use adw::subclass::prelude::*;
@@ -34,12 +36,33 @@ mod imp {
     pub struct AlbumView {
         #[template_child]
         pub nav_view: TemplateChild<adw::NavigationView>,
+
+        // Search & filter widgets
+        #[template_child]
+        pub search_btn: TemplateChild<gtk::ToggleButton>,
+        #[template_child]
+        pub search_mode: TemplateChild<gtk::DropDown>,
+        #[template_child]
+        pub search_bar: TemplateChild<gtk::SearchBar>,
+        #[template_child]
+        pub search_entry: TemplateChild<gtk::SearchEntry>,
+
+        // Content
         #[template_child]
         pub grid_view: TemplateChild<gtk::GridView>,
         #[template_child]
         pub content_page: TemplateChild<adw::NavigationPage>,
         #[template_child]
-        pub content_view: TemplateChild<AlbumContentView>
+        pub content_view: TemplateChild<AlbumContentView>,
+
+        // Search & filter models
+        pub search_filter: gtk::CustomFilter,
+        // Keep last length to optimise search
+        // If search term is now longer, only further filter still-matching
+        // items.
+        // If search term is now shorter, only check non-matching items to see
+        // if they now match.
+        pub last_search_len: Cell<usize>
     }
 
     #[glib::object_subclass]
@@ -84,16 +107,69 @@ glib::wrapper! {
 
 impl Default for AlbumView {
     fn default() -> Self {
-        glib::Object::new()
+        Self::new()
     }
 }
 
 impl AlbumView {
     pub fn new() -> Self {
-        Self::default()
+        let res: Self = glib::Object::new();
+
+        res
     }
 
     pub fn setup(&self, library: Library, albumart: Rc<AlbumArtCache>) {
+        println!("Setting up search filter");
+        self.imp().search_filter.set_filter_func(
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                #[upgrade_or]
+                false,
+                move |obj| {
+                    let album = obj
+                        .downcast_ref::<Album>()
+                        .expect("Search obj has to be a common::Album.");
+
+                    let search_term = this.imp().search_entry.text().to_lowercase();
+                    if search_term.is_empty() {
+                        return true;
+                    }
+
+                    // Vary behaviour depending on dropdown
+                    match this.imp().search_mode.selected() {
+                        // Keep these indices in sync with the GtkStringList in the UI file
+                        0 => {
+                            // Match either album title or AlbumArtist (not artist tag)
+                            if album.get_title().to_lowercase().contains(&search_term) {
+                                return true;
+                            }
+                            if let Some(artist) = album.get_artist() {
+                                return artist
+                                    .to_lowercase()
+                                    .contains(&search_term);
+                            }
+                            false
+                        }
+                        1 => {
+                            // Match only album title
+                            album.get_title().to_lowercase().contains(&search_term)
+                        }
+                        2 => {
+                            // Match only AlbumArtist (albums without such tag will never match)
+                            if let Some(artist) = album.get_artist() {
+                                return artist
+                                    .to_lowercase()
+                                    .contains(&search_term);
+                            }
+                            false
+                        }
+                        _ => unimplemented!()
+                    }
+                }
+            )
+        );
+
         self.setup_gridview(library.clone(), albumart);
         let content_view = self.imp().content_view.get();
         content_view.setup(library.clone());
@@ -145,9 +221,65 @@ impl AlbumView {
     }
 
     pub fn setup_gridview(&self, library: Library, albumart: Rc<AlbumArtCache>) {
+        // Setup search bar
+        let search_bar = self.imp().search_bar.get();
+        let search_entry = self.imp().search_entry.get();
+        search_bar.connect_entry(&search_entry);
+
+        let search_btn = self.imp().search_btn.get();
+        search_btn
+            .bind_property(
+                "active",
+                &search_bar,
+                "search-mode-enabled"
+            )
+            .sync_create()
+            .build();
+
+        // Wrap in search model
+        // TODO: Also allow searching by artist name and other criteria.
+        // TODO: Add an checkbox list popup widget to the left of SearchEntry to choose search mode
+        // TODO: Maybe let user choose case-sensitivity too (too verbose?)
+        // (album, artist, etc)
+        // let album_name_expression = gtk::PropertyExpression
+        //     ::new(
+        //         Album::static_type(),
+        //         Option::<gtk::PropertyExpression>::None,
+        //         "title"
+        //     );
+
+        // let string_filter = gtk::StringFilter::builder()
+        //     .expression(album_name_expression)
+        //     .build();
+        // Connect search entry to model
+        search_entry.connect_search_changed(
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |entry| {
+                    let text = entry.text();
+                    let new_len = text.len();
+                    let old_len = this.imp().last_search_len.replace(new_len);
+                    match new_len.cmp(&old_len) {
+                        Ordering::Greater => {
+                            this.imp().search_filter.changed(gtk::FilterChange::MoreStrict);
+                        }
+                        Ordering::Less => {
+                            this.imp().search_filter.changed(gtk::FilterChange::LessStrict);
+                        }
+                        Ordering::Equal => {
+                            this.imp().search_filter.changed(gtk::FilterChange::Different);
+                        }
+                    }
+                }
+            )
+        );
+        let search_model = gtk::FilterListModel::new(Some(library.albums()), Some(self.imp().search_filter.clone()));
+        search_model.set_incremental(true);
+        // TODO: Sort after search
         // Set selection mode
-        // TODO: Click to enter album
-        let sel_model = SingleSelection::new(Some(library.albums()));
+        let sel_model = SingleSelection::new(Some(search_model));
+
         self.imp().grid_view.set_model(Some(&sel_model));
 
         // Set up factory
