@@ -5,7 +5,7 @@
 			<object class="GtkBox">
 				<property name="overflow">hidden</property>
 				<style>
-					<class name="thumbnail-box" />
+					<class name="border-radius-6" />
 				</style>
 				<child>
 					<object class="GtkImage" id="thumbnail">
@@ -88,7 +88,7 @@
 		</child>
 		<style>
 			<class name="card" />
-			<class name="queue-row" />
+			<class name="padding-6" />
 		</style>
 	</template>
 </interface>

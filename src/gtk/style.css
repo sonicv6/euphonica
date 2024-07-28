@@ -3,25 +3,24 @@
     margin-right: 12px;
 }
 
-.floating-listview {
-    background-color: unset;
+.padding-12 {
+    padding: 12px;
 }
 
-.floating-listview row {
-    background-color: unset;
-}
-
-.queue-row {
+.padding-6 {
     padding: 6px;
 }
 
-.simple-gridview {
-    padding: 12px;
-	background-color: unset;
+.border-radius-12 {
+    border-radius: 6px;
 }
 
-.thumbnail-box {
-    border-radius: 6px;  /* 12px card radius - 6px padding for concentric rounding */
+.border-radius-6 {
+    border-radius: 6px;
+}
+
+.no-bg {
+    background-color: unset;
 }
 
 .sidebar {
@@ -33,12 +32,7 @@
 }
 
 windowhandle {
-	border-right: unset; /* Fixes an annoying visual quirk in dark mode at the top of the sidebar */
-}
-
-
-.sidebar-btn label {
-    font-weight: regular;
+    border-right: unset; /* Fixes an annoying visual quirk in dark mode at the top of the sidebar */
 }
 
 .player-bar {

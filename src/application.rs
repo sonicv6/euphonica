@@ -190,10 +190,10 @@ impl EuphoniaApplication {
         let about = adw::AboutDialog::builder()
             .application_name("Euphonia")
             .application_icon("org.euphonia.Euphonia")
-            .developer_name("Work")
+            .developer_name("htkhiem2000")
             .version(VERSION)
-            .developers(vec!["Work"])
-            .copyright("© 2024 Work")
+            .developers(vec!["htkhiem2000"])
+            .copyright("© 2024 htkhiem2000")
             .build();
 
         about.present(Some(&window));

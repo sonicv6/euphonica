@@ -39,7 +39,7 @@
 										<property name="single-click-activate">true</property>
 										<style>
 											<class name="queue-view-column" />
-											<class name="floating-listview" />
+											<class name="no-bg" />
 										</style>
 									</object>
 								</property>

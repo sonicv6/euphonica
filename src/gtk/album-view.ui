@@ -85,7 +85,8 @@
                         <property name="min-columns">1</property>
                         <property name="single-click-activate">true</property>
                         <style>
-                          <class name="simple-gridview"/>
+                          <class name="no-bg"/>
+                          <class name="padding-12"/>
                         </style>
                       </object>
                     </property>

@@ -27,6 +27,12 @@
 									<object class="AdwToolbarView">
 										<child type="top">
 											<object class="AdwHeaderBar">
+												<child type="start">
+													<object class="GtkImage">
+														<property name="icon-name">org.euphonia.Euphonia-symbolic</property>
+														<property name="icon-size">2</property>
+													</object>
+												</child>
 												<property name="title-widget">
 													<object class="AdwWindowTitle" id="title">
 														<property name="title">Euphonia</property>
