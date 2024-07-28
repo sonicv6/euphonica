@@ -20,7 +20,7 @@
 							<object class="GtkBox">
 								<property name="overflow">hidden</property>
 								<style>
-									<class name="thumbnail-box" />
+									<class name="border-radius-6" />
 								</style>
 								<child>
 									<object class="GtkImage" id="albumart">

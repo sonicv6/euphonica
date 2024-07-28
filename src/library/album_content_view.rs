@@ -22,7 +22,9 @@ use super::{
     AlbumSongRow
 };
 use crate::{
-    common::{Album, Song}
+    utils::format_secs_as_duration,
+    common::{Album, Song},
+    client::ALBUMART_PLACEHOLDER
 };
 
 mod imp {
@@ -31,6 +33,10 @@ mod imp {
     #[derive(Debug, Default, CompositeTemplate)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/album-content-view.ui")]
     pub struct AlbumContentView {
+        #[template_child]
+        pub infobox_revealer: TemplateChild<gtk::Revealer>,
+        #[template_child]
+        pub collapse_infobox: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub cover: TemplateChild<gtk::Image>,
         #[template_child]
@@ -42,7 +48,13 @@ mod imp {
         #[template_child]
         pub release_date: TemplateChild<gtk::Label>,
         #[template_child]
+        pub track_count: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub runtime: TemplateChild<gtk::Label>,
+        #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub append_queue: TemplateChild<gtk::Button>,
 
         pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
@@ -97,6 +109,35 @@ impl Default for AlbumContentView {
 
 impl AlbumContentView {
     pub fn setup(&self, library: Library) {
+        let infobox_revealer = self.imp().infobox_revealer.get();
+        let collapse_infobox = self.imp().collapse_infobox.get();
+        collapse_infobox
+            .bind_property(
+                "active",
+                &infobox_revealer,
+                "reveal-child"
+            )
+            .transform_to(|_, active: bool| { Some(!active) })
+            .transform_from(|_, active: bool| { Some(!active) })
+            .bidirectional()
+            .sync_create()
+            .build();
+
+        infobox_revealer
+            .bind_property(
+                "child-revealed",
+                &collapse_infobox,
+                "icon-name"
+            )
+            .transform_to(|_, revealed| {
+                if revealed {
+                    return Some("up-symbolic");
+                }
+                Some("down-symbolic")
+            })
+            .sync_create()
+            .build();
+
         let replace_queue_btn = self.imp().replace_queue.get();
         replace_queue_btn.connect_clicked(
             clone!(
@@ -106,8 +147,21 @@ impl AlbumContentView {
                 library,
                 move |_| {
                     if let Some(album) = this.imp().album.borrow().as_ref() {
-                        println!("Replace queue button clicked");
-                        library.queue_album(album.clone(), true);
+                        library.queue_album(album.clone(), true, true);
+                    }
+                }
+            )
+        );
+        let append_queue_btn = self.imp().append_queue.get();
+        append_queue_btn.connect_clicked(
+            clone!(
+                #[strong(rename_to = this)]
+                self,
+                #[weak]
+                library,
+                move |_| {
+                    if let Some(album) = this.imp().album.borrow().as_ref() {
+                        library.queue_album(album.clone(), false, false);
                     }
                 }
             )
@@ -119,6 +173,7 @@ impl AlbumContentView {
         // Create an empty `AlbumSongRow` during setup
         factory.connect_setup(move |_, list_item| {
             let song_row = AlbumSongRow::new();
+            song_row.setup(library.clone());
             list_item
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem")
@@ -173,6 +228,9 @@ impl AlbumContentView {
         if tex.is_some() {
             self.imp().cover.set_paintable(tex);
         }
+        else {
+            self.imp().cover.set_paintable(Some(&ALBUMART_PLACEHOLDER.clone()));
+        }
     }
 
     pub fn bind(&self, album: Album) {
@@ -201,13 +259,11 @@ impl AlbumContentView {
                 |_, boxed_date: glib::BoxedAnyObject| {
                     let format = format_description::parse("[year]-[month]-[day]").ok().unwrap();
                     if let Some(release_date) = boxed_date.borrow::<Option<Date>>().as_ref() {
-                        return Some(
-                            release_date.format(
-                                &format
-                            ).ok()
-                        );
+                        return release_date.format(
+                            &format
+                        ).ok();
                     }
-                    None
+                    Some("-".to_owned())
                 }
             )
             .sync_create()
@@ -263,6 +319,22 @@ impl AlbumContentView {
     }
 
     pub fn setup_content(&self, song_list: gio::ListStore) {
+        self.imp().track_count.set_label(&song_list.n_items().to_string());
+        self.imp().runtime.set_label(
+            &format_secs_as_duration(
+                song_list
+                    .iter()
+                    .map(
+                        |item: Result<Song, _>| {
+                            if let Ok(song) = item {
+                                return song.get_duration();
+                            }
+                            0
+                        }
+                    )
+                    .sum::<u64>() as f64
+            )
+        );
         let sel_model = gtk::NoSelection::new(Some(song_list));
         self.imp().content.set_model(Some(&sel_model));
     }

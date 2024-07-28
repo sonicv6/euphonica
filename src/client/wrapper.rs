@@ -71,6 +71,7 @@ pub enum MpdMessage {
     Connect, // Host and port are always read from gsettings
 	Play,
     Pause,
+    Add(String), // Add by URI
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
     Clear, // Clear queue
@@ -321,6 +322,7 @@ impl MpdWrapper {
         match request {
             MpdMessage::Connect => self.connect().await,
             MpdMessage::Status => self.get_status(),
+            MpdMessage::Add(uri) => self.add(uri.as_ref()),
             MpdMessage::Play => self.pause(false),
             MpdMessage::PlayId(id) => self.play_at(id, true),
             MpdMessage::PlayPos(pos) => self.play_at(pos, false),
@@ -432,6 +434,12 @@ impl MpdWrapper {
         }
         else {
             self.state.set_connection_state(ConnectionState::NotConnected);
+        }
+    }
+
+    pub fn add(&self, uri: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.push(get_dummy_song(uri));
         }
     }
 

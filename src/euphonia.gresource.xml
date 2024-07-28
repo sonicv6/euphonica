@@ -19,6 +19,10 @@
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
 	<gresource prefix="/org/euphonia/Euphonia/icons/scalable/actions/">
+		<file preprocess="xml-stripblanks" alias="hourglass-symbolic.svg">gtk/icons/hourglass-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="up-symbolic.svg">gtk/icons/up-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="down-symbolic.svg">gtk/icons/down-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="month-symbolic.svg">gtk/icons/month-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="skip-backward-large-symbolic.svg">gtk/icons/skip-backward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-large-symbolic.svg">gtk/icons/play-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-symbolic.svg">gtk/icons/play-symbolic.svg</file>

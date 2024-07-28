@@ -11,6 +11,12 @@
     padding: 6px;
 }
 
+.row {
+    padding: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
 .border-radius-12 {
     border-radius: 6px;
 }

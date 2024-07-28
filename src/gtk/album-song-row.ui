@@ -4,71 +4,110 @@
 		<child>
 			<object class="GtkLabel" id="track_index">
 				<property name="label">NaN</property>
+				<style>
+					<class name="dim-label"/>
+				</style>
 			</object>
 		</child>
 		<child>
-			<object class="GtkBox">
-				<property name="orientation">vertical</property>
-				<property name="spacing">6</property>
-				<property name="margin-start">12</property>
-				<child>
+			<object class="GtkCenterBox">
+				<property name="hexpand">true</property>
+				<property name="start-widget">
 					<object class="GtkBox">
+						<property name="orientation">vertical</property>
+						<property name="spacing">6</property>
+						<property name="margin-start">12</property>
 						<child>
-							<object class="GtkLabel" id="song_name">
-								<property name="halign">start</property>
+							<object class="GtkBox">
+								<property name="spacing">6</property>
+								<child>
+									<object class="GtkLabel" id="song_name">
+										<property name="halign">start</property>
+										<property name="ellipsize">end</property>
+										<style>
+											<class name="heading" />
+										</style>
+									</object>
+								</child>
+								<child>
+									<object class="GtkImage" id="quality_grade"></object>
+								</child>
+							</object>
+						</child>
+						<child>
+							<object class="GtkBox">
+								<child>
+									<object class="GtkImage">
+										<property name="icon-name">music-artist-symbolic</property>
+									</object>
+								</child>
+								<child>
+									<object class="GtkLabel" id="artist_name">
+										<property name="margin-start">4</property>
+										<property name="ellipsize">end</property>
+										<property name="label">Unknown</property>
+									</object>
+								</child>
+
+								<child>
+									<object class="GtkSeparator">
+										<style>
+											<class name="spacer" />
+										</style>
+									</object>
+								</child>
+
+								<child>
+									<object class="GtkImage">
+										<property name="icon-name">hourglass-symbolic</property>
+									</object>
+								</child>
+								<child>
+									<object class="GtkLabel" id="duration">
+										<property name="margin-start">4</property>
+										<property name="label">0:00</property>
+									</object>
+								</child>
+
 								<style>
-									<class name="heading" />
+									<class name="dim-label" />
+									<class name="caption" />
 								</style>
 							</object>
 						</child>
 					</object>
-				</child>
-				<child>
-					<object class="GtkBox">
-
-						<child>
-							<object class="GtkImage">
-								<property name="icon-name">music-artist-symbolic</property>
+				</property>
+				<property name="end-widget">
+					<object class="GtkRevealer" id="controls_revealer">
+						<property name="transition-type">slide-left</property>
+						<property name="child">
+							<object class="GtkBox">
+								<child>
+									<object class="GtkButton" id="replace_queue">
+										<property name="tooltip-text" translatable="true">Replace queue with this song</property>
+										<property name="icon-name">play-symbolic</property>
+										<style>
+											<class name="flat"/>
+										</style>
+									</object>
+								</child>
+								<child>
+									<object class="GtkButton" id="append_queue">
+										<property name="tooltip-text" translatable="true">Add this song to the end of the queue</property>
+										<property name="icon-name">list-add-symbolic</property>
+										<style>
+											<class name="flat"/>
+										</style>
+									</object>
+								</child>
 							</object>
-						</child>
-						<child>
-							<object class="GtkLabel" id="artist_name">
-								<property name="margin-start">4</property>
-								<property name="label">Unknown</property>
-							</object>
-						</child>
-
-						<child>
-							<object class="GtkSeparator">
-								<style>
-									<class name="spacer" />
-								</style>
-							</object>
-						</child>
-
-						<child>
-							<object class="GtkImage">
-								<property name="icon-name">clock-alt-symbolic</property>
-							</object>
-						</child>
-						<child>
-							<object class="GtkLabel" id="duration">
-								<property name="margin-start">4</property>
-								<property name="label">0:00</property>
-							</object>
-						</child>
-
-						<style>
-							<class name="dim-label" />
-							<class name="caption" />
-						</style>
+						</property>
 					</object>
-				</child>
+				</property>
 			</object>
 		</child>
 		<style>
-			<class name="card" />
-			<class name="queue-row" />
+			<class name="row" />
 		</style>
 	</template>
 </interface>

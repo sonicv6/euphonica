@@ -174,7 +174,7 @@ impl Library {
         }
     }
 
-    pub fn queue_album(&self, album: Album, replace: bool) {
+    pub fn queue_album(&self, album: Album, replace: bool, play: bool) {
         if let Some(sender) = self.imp().sender.borrow().as_ref() {
             if replace {
                 let _ = sender.send_blocking(MpdMessage::Clear);
@@ -182,10 +182,21 @@ impl Library {
             let mut query = Query::new();
             query.and(Term::Tag(Cow::Borrowed("album")), album.get_title());
             let _ = sender.send_blocking(MpdMessage::FindAdd(query));
-            // if replace {
-            //     let _ = sender.send_blocking(MpdMessage::Clear);
-            // }
-            // TODO: Implement play trigger
+            if replace && play {
+                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
+            }
+        }
+    }
+
+    pub fn queue_uri(&self, uri: &str, replace: bool, play: bool) {
+        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+            if replace {
+                let _ = sender.send_blocking(MpdMessage::Clear);
+            }
+            let _ = sender.send_blocking(MpdMessage::Add(uri.to_owned()));
+            if replace && play {
+                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
+            }
         }
     }
 }

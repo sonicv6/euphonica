@@ -90,6 +90,8 @@ pub struct SongInfo {
     queue_id: Option<u32>,
     // range: Option<Range>,
     album: Option<String>,
+    track: Cell<i64>,
+    disc: Cell<i64>,
     // TODO: add albumsort
     // Store Date instead of string to save a tiny bit of memory.
     // Also gives us formatting flexibility in the future.
@@ -116,6 +118,8 @@ impl Default for SongInfo {
             duration: None,
             queue_id: None,
             album: None,
+            track: Cell::new(-1),
+            disc: Cell::new(-1),
             release_date: None,
             is_playing: Cell::new(false),
             thumbnail: None,
@@ -130,6 +134,7 @@ mod imp {
         ParamSpec,
         ParamSpecUInt,
         ParamSpecUInt64,
+        ParamSpecInt64,
         ParamSpecBoolean,
         ParamSpecString,
         ParamSpecObject
@@ -167,6 +172,8 @@ mod imp {
                     ParamSpecUInt::builder("queue-id").build(),
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
                     ParamSpecString::builder("album").build(),
+                    ParamSpecInt64::builder("track").build(),
+                    ParamSpecInt64::builder("disc").build(),
                     ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").build(),  // boxes Option<time::Date>
                     ParamSpecString::builder("quality-grade").read_only().build(),
                     // ParamSpecString::builder("release_date").build(),
@@ -191,6 +198,8 @@ mod imp {
                 "queue-id" => obj.get_queue_id().to_value(),
                 "is-queued" => obj.is_queued().to_value(),
                 "album" => obj.get_album().to_value(),
+                "track" => obj.get_track().to_value(),
+                "disc" => obj.get_track().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
                 "is-playing" => obj.is_playing().to_value(),
@@ -292,6 +301,14 @@ impl Song {
         self.imp().info.borrow().album.clone()
     }
 
+    pub fn get_track(&self) -> i64 {
+        self.imp().info.borrow().track.get()
+    }
+
+    pub fn get_disc(&self) -> i64 {
+        self.imp().info.borrow().disc.get()
+    }
+
     pub fn get_thumbnail(&self) -> Option<Texture> {
         self.imp().info.borrow().thumbnail.clone()
     }
@@ -340,6 +357,8 @@ impl From<mpd::song::Song> for SongInfo {
             duration: song.duration,
             queue_id: None,
             album: None,
+            track: Cell::new(-1),
+            disc: Cell::new(-1),
             release_date: None,
             is_playing: Cell::new(false),
             thumbnail: None,
@@ -387,6 +406,16 @@ impl From<mpd::song::Song> for SongInfo {
                 },
                 "OriginalDate" => {
                     res.release_date = parse_date(val.as_ref());
+                },
+                "Track" => {
+                    if let Ok(idx) = val.parse::<i64>() {
+                        let _ = res.track.replace(idx);
+                    }
+                }
+                "Disc" => {
+                    if let Ok(idx) = val.parse::<i64>() {
+                        let _ = res.disc.replace(idx);
+                    }
                 }
                 _ => {}
             }
