@@ -167,6 +167,7 @@ impl Preferences {
 
         // Set up library settings
         let library_settings = settings.child("library");
+        let appearance_settings = settings.child("appearance");
         let sort_nulls_first = imp.sort_nulls_first.get();
         library_settings
             .bind(
