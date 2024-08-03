@@ -13,15 +13,10 @@ use gtk::{glib, gio};
 
 use crate::{
     utils,
-    player::Player,
-    library::Library,
     common::{Album, AlbumInfo, Song}
 };
 
-use super::{
-    albumart::AlbumArtCache,
-    state::{ClientState, ConnectionState},
-};
+use super::state::{ClientState, ConnectionState};
 
 use mpd::{
     client::Client,
@@ -69,6 +64,7 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
 // as Connect and Toggle.
 pub enum MpdMessage {
     Connect, // Host and port are always read from gsettings
+    Update, // Update DB
 	Play,
     Pause,
     Add(String), // Add by URI
@@ -86,15 +82,18 @@ pub enum MpdMessage {
     AlbumContent(AlbumInfo), // Get list of songs in album with given tag name
 
 	// Reserved for child thread
+	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
 	AlbumArtDownloaded(String), // Notify which album art was downloaded and where it is
-    AlbumBasicInfoDownloaded(AlbumInfo) // Return new album to be added to the list model.
+    AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model.
+    DBUpdated
 }
 
 // Work requests for sending to the child thread.
 // Completed results will be reported back via MpdMessage.
 #[derive(Debug)]
 enum BackgroundTask {
+    Update,
     DownloadAlbumArt(String, PathBuf, PathBuf),  // With folder-level URL for querying and cache paths to write to (full-res & thumb)
     FetchAlbums  // Gradually get all albums
 }
@@ -188,13 +187,24 @@ impl MpdWrapper {
             client.subscribe(self.bg_channel.clone()).expect("Child thread could not subscribe to inter-client channel!");
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting idle loop...");
+                let mut prev_size: usize = bg_receiver.len();
                 'outer: loop {
                     // Check if there is work to do
                     if !bg_receiver.is_empty() {
+                        if prev_size == 0 {
+                            // We have tasks now, set state to busy
+                            prev_size = bg_receiver.len();
+                            let _ = sender_to_fg.send_blocking(MpdMessage::Busy(true));
+                        }
                         // TODO: Take one task for each loop
                         if let Ok(task) = bg_receiver.recv_blocking() {
                             // println!("Got task: {:?}", task);
                             match task {
+                                BackgroundTask::Update => {
+                                    if let Ok(_) = client.update() {
+                                        let _ = sender_to_fg.send_blocking(MpdMessage::DBUpdated);
+                                    }
+                                }
                                 BackgroundTask::DownloadAlbumArt(uri, cache_path, thumb_cache_path) => {
                                     // Check if already cached. This usually happens when
                                     // multiple songs using the same un-cached album art
@@ -240,6 +250,11 @@ impl MpdWrapper {
                         }
                     }
                     else {
+                        if prev_size > 0 {
+                            // No more tasks
+                            prev_size = 0;
+                            let _ = sender_to_fg.send_blocking(MpdMessage::Busy(false));
+                        }
                         // If not, go into idle mode
                         if let Ok(changes) = client.wait(&[]) {
                             println!("Change: {:?}", changes);
@@ -315,6 +330,7 @@ impl MpdWrapper {
         // println!("Received MpdMessage {:?}", request);
         match request {
             MpdMessage::Connect => self.connect().await,
+            MpdMessage::Update => self.queue_task(BackgroundTask::Update),
             MpdMessage::Status => self.get_status(),
             MpdMessage::Add(uri) => self.add(uri.as_ref()),
             MpdMessage::Play => self.pause(false),
@@ -347,6 +363,7 @@ impl MpdWrapper {
                 "album-basic-info-downloaded",
                 Album::from(info)
             ),
+            MpdMessage::Busy(busy) => self.state.set_busy(busy),
             _ => {}
         }
         glib::ControlFlow::Continue

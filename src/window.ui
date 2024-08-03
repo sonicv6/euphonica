@@ -28,9 +28,26 @@
 										<child type="top">
 											<object class="AdwHeaderBar">
 												<child type="start">
-													<object class="GtkImage">
-														<property name="icon-name">org.euphonia.Euphonia-symbolic</property>
-														<property name="icon-size">2</property>
+													<object class="GtkStack" id="logo_stack">
+														<child>
+															<object class="GtkStackPage">
+																<property name="name">spinner</property>
+																<property name="child">
+																	<object class="GtkSpinner"></object>
+																</property>
+															</object>
+														</child>
+														<child>
+															<object class="GtkStackPage">
+																<property name="name">logo</property>
+																<property name="child">
+																	<object class="GtkImage">
+																		<property name="icon-name">org.euphonia.Euphonia-symbolic</property>
+																		<property name="icon-size">2</property>
+																	</object>
+																</property>
+															</object>
+														</child>
 													</object>
 												</child>
 												<property name="title-widget">
@@ -105,6 +122,10 @@
 
 	<menu id="primary_menu">
 		<section>
+			<item>
+				<attribute name="label" translatable="yes">_Update database</attribute>
+				<attribute name="action">app.update-db</attribute>
+			</item>
 			<item>
 				<attribute name="label" translatable="yes">_Preferences</attribute>
 				<attribute name="action">app.preferences</attribute>

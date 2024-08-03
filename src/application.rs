@@ -163,6 +163,9 @@ impl EuphoniaApplication {
     }
 
     fn setup_gactions(&self) {
+        let update_db_action = gio::ActionEntry::builder("update-db")
+            .activate(move |app: &Self, _, _| app.update_db())
+            .build();
         let quit_action = gio::ActionEntry::builder("quit")
             .activate(move |app: &Self, _, _| app.quit())
             .build();
@@ -172,7 +175,17 @@ impl EuphoniaApplication {
         let preferences_action = gio::ActionEntry::builder("preferences")
             .activate(move |app: &Self, _, _| app.show_preferences())
             .build();
-        self.add_action_entries([quit_action, about_action, preferences_action]);
+        self.add_action_entries([
+            update_db_action,
+            quit_action,
+            about_action,
+            preferences_action
+        ]);
+    }
+
+    fn update_db(&self) {
+        let sender = &self.imp().sender;
+        let _ = sender.send_blocking(MpdMessage::Update);
     }
 
     fn show_about(&self) {
