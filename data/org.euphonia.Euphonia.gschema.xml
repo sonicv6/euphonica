@@ -39,6 +39,16 @@
 			</description>
 			<default>15</default>
 		</key>
+
+		<key name="use-lastfm" type="b">
+			<default>false</default>
+		</key>
+		<key name="lastfm-api-key" type="s">
+			<default>''</default>
+		</key>
+		<key name="lastfm-username" type="s">
+			<default>'Euphonia'</default>
+		</key>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.library" path="/org/euphonia/Euphonia/library/">

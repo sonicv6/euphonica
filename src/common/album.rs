@@ -14,13 +14,14 @@ use super::{Song, QualityGrade};
 #[derive(Debug, Clone)]
 pub struct AlbumInfo {
     // TODO: Might want to refactor to Into<Cow<'a, str>>
-    title: String,
+    pub title: String,
     // Folder-based URI, acquired from the first song found with this album's tag.
-    uri: String,
-    artist: Option<String>,  // use AlbumArtist tag
-    cover: Option<Texture>,
-    release_date: Option<Date>,
-    quality_grade: QualityGrade
+    pub uri: String,
+    pub artist: Option<String>,  // use AlbumArtist tag
+    pub cover: Option<Texture>,
+    pub release_date: Option<Date>,
+    pub quality_grade: QualityGrade,
+    pub mb_album_id: Option<String>
 }
 
 impl AlbumInfo {
@@ -31,26 +32,9 @@ impl AlbumInfo {
             title: title.to_owned(),
             cover: None,
             release_date: None,
-            quality_grade: QualityGrade::Unknown
+            quality_grade: QualityGrade::Unknown,
+            mb_album_id: None
         }
-    }
-
-    // copying all the strings instead of returning references.
-    // This should allow for an easier ID3 tag editor implementation.
-    pub fn title(&self) -> String {
-        self.title.clone()
-    }
-
-    pub fn artist(&self) -> Option<String> {
-        self.artist.clone()
-    }
-
-    pub fn uri(&self) -> String {
-        self.uri.clone()
-    }
-
-    pub fn cover(&self) -> Option<Texture> {
-        self.cover.clone()
     }
 }
 
@@ -62,7 +46,8 @@ impl Default for AlbumInfo {
             artist: None,
             cover: None,
             release_date: None,
-            quality_grade: QualityGrade::Unknown
+            quality_grade: QualityGrade::Unknown,
+            mb_album_id: None
         }
     }
 }
@@ -163,23 +148,27 @@ impl Album {
     }
 
     pub fn get_uri(&self) -> String {
-        self.imp().info.borrow().uri()
+        self.imp().info.borrow().uri.clone()
     }
 
     pub fn get_title(&self) -> String {
-        self.imp().info.borrow().title()
+        self.imp().info.borrow().title.clone()
     }
 
     pub fn get_artist(&self) -> Option<String> {
-        self.imp().info.borrow().artist()
+        self.imp().info.borrow().artist.clone()
+    }
+
+    pub fn get_mb_album_id(&self) -> Option<String> {
+        self.imp().info.borrow().mb_album_id.clone()
     }
 
     pub fn get_cover(&self) -> Option<Texture> {
-        self.imp().info.borrow().cover()
+        self.imp().info.borrow().cover.clone()
     }
 
     pub fn get_release_date(&self) -> Option<Date> {
-        self.imp().info.borrow().release_date
+        self.imp().info.borrow().release_date.clone()
     }
 
     pub fn get_quality_grade(&self) -> QualityGrade {
@@ -191,7 +180,7 @@ impl Album {
             self.imp().info.borrow_mut().cover.replace(tex);
         }
         else {
-            let _ = self.imp().info.borrow_mut().cover().take();
+            let _ = self.imp().info.borrow_mut().cover.take();
         }
         self.notify("cover");
     }
@@ -211,7 +200,8 @@ impl From<Song> for AlbumInfo {
             artist: song.get_album_artist(),
             cover: None,
             release_date: song.get_release_date(),
-            quality_grade: song.get_quality_grade()
+            quality_grade: song.get_quality_grade(),
+            mb_album_id: song.get_mb_album_id()
         }
     }
 }

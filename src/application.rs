@@ -21,12 +21,11 @@ use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
 use std::{
-    cell::RefCell,
     rc::Rc,
     fs::create_dir_all,
     path::PathBuf
 };
-use async_channel::{Sender, Receiver};
+use async_channel::Sender;
 
 use crate::{
     library::Library,
@@ -66,36 +65,27 @@ mod imp {
             println!("Cache path: {}", cache_path.to_str().unwrap());
             create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
-            // Set up channels for communication with client object
-            // Only one message at a time to client
-            let (
-                sender,
-                receiver
-            ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::unbounded();
+            // Create cache controller
+            let albumart = Rc::new(AlbumArtCache::new(&cache_path));
+
+            // Create client instance (not connected yet)
+            let client = MpdWrapper::new();
+            let client_sender = client.clone().get_sender();
+            let client_state = client.clone().get_client_state();
 
             // Create controllers
             // These two are GObjects (already refcounted by GLib)
             let player = Player::default();
             let library = Library::default();
-            let albumart = Rc::new(AlbumArtCache::new(&cache_path));
-            player.setup(sender.clone(), albumart.clone());
-            library.setup(sender.clone(), albumart.clone());
-
-            // Create client instance (not connected yet)
-            let client = MpdWrapper::new(
-                player.clone(),
-                library.clone(),
-                sender.clone(),
-                RefCell::new(Some(receiver)),
-                albumart.clone()
-            );
+            player.setup(client_sender.clone(), albumart.clone(), client_state.clone());
+            library.setup(client_sender.clone(), albumart.clone(), client_state);
 
             Self {
                 player,
                 library,
                 client,
                 albumart,
-                sender,
+                sender: client_sender,
                 cache_path
             }
         }

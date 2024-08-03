@@ -1,6 +1,6 @@
 extern crate mpd;
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, RefCell, OnceCell},
     rc::Rc,
     vec::Vec,
 };
@@ -8,7 +8,10 @@ use async_channel::Sender;
 use mpd::status::{State, Status, AudioFormat};
 use crate::{
     common::{Song, QualityGrade},
-    client::albumart::AlbumArtCache,
+    client::{
+        ClientState,
+        AlbumArtCache
+    },
     client::MpdMessage,
     utils::{prettify_audio_format, strip_filename_linux}
 };
@@ -16,6 +19,10 @@ use gtk::{
     glib,
     gio,
     prelude::*,
+};
+use glib::{
+    closure_local,
+    BoxedAnyObject
 };
 use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
@@ -49,8 +56,8 @@ mod imp {
         pub current_song: RefCell<Option<Song>>,
         pub queue: RefCell<gio::ListStore>,
         pub format: RefCell<Option<AudioFormat>>,
-        pub albumart: RefCell<Option<Rc<AlbumArtCache>>>,
-        pub sender: RefCell<Option<Sender<MpdMessage>>>
+        pub albumart: OnceCell<Rc<AlbumArtCache>>,
+        pub sender: OnceCell<Sender<MpdMessage>>
     }
 
     #[glib::object_subclass]
@@ -66,8 +73,8 @@ mod imp {
                 current_song: RefCell::new(None),
                 queue,
                 format: RefCell::new(None),
-                albumart: RefCell::new(None),
-                sender: RefCell::new(None)
+                albumart: OnceCell::new(),
+                sender: OnceCell::new()
             }
         }
     }
@@ -126,14 +133,37 @@ impl Default for Player {
 
 
 impl Player {
-    pub fn setup(&self, sender: Sender<MpdMessage>, albumart: Rc<AlbumArtCache>) {
-        self.imp().albumart.replace(Some(albumart));
-        self.imp().sender.replace(Some(sender));
+    pub fn setup(&self, sender: Sender<MpdMessage>, albumart: Rc<AlbumArtCache>, client_state: ClientState) {
+        let _ = self.imp().albumart.set(albumart);
+        let _ = self.imp().sender.set(sender);
+        // Connect to ClientState signals that announce completion of requests
+        client_state.connect_closure(
+            "status-changed",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, boxed: BoxedAnyObject| {
+                    this.update_status(&boxed.borrow());
+                }
+            )
+        );
+        client_state.connect_closure(
+            "queue-changed",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, boxed: BoxedAnyObject| {
+                    this.update_queue(boxed.borrow::<Vec<Song>>().as_ref());
+                }
+            )
+        );
     }
 
     // Utility functions
     fn send(&self, msg: MpdMessage) -> Result<(), &str> {
-        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+        if let Some(sender) = self.imp().sender.get() {
             let res = sender.send_blocking(msg);
             if res.is_err() {
                 return Err("Sender error");
@@ -255,25 +285,24 @@ impl Player {
         }
     }
 
-    pub fn update_queue(&self, new_queue: &mut [mpd::song::Song]) {
+    pub fn update_queue(&self, songs: &[Song]) {
         // TODO: use diffs instead of refreshing the whole queue
         let queue = self.imp().queue.borrow();
         queue.remove_all();
-        // Convert to our internal Song GObjects
-        let songs: Vec<Song> = new_queue
-                .iter_mut()
-                .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
-                .collect();
         // Ensure we have local copies of all the album arts.
         // This does not load them into memory yet. That only happens when QueueRow is displayed.
         // TODO: batch download requests
-        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
-            if let Some(sender) = self.imp().sender.borrow().as_ref() {
-                for song in &songs {
+        if let Some(albumart) = self.imp().albumart.get() {
+            if let Some(sender) = self.imp().sender.get() {
+                for song in songs {
                     let uri = &song.get_uri();
                     let folder_uri = strip_filename_linux(uri);
                     if !albumart.get_thumbnail_path_for(folder_uri).exists() {
-                        let _ = sender.send_blocking(MpdMessage::AlbumArt(folder_uri.to_owned()));
+                        let _ = sender.send_blocking(MpdMessage::AlbumArt(
+                            folder_uri.to_owned(),
+                            albumart.get_path_for(folder_uri),
+                            albumart.get_thumbnail_path_for(folder_uri)
+                        ));
                     }
                 }
             }
@@ -289,7 +318,7 @@ impl Player {
         // Songs whose album arts have already been downloaded will not need this fn.
         // Instead, their album arts are loaded on-demand from disk or cache by the queue view.
         // Iterate through the queue to see if we can load album art for any
-        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+        if let Some(albumart) = self.imp().albumart.get() {
             if let Some(tex) = albumart.get_for(folder_uri, true) {
                 for song in self.imp().queue.borrow().iter::<Song>().flatten() {
                     if song.get_thumbnail().is_none() && strip_filename_linux(&song.get_uri()) == folder_uri {
@@ -332,7 +361,7 @@ impl Player {
     pub fn album_art(&self) -> Option<Texture> {
         // Use high-resolution version
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
-            if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+            if let Some(albumart) = self.imp().albumart.get() {
                 let uri = song.get_uri();
                 let folder_uri = strip_filename_linux(&uri);
                 return albumart.get_for(folder_uri, false);

@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{OnceCell, RefCell},
     rc::Rc,
     vec::Vec,
     sync::OnceLock,
@@ -7,15 +7,27 @@ use std::{
 };
 use async_channel::Sender;
 use crate::{
-    common::{Album, AlbumInfo, Song},
-    client::{MpdMessage, AlbumArtCache}
+    client::{
+        AlbumArtCache,
+        ClientState,
+        MpdMessage
+    },
+    common::{
+        Album,
+        AlbumInfo,
+        Song
+    }
 };
 use gtk::{
     glib,
     gio,
     prelude::*,
 };
-use glib::subclass::Signal;
+use glib::{
+    clone,
+    closure_local,
+    subclass::Signal
+};
 
 use adw::subclass::prelude::*;
 
@@ -36,7 +48,7 @@ mod imp {
 
     #[derive(Debug)]
     pub struct Library {
-        pub sender: RefCell<Option<Sender<MpdMessage>>>,
+        pub sender: OnceCell<Sender<MpdMessage>>,
         // Each view gets their own list.
         //
         // Album retrieval routine:
@@ -50,7 +62,7 @@ mod imp {
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
         pub albums: RefCell<gio::ListStore>,
-        pub albumart: RefCell<Option<Rc<AlbumArtCache>>>,
+        pub albumart: OnceCell<Rc<AlbumArtCache>>,
     }
 
     #[glib::object_subclass]
@@ -61,9 +73,9 @@ mod imp {
         fn new() -> Self {
             let albums = RefCell::new(gio::ListStore::new::<Album>());
             Self {
-                sender: RefCell::new(None),
+                sender: OnceCell::new(),
                 albums,
-                albumart: RefCell::new(None)
+                albumart: OnceCell::new()
             }
         }
     }
@@ -111,9 +123,45 @@ impl Default for Library {
 
 
 impl Library {
-    pub fn setup(&self, sender: Sender<MpdMessage>, albumart: Rc<AlbumArtCache>) {
-        self.imp().albumart.replace(Some(albumart));
-        self.imp().sender.replace(Some(sender));
+    pub fn setup(&self, sender: Sender<MpdMessage>, albumart: Rc<AlbumArtCache>, client_state: ClientState) {
+        self.imp().albumart.set(albumart);
+        self.imp().sender.set(sender);
+        // Connect to ClientState signals that announce completion of requests
+        client_state.connect_closure(
+            "album-art-downloaded",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, folder_uri: String| {
+                    this.update_album_art(&folder_uri);
+                }
+            )
+        );
+
+        client_state.connect_closure(
+            "album-basic-info-downloaded",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, album: Album| {
+                    this.add_album(album);
+                }
+            )
+        );
+
+        client_state.connect_closure(
+            "album-content-downloaded",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, album: Album, songs: glib::BoxedAnyObject| {
+                    this.push_album_content_page(album, songs.borrow::<Vec<Song>>().as_ref());
+                }
+            )
+        );
     }
 
     pub fn albums(&self) -> gio::ListStore {
@@ -122,18 +170,21 @@ impl Library {
 
     pub fn on_album_clicked(&self, album: Album) {
         // Used by AlbumView
-        if let Some(sender) = self.imp().sender.borrow().as_ref() {
-            let _ = sender.send_blocking(MpdMessage::Album(album.get_info()));
+        if let Some(sender) = self.imp().sender.get() {
+            let _ = sender.send_blocking(MpdMessage::AlbumContent(album.get_info()));
         }
     }
 
-    pub fn add_album_info(&self, info: AlbumInfo) {
-        let album = Album::from(info);
+    pub fn add_album(&self, album: Album) {
         let folder_uri = album.get_uri();
-        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
-            if let Some(sender) = self.imp().sender.borrow().as_ref() {
+        if let Some(albumart) = self.imp().albumart.get() {
+            if let Some(sender) = self.imp().sender.get() {
                 if !albumart.get_path_for(&folder_uri).exists() {
-                    let _ = sender.send_blocking(MpdMessage::AlbumArt(folder_uri.to_owned()));
+                    let _ = sender.send_blocking(MpdMessage::AlbumArt(
+                        folder_uri.to_owned(),
+                        albumart.get_path_for(&folder_uri),
+                        albumart.get_thumbnail_path_for(&folder_uri)
+                    ));
                 }
             }
         }
@@ -142,14 +193,13 @@ impl Library {
         );
     }
 
-    pub fn push_album_content_page(&self, info: AlbumInfo, songs: Vec<Song>) {
+    pub fn push_album_content_page(&self, album: Album, songs: &[Song]) {
         let song_list = gio::ListStore::new::<Song>();
-        song_list.extend_from_slice(&songs);
+        song_list.extend_from_slice(songs);
         self.emit_by_name::<()>(
             "album-clicked",
             &[
-                // Need to wrap info in an Album GObject again to pass along signal
-                &Album::from(info),
+                &album,
                 &song_list
             ]
         );
@@ -162,7 +212,7 @@ impl Library {
         // Albums whose covers have already been downloaded will not need this fn.
         // Instead, they are loaded on-demand from disk or cache by the grid view.
         // Iterate through the list store to see if we can load album art for any
-        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+        if let Some(albumart) = self.imp().albumart.get() {
             println!("Updating album art for {}", folder_uri);
             if let Some(tex) = albumart.get_for(folder_uri, false) {
                 for album in self.imp().albums.borrow().iter::<Album>().flatten() {
@@ -175,7 +225,7 @@ impl Library {
     }
 
     pub fn queue_album(&self, album: Album, replace: bool, play: bool) {
-        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+        if let Some(sender) = self.imp().sender.get() {
             if replace {
                 let _ = sender.send_blocking(MpdMessage::Clear);
             }
@@ -189,7 +239,7 @@ impl Library {
     }
 
     pub fn queue_uri(&self, uri: &str, replace: bool, play: bool) {
-        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+        if let Some(sender) = self.imp().sender.get() {
             if replace {
                 let _ = sender.send_blocking(MpdMessage::Clear);
             }

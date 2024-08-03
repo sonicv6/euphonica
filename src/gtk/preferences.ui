@@ -12,7 +12,7 @@
 				<property name="icon-name">server-pick-symbolic</property>
 				<child>
 					<object class="AdwPreferencesGroup">
-						<property name="title" translatable="true">Connection</property>
+						<property name="title" translatable="true">Music Player Daemon</property>
 						<property name="description" translatable="true">Change how Euphonia connects to your Music Player Daemon instance. Click Apply to save these settings and initiate a new connection.</property>
 						<property name="header-suffix">
 							<object class="GtkButton" id="reconnect">
@@ -32,6 +32,23 @@
 						<child>
 							<object class="AdwEntryRow" id="mpd_port">
 								<property name="title" translatable="true">Port</property>
+							</object>
+						</child>
+					</object>
+				</child>
+				<child>
+					<object class="AdwPreferencesGroup">
+						<property name="title" translatable="true">Last.fm</property>
+						<property name="description" translatable="true">You can optionally connect to Last.fm to fetch additional information, such as album descriptions, artist bios, etc.</property>
+						<child>
+							<object class="AdwSwitchRow" id="use_lastfm">
+								<property name="title" translatable="true">Use Last.fm</property>
+							</object>
+						</child>
+						<child>
+							<object class="AdwEntryRow" id="lastfm_key">
+								<property name="title" translatable="true">API key</property>
+								<property name="sensitive">false</property>
 							</object>
 						</child>
 					</object>
