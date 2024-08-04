@@ -136,11 +136,11 @@ impl EuphoniaWindow {
         win.restore_window_state();
         win.imp().queue_view.setup(
             app.get_player(),
-            app.get_album_art_cache()
+            app.get_cache()
         );
         win.imp().album_view.setup(
             app.get_library(),
-            app.get_album_art_cache()
+            app.get_cache()
         );
         win.imp().sidebar.setup(
             win.imp().stack.clone()

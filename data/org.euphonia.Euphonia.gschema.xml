@@ -39,6 +39,9 @@
 			</description>
 			<default>15</default>
 		</key>
+		<key name="mpd-download-album-art" type="b">
+			<default>true</default>
+		</key>
 
 		<key name="use-lastfm" type="b">
 			<default>false</default>
@@ -46,8 +49,8 @@
 		<key name="lastfm-api-key" type="s">
 			<default>''</default>
 		</key>
-		<key name="lastfm-username" type="s">
-			<default>'Euphonia'</default>
+		<key name="lastfm-user-agent" type="s">
+			<default>'Euphonia Dev (MPD client)'</default>
 		</key>
 	</schema>
 

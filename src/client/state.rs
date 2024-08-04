@@ -89,7 +89,12 @@ mod imp {
             SIGNALS.get_or_init(|| {
                 vec![
                     Signal::builder("album-art-downloaded")
-                        .param_types([String::static_type()])
+                        .param_types([
+                            String::static_type(),  // folder URI
+                        ])
+                        .build(),
+                    Signal::builder("outputs-changed")
+                        .param_types([BoxedAnyObject::static_type()])  // Vec<mpd::output::Output>
                         .build(),
                     // Enough information about this album has been downloaded to display it
                     // as a thumbnail in the album view

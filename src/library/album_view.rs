@@ -26,7 +26,7 @@ use super::{
 };
 use crate::{
     common::Album,
-    client::albumart::AlbumArtCache,
+    cache::Cache,
     utils::{settings_manager, g_cmp_str_options, g_cmp_options, g_search_substr}
 };
 
@@ -125,10 +125,10 @@ impl AlbumView {
         res
     }
 
-    pub fn setup(&self, library: Library, albumart: Rc<AlbumArtCache>) {
+    pub fn setup(&self, library: Library, cache: Rc<Cache>) {
         self.setup_sort();
         self.setup_search();
-        self.setup_gridview(library.clone(), albumart);
+        self.setup_gridview(library.clone(), cache);
 
         let content_view = self.imp().content_view.get();
         content_view.setup(library.clone());
@@ -414,7 +414,7 @@ impl AlbumView {
         );
     }
 
-    fn setup_gridview(&self, library: Library, albumart: Rc<AlbumArtCache>) {
+    fn setup_gridview(&self, library: Library, cache: Rc<Cache>) {
         // Setup search bar
         let search_bar = self.imp().search_bar.get();
         let search_entry = self.imp().search_entry.get();
@@ -450,12 +450,9 @@ impl AlbumView {
                 .expect("Needs to be ListItem")
                 .set_child(Some(&album_cell));
         });
+
         // Tell factory how to bind `AlbumCell` to one of our Album GObjects
-        factory.connect_bind(
-            clone!(
-                #[weak]
-                albumart,
-                move |_, list_item| {
+        factory.connect_bind(move |_, list_item| {
             // Get `Song` from `ListItem` (that is, the data side)
             let item: Album = list_item
                 .downcast_ref::<ListItem>()
@@ -471,7 +468,7 @@ impl AlbumView {
             // controller upon receiving queue updates.
             // Note 2: Album GObjects contain folder-level URIs, so there is no need to strip filename.
             if item.get_cover().is_none() {
-                if let Some(tex) = albumart.get_for(&item.get_uri(), false) {
+                if let Some(tex) = cache.load_local_album_art(&item.get_uri(), false) {
                     item.set_cover(Some(tex));
                 }
             }
@@ -486,7 +483,7 @@ impl AlbumView {
 
             // Within this binding fn is where the cached album art texture gets used.
             child.bind(&item);
-        }));
+        });
 
 
         // When cell goes out of sight, unbind from item to allow reuse with another.

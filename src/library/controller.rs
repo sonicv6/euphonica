@@ -8,9 +8,12 @@ use std::{
 use async_channel::Sender;
 use crate::{
     client::{
-        AlbumArtCache,
         ClientState,
         MpdMessage
+    },
+    cache::{
+        CacheState,
+        Cache
     },
     common::{
         Album,
@@ -62,7 +65,7 @@ mod imp {
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
         pub albums: RefCell<gio::ListStore>,
-        pub albumart: OnceCell<Rc<AlbumArtCache>>,
+        pub cache: OnceCell<Rc<Cache>>,
     }
 
     #[glib::object_subclass]
@@ -75,7 +78,7 @@ mod imp {
             Self {
                 sender: OnceCell::new(),
                 albums,
-                albumart: OnceCell::new()
+                cache: OnceCell::new()
             }
         }
     }
@@ -121,19 +124,19 @@ impl Default for Library {
     }
 }
 
-
 impl Library {
-    pub fn setup(&self, sender: Sender<MpdMessage>, albumart: Rc<AlbumArtCache>, client_state: ClientState) {
-        self.imp().albumart.set(albumart);
+    pub fn setup(&self, sender: Sender<MpdMessage>, client_state: ClientState, cache: Rc<Cache>) {
+        let cache_state: CacheState = cache.clone().get_cache_state();
+        self.imp().cache.set(cache);
         self.imp().sender.set(sender);
         // Connect to ClientState signals that announce completion of requests
-        client_state.connect_closure(
+        cache_state.connect_closure(
             "album-art-downloaded",
             false,
             closure_local!(
                 #[strong(rename_to = this)]
                 self,
-                move |_: ClientState, folder_uri: String| {
+                move |_: CacheState, folder_uri: String| {
                     this.update_album_art(&folder_uri);
                 }
             )
@@ -177,16 +180,9 @@ impl Library {
 
     pub fn add_album(&self, album: Album) {
         let folder_uri = album.get_uri();
-        if let Some(albumart) = self.imp().albumart.get() {
-            if let Some(sender) = self.imp().sender.get() {
-                if !albumart.get_path_for(&folder_uri).exists() {
-                    let _ = sender.send_blocking(MpdMessage::AlbumArt(
-                        folder_uri.to_owned(),
-                        albumart.get_path_for(&folder_uri),
-                        albumart.get_thumbnail_path_for(&folder_uri)
-                    ));
-                }
-            }
+        if let Some(cache) = self.imp().cache.get() {
+            // Might queue a download but won't load anything into memory just yet.
+            cache.ensure_local_album_art(&folder_uri);
         }
         self.imp().albums.borrow().append(
             &album
@@ -212,9 +208,9 @@ impl Library {
         // Albums whose covers have already been downloaded will not need this fn.
         // Instead, they are loaded on-demand from disk or cache by the grid view.
         // Iterate through the list store to see if we can load album art for any
-        if let Some(albumart) = self.imp().albumart.get() {
+        if let Some(cache) = self.imp().cache.get() {
             println!("Updating album art for {}", folder_uri);
-            if let Some(tex) = albumart.get_for(folder_uri, false) {
+            if let Some(tex) = cache.load_local_album_art(folder_uri, false) {
                 for album in self.imp().albums.borrow().iter::<Album>().flatten() {
                     if album.get_cover().is_none() && album.get_uri() == folder_uri {
                         album.set_cover(Some(tex.clone()));

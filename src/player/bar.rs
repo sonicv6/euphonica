@@ -6,9 +6,7 @@ use gtk::{
     subclass::prelude::*,
     CompositeTemplate,
 };
-use glib::{
-    clone,
-};
+use glib::clone;
 use async_channel::Sender;
 
 use crate::{
@@ -309,7 +307,7 @@ impl PlayerBar {
             .sync_create()
             .build();
 
-        self.update_album_art(player.album_art().as_ref());
+        self.update_album_art(player.current_song_album_art().as_ref());
         player.connect_notify_local(
             Some("album-art"),
             clone!(
@@ -318,7 +316,7 @@ impl PlayerBar {
                 #[weak]
                 player,
                 move |_, _| {
-                    this.update_album_art(player.album_art().as_ref());
+                    this.update_album_art(player.current_song_album_art().as_ref());
                 }
             )
         );

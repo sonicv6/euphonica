@@ -75,11 +75,13 @@ pub enum MpdMessage {
     Next,
 	Status,
 	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
-	AlbumArt(String, PathBuf, PathBuf), // Download album art to the specified paths (hi-res and thumbnail)
     FindAdd(Query<'static>),
 	Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
     AlbumContent(AlbumInfo), // Get list of songs in album with given tag name
+
+    // Reserved for cache controller
+    AlbumArt(String, PathBuf, PathBuf), // Download album art to the specified paths (hi-res and thumbnail)
 
 	// Reserved for child thread
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
@@ -287,7 +289,7 @@ impl MpdWrapper {
         // Set up a listener to the receiver we got from Application.
         // This will be the loop that handles user interaction and idle updates.
         glib::MainContext::default().spawn_local(clone!(
-            #[strong(rename_to = this)]
+            #[weak(rename_to = this)]
             self,
             async move {
             use futures::prelude::*;
@@ -304,7 +306,7 @@ impl MpdWrapper {
         let conn = utils::settings_manager().child("client");
         let ping_interval = conn.uint("mpd-ping-interval-s");
         glib::MainContext::default().spawn_local(clone!(
-            #[strong(rename_to = this)]
+            #[weak(rename_to = this)]
             self,
             async move {
             loop {
@@ -382,6 +384,9 @@ impl MpdWrapper {
                     // specifically what changed
                     self.get_current_queue();
                 }
+                Subsystem::Output => {
+                    self.get_outputs();
+                }
                 // Else just skip. More features to come.
                 _ => {}
             }
@@ -406,6 +411,7 @@ impl MpdWrapper {
 
     fn init_state(&self) {
         self.queue_task(BackgroundTask::FetchAlbums);
+        self.get_outputs();
         // Get queue first so we can look for current song in it later
         self.get_current_queue();
         self.get_status();
@@ -470,6 +476,20 @@ impl MpdWrapper {
             // TODO: handle error
         }
     }
+
+    pub fn get_outputs(&self) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if let Ok(outputs) = client.outputs() {
+                // Let each state update their respective properties
+                self.state.emit_boxed_result("outputs-changed", outputs);
+            }
+            // TODO: handle error
+        }
+        else {
+            // TODO: handle error
+        }
+    }
+
     pub fn pause(self: Rc<Self>, is_pause: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle

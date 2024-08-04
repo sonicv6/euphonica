@@ -30,7 +30,8 @@ use async_channel::Sender;
 use crate::{
     library::Library,
     player::Player,
-    client::{MpdWrapper, MpdMessage, AlbumArtCache},
+    client::{MpdWrapper, MpdMessage},
+    cache::Cache,
     config::VERSION,
     preferences::Preferences,
     EuphoniaWindow
@@ -45,7 +46,7 @@ mod imp {
     pub struct EuphoniaApplication {
         pub player: Player,
         pub library: Library,
-        pub albumart: Rc<AlbumArtCache>,
+        pub cache: Rc<Cache>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
     	pub client: Rc<MpdWrapper>,
@@ -65,26 +66,26 @@ mod imp {
             println!("Cache path: {}", cache_path.to_str().unwrap());
             create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
-            // Create cache controller
-            let albumart = Rc::new(AlbumArtCache::new(&cache_path));
-
             // Create client instance (not connected yet)
             let client = MpdWrapper::new();
             let client_sender = client.clone().get_sender();
             let client_state = client.clone().get_client_state();
 
+            // Create cache controller
+            let cache = Cache::new(&cache_path, client_sender.clone(), client_state.clone());
+
             // Create controllers
             // These two are GObjects (already refcounted by GLib)
             let player = Player::default();
             let library = Library::default();
-            player.setup(client_sender.clone(), albumart.clone(), client_state.clone());
-            library.setup(client_sender.clone(), albumart.clone(), client_state);
+            player.setup(client_sender.clone(), client_state.clone(), cache.clone());
+            library.setup(client_sender.clone(), client_state, cache.clone());
 
             Self {
                 player,
                 library,
                 client,
-                albumart,
+                cache,
                 sender: client_sender,
                 cache_path
             }
@@ -150,8 +151,8 @@ impl EuphoniaApplication {
         self.imp().library.clone()
     }
 
-    pub fn get_album_art_cache(&self) -> Rc<AlbumArtCache> {
-        self.imp().albumart.clone()
+    pub fn get_cache(&self) -> Rc<Cache> {
+        self.imp().cache.clone()
     }
 
     pub fn get_client(&self) -> Rc<MpdWrapper> {

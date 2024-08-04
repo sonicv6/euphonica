@@ -51,6 +51,12 @@
 								<property name="sensitive">false</property>
 							</object>
 						</child>
+						<child>
+							<object class="AdwEntryRow" id="lastfm_user_agent">
+								<property name="title" translatable="true">User agent string</property>
+								<property name="sensitive">false</property>
+							</object>
+						</child>
 					</object>
 				</child>
 			</object>

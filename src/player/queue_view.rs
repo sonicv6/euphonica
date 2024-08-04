@@ -1,6 +1,4 @@
-use std::{
-    rc::Rc
-};
+use std::rc::Rc;
 
 
 use adw::subclass::prelude::*;
@@ -15,12 +13,10 @@ use gtk::{
     ListItem,
 };
 use gdk::Texture;
-use glib::{
-    clone
-};
+use glib::clone;
 
 use crate::{
-    client::albumart::AlbumArtCache,
+    cache::Cache,
     utils::strip_filename_linux,
     common::Song
 };
@@ -104,7 +100,7 @@ impl QueueView {
         Self::default()
     }
 
-    pub fn setup_listview(&self, player: Player, albumart: Rc<AlbumArtCache>) {
+    pub fn setup_listview(&self, player: Player, cache: Rc<Cache>) {
         // Enable/disable clear queue button depending on whether the queue is empty or not
         // Set selection mode
         // TODO: Allow click to jump to song
@@ -138,7 +134,7 @@ impl QueueView {
             // Note that this does not trigger any downloading. That's done by the Player
             // controller upon receiving queue updates.
             if item.get_thumbnail().is_none() {
-                if let Some(tex) = albumart.get_for(strip_filename_linux(&item.get_uri()), true) {
+                if let Some(tex) = cache.load_local_album_art(strip_filename_linux(&item.get_uri()), true) {
                     item.set_thumbnail(Some(tex));
                 }
             }
@@ -247,7 +243,7 @@ impl QueueView {
             .sync_create()
             .build();
 
-        self.update_album_art(player.album_art().as_ref());
+        self.update_album_art(player.current_song_album_art().as_ref());
         player.connect_notify_local(
             Some("album-art"),
             clone!(
@@ -256,7 +252,7 @@ impl QueueView {
                 #[weak]
                 player,
                 move |_, _| {
-                    this.update_album_art(player.album_art().as_ref());
+                    this.update_album_art(player.current_song_album_art().as_ref());
                 }
             )
         );
@@ -278,8 +274,8 @@ impl QueueView {
         }));
     }
 
-    pub fn setup(&self, player: Player, albumart: Rc<AlbumArtCache>) {
-        self.setup_listview(player.clone(), albumart);
+    pub fn setup(&self, player: Player, cache: Rc<Cache>) {
+        self.setup_listview(player.clone(), cache);
         self.bind_state(player);
     }
 }

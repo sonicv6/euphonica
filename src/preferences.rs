@@ -26,11 +26,15 @@ mod imp {
         pub mpd_port: TemplateChild<adw::EntryRow>,
         #[template_child]
         pub reconnect: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub mpd_download_album_art: TemplateChild<adw::SwitchRow>,
 
         #[template_child]
         pub use_lastfm: TemplateChild<adw::SwitchRow>,
         #[template_child]
         pub lastfm_key: TemplateChild<adw::EntryRow>,
+        #[template_child]
+        pub lastfm_user_agent: TemplateChild<adw::EntryRow>,
         // #[template_child]
         // pub lastfm_username: TemplateChild<adw::EntryRow>,
 
@@ -175,8 +179,9 @@ impl Preferences {
         // Set up Last.fm settings
         let use_lastfm = imp.use_lastfm.get();
         let lastfm_key = imp.lastfm_key.get();
+        let lastfm_user_agent = imp.lastfm_user_agent.get();
         // let lastfm_username = imp.lastfm_username.get();
-        for widget in [&lastfm_key] {
+        for widget in [&lastfm_key, &lastfm_user_agent] {
             use_lastfm
                 .bind_property(
                     "active",
@@ -191,6 +196,14 @@ impl Preferences {
             .bind(
                 "lastfm-api-key",
                 &lastfm_key,
+                "text"
+            )
+            .build();
+
+        conn_settings
+            .bind(
+                "lastfm-user-agent",
+                &lastfm_user_agent,
                 "text"
             )
             .build();
