@@ -3,6 +3,7 @@ use std::{
     cell::{Cell, RefCell, OnceCell},
     rc::Rc,
     vec::Vec,
+    sync::OnceLock
 };
 use async_channel::Sender;
 use mpd::status::{State, Status, AudioFormat};
@@ -22,10 +23,12 @@ use gtk::{
 };
 use glib::{
     closure_local,
-    BoxedAnyObject
+    BoxedAnyObject,
+    subclass::Signal
 };
 use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
+use mpd::output::Output;
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "EuphoniaPlaybackState")]
@@ -49,7 +52,6 @@ mod imp {
     use once_cell::sync::Lazy;
     use super::*;
 
-    #[derive(Debug)]
     pub struct Player {
         pub state: Cell<PlaybackState>,
         pub position: Cell<f64>,
@@ -122,6 +124,17 @@ mod imp {
                 _ => unimplemented!(),
             }
         }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("outputs-changed")
+                        .param_types([BoxedAnyObject::static_type()])
+                        .build()
+                ]
+            })
+        }
     }
 }
 
@@ -166,6 +179,18 @@ impl Player {
                 self,
                 move |_: ClientState, boxed: BoxedAnyObject| {
                     this.update_queue(boxed.borrow::<Vec<Song>>().as_ref());
+                }
+            )
+        );
+        client_state.connect_closure(
+            "outputs-changed",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, boxed: BoxedAnyObject| {
+                    // Forward to bar
+                    this.update_outputs(boxed);
                 }
             )
         );
@@ -308,7 +333,6 @@ impl Player {
 
     pub fn update_queue(&self, songs: &[Song]) {
         // TODO: use diffs instead of refreshing the whole queue
-        println!("UPDATING QUEUE");
         let queue = self.imp().queue.borrow();
         queue.remove_all();
         if let Some(cache) = self.imp().cache.get() {
@@ -320,8 +344,18 @@ impl Player {
                 cache.ensure_local_album_art(folder_uri);
             }
         }
-        queue.extend_from_slice(&songs);
+        queue.extend_from_slice(songs);
         // Downstream widgets should now receive an item-changed signal.
+    }
+
+    fn update_outputs(&self, outputs: BoxedAnyObject) {
+        self.emit_by_name::<()>("outputs-changed", &[&outputs]);
+    }
+
+    pub fn set_output(&self, id: u32, state: bool) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            sender.send_blocking(MpdMessage::Output(id, state));
+        }
     }
 
     fn update_queue_album_arts(&self, folder_uri: &str) {

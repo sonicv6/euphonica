@@ -65,6 +65,7 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
 pub enum MpdMessage {
     Connect, // Host and port are always read from gsettings
     Update, // Update DB
+    Output(u32, bool), // Set output state. Specify target ID and state to set to.
 	Play,
     Pause,
     Add(String), // Add by URI
@@ -333,6 +334,7 @@ impl MpdWrapper {
         match request {
             MpdMessage::Connect => self.connect().await,
             MpdMessage::Update => self.queue_task(BackgroundTask::Update),
+            MpdMessage::Output(id, state) => self.set_output(id, state),
             MpdMessage::Status => self.get_status(),
             MpdMessage::Add(uri) => self.add(uri.as_ref()),
             MpdMessage::Play => self.pause(false),
@@ -341,7 +343,6 @@ impl MpdWrapper {
             MpdMessage::Pause => self.pause(true),
             MpdMessage::Prev => self.prev(),
             MpdMessage::Next => self.next(),
-
             MpdMessage::Clear => self.clear_queue(),
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
@@ -464,24 +465,25 @@ impl MpdWrapper {
         }
     }
 
+    fn get_outputs(&self) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if let Ok(outputs) = client.outputs() {
+                self.state.emit_boxed_result("outputs-changed", outputs);
+            }
+        }
+    }
+
+    fn set_output(&self, id: u32, state: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            client.output(id, state);
+        }
+    }
+
     pub fn get_status(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
                 // Let each state update their respective properties
                 self.state.emit_boxed_result("status-changed", status);
-            }
-            // TODO: handle error
-        }
-        else {
-            // TODO: handle error
-        }
-    }
-
-    pub fn get_outputs(&self) {
-        if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(outputs) = client.outputs() {
-                // Let each state update their respective properties
-                self.state.emit_boxed_result("outputs-changed", outputs);
             }
             // TODO: handle error
         }

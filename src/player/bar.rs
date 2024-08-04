@@ -6,8 +6,13 @@ use gtk::{
     subclass::prelude::*,
     CompositeTemplate,
 };
-use glib::clone;
+use glib::{
+    clone,
+    closure_local,
+    BoxedAnyObject
+};
 use async_channel::Sender;
+use mpd::output::Output;
 
 use crate::{
     utils::format_secs_as_duration,
@@ -16,7 +21,7 @@ use crate::{
     common::QualityGrade
 };
 
-use super::{PlaybackState, VolumeKnob};
+use super::{PlaybackState, VolumeKnob, MpdOutput};
 
 mod imp {
     use super::*;
@@ -58,10 +63,22 @@ mod imp {
         #[template_child]
         pub duration: TemplateChild<gtk::Label>,
 
-        // TODO: Right side: output info
+        // Right side: output info & volume control
+        #[template_child]
+        pub output_section: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub output_stack: TemplateChild<gtk::Stack>,
+        #[template_child]
+        pub prev_output: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub next_output: TemplateChild<gtk::Button>,
         #[template_child]
         pub vol_knob: TemplateChild<VolumeKnob>,
 
+        pub output_widgets: RefCell<Vec<MpdOutput>>,
+        // Index of visible child in output_widgets
+        pub current_output: Cell<usize>,
+        pub output_count: Cell<usize>,
         // Handle to seekbar polling task
         pub seekbar_poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
         // Temporary place for seekbar position before sending seekcur
@@ -275,6 +292,17 @@ impl PlayerBar {
                 }
             ),
         );
+        player.connect_closure(
+            "outputs-changed",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |player: Player, outputs: BoxedAnyObject| {
+                    this.update_outputs(player, outputs.borrow::<Vec<Output>>().as_ref());
+                }
+            )
+        );
 
         let elapsed = imp.elapsed.get();
         player
@@ -348,6 +376,26 @@ impl PlayerBar {
                 }
             )
         );
+
+        self.imp().prev_output.connect_clicked(
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_| {
+                    this.prev_output();
+                }
+            )
+        );
+
+        self.imp().next_output.connect_clicked(
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_| {
+                    this.next_output();
+                }
+            )
+        );
     }
 
     fn update_album_art(&self, tex: Option<&Texture>) {
@@ -360,6 +408,79 @@ impl PlayerBar {
                 Some("/org/euphonia/Euphonia/albumart-placeholder.png")
             );
         }
+    }
+
+    fn update_outputs(&self, player: Player, outputs: &[Output]) {
+        let section = self.imp().output_section.get();
+        let stack = self.imp().output_stack.get();
+        let old_widgets = self.imp().output_widgets.replace(Vec::with_capacity(0));
+        // Clear stack
+        for widget in old_widgets {
+            stack.remove(&widget);
+        }
+        if outputs.is_empty() {
+            section.set_visible(false);
+            let _ = self.imp().output_count.replace(0);
+        }
+        else {
+            section.set_visible(true);
+            // Handle buttons
+            if outputs.len() > 1 {
+                self.imp().prev_output.set_visible(true);
+                self.imp().next_output.set_visible(true);
+            }
+            else {
+                self.imp().prev_output.set_visible(false);
+                self.imp().next_output.set_visible(false);
+            }
+            let new_widgets: Vec<MpdOutput> = outputs.iter().map(|v| {
+                MpdOutput::from_output(v, player.clone())
+            }).collect();
+            // Add new ones
+            for widget in &new_widgets {
+                stack.add_child(widget);
+            }
+            let _ = self.imp().output_count.replace(new_widgets.len());
+            let _ = self.imp().output_widgets.replace(new_widgets);
+            // Call this once to update button sensitivities & visible child
+            self.set_visible_output(self.imp().current_output.get() as i32);
+        }
+    }
+
+    fn set_visible_output(&self, new_idx: i32) {
+        if self.imp().output_count.get() > 0 {
+            let max = self.imp().output_count.get() - 1;
+            if new_idx as usize >= max {
+                let _ = self.imp().current_output.replace(max);
+                self.imp().next_output.set_sensitive(false);
+                self.imp().prev_output.set_sensitive(true);
+            }
+            else if new_idx <= 0 {
+                let _ = self.imp().current_output.replace(0);
+                self.imp().next_output.set_sensitive(true);
+                self.imp().prev_output.set_sensitive(false);
+            }
+            else {
+                let _ = self.imp().current_output.replace(new_idx as usize);
+                self.imp().next_output.set_sensitive(true);
+                self.imp().prev_output.set_sensitive(true);
+            }
+
+            // Update stack
+            self.imp().output_stack.set_visible_child(
+                &self.imp().output_widgets.borrow()[
+                    self.imp().current_output.get()
+                ]
+            );
+        }
+    }
+
+    fn next_output(&self) {
+        self.set_visible_output(self.imp().current_output.get() as i32 + 1);
+    }
+
+    fn prev_output(&self) {
+        self.set_visible_output(self.imp().current_output.get() as i32 - 1);
     }
 
     fn setup_seekbar(&self, player: Player,  sender: Sender<MpdMessage>) {
