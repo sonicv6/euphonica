@@ -99,7 +99,11 @@ pub struct SongInfo {
     // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
     is_playing: Cell<bool>,
     thumbnail: Option<Texture>,
-    quality_grade: QualityGrade
+    quality_grade: QualityGrade,
+    // MusicBrainz stuff
+    mb_track_id: Option<String>,
+    mb_artist_ids: Vec<String>,
+    mb_album_id: Option<String>,
 }
 
 impl SongInfo {
@@ -123,7 +127,10 @@ impl Default for SongInfo {
             release_date: None,
             is_playing: Cell::new(false),
             thumbnail: None,
-            quality_grade: QualityGrade::Unknown
+            quality_grade: QualityGrade::Unknown,
+            mb_track_id: None,
+            mb_artist_ids: Vec::new(),
+            mb_album_id: None,
         }
     }
 }
@@ -137,7 +144,8 @@ mod imp {
         ParamSpecInt64,
         ParamSpecBoolean,
         ParamSpecString,
-        ParamSpecObject
+        ParamSpecObject,
+        ParamSpecVariant
     };
     use once_cell::sync::Lazy;
     use super::*;
@@ -176,6 +184,10 @@ mod imp {
                     ParamSpecInt64::builder("disc").build(),
                     ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").build(),  // boxes Option<time::Date>
                     ParamSpecString::builder("quality-grade").read_only().build(),
+                    ParamSpecString::builder("mb-track-id").read_only().build(),
+                    ParamSpecString::builder("mb-album-id").read_only().build(),
+                    // TODO: Find a way other than concatenating these
+                    ParamSpecString::builder("mb-artist-ids").read_only().build(),  // comma-separated
                     // ParamSpecString::builder("release_date").build(),
                     ParamSpecBoolean::builder("is-playing").build(),
                     ParamSpecObject::builder::<Texture>("thumbnail")
@@ -188,6 +200,7 @@ mod imp {
 
         fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
             let obj = self.obj();
+            let name = pspec.name();
             match pspec.name() {
                 "uri" => obj.get_uri().to_value(),
                 "name" => obj.get_name().to_value(),
@@ -199,7 +212,10 @@ mod imp {
                 "is-queued" => obj.is_queued().to_value(),
                 "album" => obj.get_album().to_value(),
                 "track" => obj.get_track().to_value(),
-                "disc" => obj.get_track().to_value(),
+                "disc" => obj.get_disc().to_value(),
+                "mb-track-id" => obj.get_mb_track_id().to_value(),
+                "mb-album-id" => obj.get_mb_album_id().to_value(),
+                "mb-artist-ids" => obj.get_mb_artist_ids().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
                 "is-playing" => obj.is_playing().to_value(),
@@ -339,6 +355,22 @@ impl Song {
     pub fn get_release_date(&self) -> Option<Date> {
         self.imp().info.borrow().release_date
     }
+
+    pub fn get_mb_track_id(&self) -> Option<String> {
+        self.imp().info.borrow().mb_track_id.clone()
+    }
+
+    pub fn get_mb_album_id(&self) -> Option<String> {
+        self.imp().info.borrow().mb_album_id.clone()
+    }
+
+    pub fn get_mb_artist_ids(&self) -> Vec<String> {
+        self.imp().info.borrow().mb_artist_ids.clone()
+    }
+
+    pub fn get_mb_artist_id_list(&self) -> String {
+        self.imp().info.borrow().mb_artist_ids.join(",")
+    }
 }
 
 impl Default for Song {
@@ -362,6 +394,9 @@ impl From<mpd::song::Song> for SongInfo {
             release_date: None,
             is_playing: Cell::new(false),
             thumbnail: None,
+            mb_track_id: None,
+            mb_album_id: None,
+            mb_artist_ids: Vec::new(),
             quality_grade: QualityGrade::Unknown
         };
         if let Some(place) = song.place {
@@ -382,11 +417,11 @@ impl From<mpd::song::Song> for SongInfo {
             }
         }
         for (tag, val) in song.tags.into_iter() {
-            match tag.as_str() {
-                "Album" => {let _ = res.album.replace(val);},
-                "AlbumArtist" => {let _ = res.album_artist.replace(val);},
+            match tag.to_lowercase().as_str() {
+                "album" => {let _ = res.album.replace(val);},
+                "albumartist" => {let _ = res.album_artist.replace(val);},
                 // "date" => res.imp().release_date.replace(Some(val.clone())),
-                "Format" => {
+                "format" => {
                     if let Some(extension) = maybe_extension {
                         if let Ok(format) = val.parse::<AudioFormat>() {
                             if ["flac", "alac", "wv", "ape"].contains(&extension) {
@@ -404,18 +439,29 @@ impl From<mpd::song::Song> for SongInfo {
                         }
                     }
                 },
-                "OriginalDate" => {
+                "originaldate" => {
                     res.release_date = parse_date(val.as_ref());
                 },
-                "Track" => {
+                "track" => {
                     if let Ok(idx) = val.parse::<i64>() {
                         let _ = res.track.replace(idx);
                     }
                 }
-                "Disc" => {
+                "disc" => {
                     if let Ok(idx) = val.parse::<i64>() {
                         let _ = res.disc.replace(idx);
                     }
+                }
+                // Beets use uppercase version
+                "musicbrainz_trackid" => {
+                    res.mb_track_id.replace(val);
+                }
+                "musicbrainz_albumid" => {
+                    res.mb_album_id.replace(val);
+                }
+                "musicbrainz_artistid" => {
+                    // Can encounter this multiple times
+                    res.mb_artist_ids.push(val);
                 }
                 _ => {}
             }

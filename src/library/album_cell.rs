@@ -20,7 +20,7 @@ use crate::{
         Album,
         QualityGrade
     },
-    client::ALBUMART_PLACEHOLDER
+    cache::placeholders::ALBUMART_PLACEHOLDER
 };
 
 fn maybe_get_cover(album: &Album) -> Option<Texture> {

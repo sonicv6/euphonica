@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use async_channel::Sender;
 
 use adw::subclass::prelude::*;
@@ -27,6 +26,18 @@ mod imp {
         pub mpd_port: TemplateChild<adw::EntryRow>,
         #[template_child]
         pub reconnect: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub mpd_download_album_art: TemplateChild<adw::SwitchRow>,
+
+        #[template_child]
+        pub use_lastfm: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub lastfm_key: TemplateChild<adw::EntryRow>,
+        #[template_child]
+        pub lastfm_user_agent: TemplateChild<adw::EntryRow>,
+        // #[template_child]
+        // pub lastfm_username: TemplateChild<adw::EntryRow>,
+
         #[template_child]
         pub sort_nulls_first: TemplateChild<adw::SwitchRow>,
         #[template_child]
@@ -77,7 +88,7 @@ impl Default for Preferences {
 }
 
 impl Preferences {
-    pub fn new(sender: Sender<MpdMessage>, client_state: Rc<ClientState>) -> Self {
+    pub fn new(sender: Sender<MpdMessage>, client_state: ClientState) -> Self {
         let res = Self::default();
         let imp = res.imp();
         // Populate with current gsettings values
@@ -164,6 +175,38 @@ impl Preferences {
                 let _ = sender.send_blocking(MpdMessage::Connect);
             }
         ));
+
+        // Set up Last.fm settings
+        let use_lastfm = imp.use_lastfm.get();
+        let lastfm_key = imp.lastfm_key.get();
+        let lastfm_user_agent = imp.lastfm_user_agent.get();
+        // let lastfm_username = imp.lastfm_username.get();
+        for widget in [&lastfm_key, &lastfm_user_agent] {
+            use_lastfm
+                .bind_property(
+                    "active",
+                    widget,
+                    "sensitive"
+                )
+                .sync_create()
+                .build();
+        }
+
+        conn_settings
+            .bind(
+                "lastfm-api-key",
+                &lastfm_key,
+                "text"
+            )
+            .build();
+
+        conn_settings
+            .bind(
+                "lastfm-user-agent",
+                &lastfm_user_agent,
+                "text"
+            )
+            .build();
 
         // Set up library settings
         let library_settings = settings.child("library");

@@ -19,6 +19,7 @@
  */
 mod application;
 mod common;
+mod cache;
 mod player;
 mod config;
 mod window;

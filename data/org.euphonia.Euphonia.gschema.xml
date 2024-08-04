@@ -17,6 +17,7 @@
 		<child schema="org.euphonia.Euphonia.state" name="state"/>
 		<child schema="org.euphonia.Euphonia.library" name="library"/>
 		<child schema="org.euphonia.Euphonia.client" name="client"/>
+		<child schema="org.euphonia.Euphonia.appearance" name="appearance"/>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.client" path="/org/euphonia/Euphonia/client/">
@@ -38,6 +39,19 @@
 			</description>
 			<default>15</default>
 		</key>
+		<key name="mpd-download-album-art" type="b">
+			<default>true</default>
+		</key>
+
+		<key name="use-lastfm" type="b">
+			<default>false</default>
+		</key>
+		<key name="lastfm-api-key" type="s">
+			<default>''</default>
+		</key>
+		<key name="lastfm-user-agent" type="s">
+			<default>'Euphonia Dev (MPD client)'</default>
+		</key>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.library" path="/org/euphonia/Euphonia/library/">
@@ -50,6 +64,9 @@
 		<key name="sort-case-sensitive" type="b">
 			<default>false</default>
 		</key>
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.appearance" path="/org/euphonia/Euphonia/appearance/">
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">

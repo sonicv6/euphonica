@@ -23,8 +23,7 @@ use super::{
 };
 use crate::{
     utils::format_secs_as_duration,
-    common::{Album, Song},
-    client::ALBUMART_PLACEHOLDER
+    common::{Album, Song}
 };
 
 mod imp {
@@ -227,9 +226,6 @@ impl AlbumContentView {
         // Use high-resolution version here
         if tex.is_some() {
             self.imp().cover.set_paintable(tex);
-        }
-        else {
-            self.imp().cover.set_paintable(Some(&ALBUMART_PLACEHOLDER.clone()));
         }
     }
 

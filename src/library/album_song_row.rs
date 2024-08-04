@@ -31,8 +31,6 @@ mod imp {
         #[template_child]
         pub quality_grade: TemplateChild<gtk::Image>,
         #[template_child]
-        pub controls_revealer: TemplateChild<gtk::Revealer>,
-        #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
         #[template_child]
         pub append_queue: TemplateChild<gtk::Button>,
@@ -102,26 +100,11 @@ impl AlbumSongRow {
         // Reserve space since we know exactly how many IDs there are
         self.imp().bindings.borrow_mut().reserve_exact(7);
         // Must be called at setup time (use SignalListItemFactory::connect_setup)
-        let revealer = self.imp().controls_revealer.get();
-        let hover_ctl = gtk::EventControllerMotion::new();
-        hover_ctl.connect_enter(
-            clone!(
-                #[weak]
-                revealer,
-                move |_,_,_| {
-                    revealer.set_reveal_child(true);
-                }
-            )
-        );
-        hover_ctl.connect_leave(
-            move |_| {
-                revealer.set_reveal_child(false);
-            }
-        );
-        self.add_controller(hover_ctl);
     }
 
     pub fn bind(&self, song: &Song) {
+        // Due to the amount of transformations performed we'll probably
+        // stick with manual bind-unbind semantics here.
         let track_idx = self.imp().track_index.get();
         let duration = self.imp().duration.get();
         let song_name_label = self.imp().song_name.get();

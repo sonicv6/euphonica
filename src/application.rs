@@ -21,17 +21,17 @@ use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{gio, glib};
 use std::{
-    cell::RefCell,
     rc::Rc,
     fs::create_dir_all,
     path::PathBuf
 };
-use async_channel::{Sender, Receiver};
+use async_channel::Sender;
 
 use crate::{
     library::Library,
     player::Player,
-    client::{MpdWrapper, MpdMessage, AlbumArtCache},
+    client::{MpdWrapper, MpdMessage},
+    cache::Cache,
     config::VERSION,
     preferences::Preferences,
     EuphoniaWindow
@@ -46,7 +46,7 @@ mod imp {
     pub struct EuphoniaApplication {
         pub player: Player,
         pub library: Library,
-        pub albumart: Rc<AlbumArtCache>,
+        pub cache: Rc<Cache>,
         // pub library: Rc<LibraryController>, // TODO
     	pub sender: Sender<MpdMessage>, // To send to client wrapper
     	pub client: Rc<MpdWrapper>,
@@ -66,36 +66,27 @@ mod imp {
             println!("Cache path: {}", cache_path.to_str().unwrap());
             create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
-            // Set up channels for communication with client object
-            // Only one message at a time to client
-            let (
-                sender,
-                receiver
-            ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::unbounded();
+            // Create client instance (not connected yet)
+            let client = MpdWrapper::new();
+            let client_sender = client.clone().get_sender();
+            let client_state = client.clone().get_client_state();
+
+            // Create cache controller
+            let cache = Cache::new(&cache_path, client_sender.clone(), client_state.clone());
 
             // Create controllers
             // These two are GObjects (already refcounted by GLib)
             let player = Player::default();
             let library = Library::default();
-            let albumart = Rc::new(AlbumArtCache::new(&cache_path));
-            player.setup(sender.clone(), albumart.clone());
-            library.setup(sender.clone(), albumart.clone());
-
-            // Create client instance (not connected yet)
-            let client = MpdWrapper::new(
-                player.clone(),
-                library.clone(),
-                sender.clone(),
-                RefCell::new(Some(receiver)),
-                albumart.clone()
-            );
+            player.setup(client_sender.clone(), client_state.clone(), cache.clone());
+            library.setup(client_sender.clone(), client_state, cache.clone());
 
             Self {
                 player,
                 library,
                 client,
-                albumart,
-                sender,
+                cache,
+                sender: client_sender,
                 cache_path
             }
         }
@@ -160,8 +151,8 @@ impl EuphoniaApplication {
         self.imp().library.clone()
     }
 
-    pub fn get_album_art_cache(&self) -> Rc<AlbumArtCache> {
-        self.imp().albumart.clone()
+    pub fn get_cache(&self) -> Rc<Cache> {
+        self.imp().cache.clone()
     }
 
     pub fn get_client(&self) -> Rc<MpdWrapper> {
@@ -173,6 +164,9 @@ impl EuphoniaApplication {
     }
 
     fn setup_gactions(&self) {
+        let update_db_action = gio::ActionEntry::builder("update-db")
+            .activate(move |app: &Self, _, _| app.update_db())
+            .build();
         let quit_action = gio::ActionEntry::builder("quit")
             .activate(move |app: &Self, _, _| app.quit())
             .build();
@@ -182,7 +176,17 @@ impl EuphoniaApplication {
         let preferences_action = gio::ActionEntry::builder("preferences")
             .activate(move |app: &Self, _, _| app.show_preferences())
             .build();
-        self.add_action_entries([quit_action, about_action, preferences_action]);
+        self.add_action_entries([
+            update_db_action,
+            quit_action,
+            about_action,
+            preferences_action
+        ]);
+    }
+
+    fn update_db(&self) {
+        let sender = &self.imp().sender;
+        let _ = sender.send_blocking(MpdMessage::Update);
     }
 
     fn show_about(&self) {

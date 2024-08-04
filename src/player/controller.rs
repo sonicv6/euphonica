@@ -1,6 +1,6 @@
 extern crate mpd;
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, RefCell, OnceCell},
     rc::Rc,
     vec::Vec,
 };
@@ -8,14 +8,21 @@ use async_channel::Sender;
 use mpd::status::{State, Status, AudioFormat};
 use crate::{
     common::{Song, QualityGrade},
-    client::albumart::AlbumArtCache,
-    client::MpdMessage,
+    client::{
+        ClientState,
+        MpdMessage
+    },
+    cache::{Cache, CacheState},
     utils::{prettify_audio_format, strip_filename_linux}
 };
 use gtk::{
     glib,
     gio,
     prelude::*,
+};
+use glib::{
+    closure_local,
+    BoxedAnyObject
 };
 use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
@@ -49,8 +56,12 @@ mod imp {
         pub current_song: RefCell<Option<Song>>,
         pub queue: RefCell<gio::ListStore>,
         pub format: RefCell<Option<AudioFormat>>,
-        pub albumart: RefCell<Option<Rc<AlbumArtCache>>>,
-        pub sender: RefCell<Option<Sender<MpdMessage>>>
+        pub client_sender: OnceCell<Sender<MpdMessage>>,
+        // Direct reference to the cache object for fast path to
+        // album arts (else we'd have to wait for signals, then
+        // loop through the whole queue & search for songs matching
+        // that album URI to update their arts).
+        pub cache: OnceCell<Rc<Cache>>,
     }
 
     #[glib::object_subclass]
@@ -66,8 +77,8 @@ mod imp {
                 current_song: RefCell::new(None),
                 queue,
                 format: RefCell::new(None),
-                albumart: RefCell::new(None),
-                sender: RefCell::new(None)
+                client_sender: OnceCell::new(),
+                cache: OnceCell::new(),
             }
         }
     }
@@ -103,7 +114,7 @@ mod imp {
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
                 "album" => obj.album().to_value(),
-                "album-art" => obj.album_art().to_value(), // High-res version
+                "album-art" => obj.current_song_album_art().to_value(), // High-res version
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
                 "quality-grade" => obj.quality_grade().to_value(),
@@ -126,14 +137,54 @@ impl Default for Player {
 
 
 impl Player {
-    pub fn setup(&self, sender: Sender<MpdMessage>, albumart: Rc<AlbumArtCache>) {
-        self.imp().albumart.replace(Some(albumart));
-        self.imp().sender.replace(Some(sender));
+    pub fn setup(
+        &self,
+        client_sender: Sender<MpdMessage>,
+        client_state: ClientState,
+        cache: Rc<Cache>
+    ) {
+        let _ = self.imp().client_sender.set(client_sender);
+        let cache_state: CacheState = cache.get_cache_state();
+        let _ = self.imp().cache.set(cache);
+        // Connect to ClientState signals that announce completion of requests
+        client_state.connect_closure(
+            "status-changed",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, boxed: BoxedAnyObject| {
+                    this.update_status(&boxed.borrow());
+                }
+            )
+        );
+        client_state.connect_closure(
+            "queue-changed",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, boxed: BoxedAnyObject| {
+                    this.update_queue(boxed.borrow::<Vec<Song>>().as_ref());
+                }
+            )
+        );
+        cache_state.connect_closure(
+            "album-art-downloaded",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: CacheState, folder_uri: &str| {
+                    this.update_queue_album_arts(folder_uri);
+                }
+            )
+        );
     }
 
     // Utility functions
     fn send(&self, msg: MpdMessage) -> Result<(), &str> {
-        if let Some(sender) = self.imp().sender.borrow().as_ref() {
+        if let Some(sender) = self.imp().client_sender.get() {
             let res = sender.send_blocking(msg);
             if res.is_err() {
                 return Err("Sender error");
@@ -255,42 +306,33 @@ impl Player {
         }
     }
 
-    pub fn update_queue(&self, new_queue: &mut [mpd::song::Song]) {
+    pub fn update_queue(&self, songs: &[Song]) {
         // TODO: use diffs instead of refreshing the whole queue
+        println!("UPDATING QUEUE");
         let queue = self.imp().queue.borrow();
         queue.remove_all();
-        // Convert to our internal Song GObjects
-        let songs: Vec<Song> = new_queue
-                .iter_mut()
-                .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
-                .collect();
-        // Ensure we have local copies of all the album arts.
-        // This does not load them into memory yet. That only happens when QueueRow is displayed.
-        // TODO: batch download requests
-        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
-            if let Some(sender) = self.imp().sender.borrow().as_ref() {
-                for song in &songs {
-                    let uri = &song.get_uri();
-                    let folder_uri = strip_filename_linux(uri);
-                    if !albumart.get_thumbnail_path_for(folder_uri).exists() {
-                        let _ = sender.send_blocking(MpdMessage::AlbumArt(folder_uri.to_owned()));
-                    }
-                }
+        if let Some(cache) = self.imp().cache.get() {
+            for song in songs {
+                let uri = song.get_uri();
+                let folder_uri = strip_filename_linux(&uri);
+                // Might queue downloads, depending on user settings, but
+                // will not actually load anything into memory just yet.
+                cache.ensure_local_album_art(folder_uri);
             }
         }
         queue.extend_from_slice(&songs);
         // Downstream widgets should now receive an item-changed signal.
     }
 
-    pub fn update_album_art(&self, folder_uri: &str) {
+    fn update_queue_album_arts(&self, folder_uri: &str) {
         // TODO: batch this too.
         // This fn is only for updating album art AFTER the songs have already been displayed
         // in the queue (for example, after finishing downloading their album arts).
         // Songs whose album arts have already been downloaded will not need this fn.
         // Instead, their album arts are loaded on-demand from disk or cache by the queue view.
-        // Iterate through the queue to see if we can load album art for any
-        if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
-            if let Some(tex) = albumart.get_for(folder_uri, true) {
+        // Iterate through the queue to see if we can update album art for any of them.
+        if let Some(cache) = self.imp().cache.get() {
+            if let Some(tex) = cache.load_local_album_art(folder_uri, true) {
                 for song in self.imp().queue.borrow().iter::<Song>().flatten() {
                     if song.get_thumbnail().is_none() && strip_filename_linux(&song.get_uri()) == folder_uri {
                         song.set_thumbnail(Some(tex.clone()));
@@ -329,13 +371,13 @@ impl Player {
         None
     }
 
-    pub fn album_art(&self) -> Option<Texture> {
+    pub fn current_song_album_art(&self) -> Option<Texture> {
         // Use high-resolution version
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
-            if let Some(albumart) = self.imp().albumart.borrow().as_ref() {
+            if let Some(cache) = self.imp().cache.get() {
                 let uri = song.get_uri();
                 let folder_uri = strip_filename_linux(&uri);
-                return albumart.get_for(folder_uri, false);
+                return cache.load_local_album_art(folder_uri, false);
             }
             return None;
         }

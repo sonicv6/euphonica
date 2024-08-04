@@ -1,9 +1,18 @@
-use std::cell::Cell;
+use std::{
+    cell::Cell,
+    sync::OnceLock
+};
 use gtk::glib;
 use glib::{
     prelude::*,
-    subclass::prelude::*
+    subclass::{
+        prelude::*,
+        Signal
+    },
+    BoxedAnyObject
 };
+
+use crate::common::Album;
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, glib::Enum)]
 #[enum_type(name = "EuphoniaConnectionState")]
@@ -18,6 +27,7 @@ pub enum ConnectionState {
 mod imp {
     use glib::{
         ParamSpec,
+        ParamSpecBoolean,
         ParamSpecEnum
     };
     use super::*;
@@ -26,19 +36,29 @@ mod imp {
     #[derive(Debug, Default)]
     pub struct ClientState {
         pub connection_state: Cell<ConnectionState>,
+        // Used to indicate that the background client is busy.
+        pub busy: Cell<bool>
     }
 
     #[glib::object_subclass]
     impl ObjectSubclass for ClientState {
         const NAME: &'static str = "EuphoniaClientState";
         type Type = super::ClientState;
+
+        fn new() -> Self {
+            Self {
+                connection_state: Cell::default(),
+                busy: Cell::new(false)
+            }
+        }
     }
 
     impl ObjectImpl for ClientState {
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
-                    ParamSpecEnum::builder::<ConnectionState>("connection-state").build()
+                    ParamSpecBoolean::builder("busy").read_only().build(),
+                    ParamSpecEnum::builder::<ConnectionState>("connection-state").read_only().build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -48,19 +68,55 @@ mod imp {
             let obj = self.obj();
             match pspec.name() {
                 "connection-state" => obj.get_connection_state().to_value(),
+                "busy" => obj.is_busy().to_value(),
                 _ => unimplemented!(),
             }
         }
 
-        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
-            let obj = self.obj();
-            match pspec.name() {
-                "connection-state" => {
-                    let state = value.get().expect("Error in ClientState::set_property");
-                    obj.set_connection_state(state);
-                },
-                _ => unimplemented!()
-            }
+        // fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
+        //     let obj = self.obj();
+        //     match pspec.name() {
+        //         "connection-state" => {
+        //             let state = value.get().expect("Error in ClientState::set_property");
+        //             obj.set_connection_state(state);
+        //         },
+        //         _ => unimplemented!()
+        //     }
+        // }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("album-art-downloaded")
+                        .param_types([
+                            String::static_type(),  // folder URI
+                        ])
+                        .build(),
+                    Signal::builder("outputs-changed")
+                        .param_types([BoxedAnyObject::static_type()])  // Vec<mpd::output::Output>
+                        .build(),
+                    // Enough information about this album has been downloaded to display it
+                    // as a thumbnail in the album view
+                    Signal::builder("album-basic-info-downloaded")
+                        .param_types([Album::static_type()])
+                        .build(),
+                    // An album's song list has been downloaded. We can now push an
+                    // AlbumContentView for it.
+                    Signal::builder("album-content-downloaded")
+                        .param_types([
+                            Album::static_type(),
+                            BoxedAnyObject::static_type()  // Vec<Song>
+                        ])
+                        .build(),
+                    Signal::builder("status-changed")
+                        .param_types([BoxedAnyObject::static_type()])
+                        .build(),
+                    Signal::builder("queue-changed")
+                        .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
+                        .build(),
+                ]
+            })
         }
     }
 }
@@ -81,10 +137,38 @@ impl ClientState {
         self.imp().connection_state.get()
     }
 
+    pub fn is_busy(&self) -> bool {
+        self.imp().busy.get()
+    }
+
     pub fn set_connection_state(&self, new_state: ConnectionState) {
         let old_state = self.imp().connection_state.replace(new_state);
         if old_state != new_state {
             self.notify("connection-state");
         }
+    }
+
+    pub fn set_busy(&self, new_busy: bool) {
+        let old_busy = self.imp().busy.replace(new_busy);
+        if old_busy != new_busy {
+            self.notify("busy");
+        }
+    }
+
+    // Convenience emit wrappers
+    pub fn emit_result<T: ToValue>(&self, signal_name: &str, val: T) {
+        self.emit_by_name::<()>(
+            signal_name,
+            &[
+                &val
+            ]
+        )
+    }
+
+    pub fn emit_boxed_result<T: 'static>(&self, signal_name: &str, to_box: T) {
+        // T must be owned or static
+        self.emit_by_name::<()>(signal_name, &[
+            &BoxedAnyObject::new(to_box)
+        ]);
     }
 }

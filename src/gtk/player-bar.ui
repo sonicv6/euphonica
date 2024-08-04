@@ -108,6 +108,9 @@
 								</child>
 							</object>
 						</child>
+						<child>
+							<object class="GtkSeparator"></object>
+						</child>
 					</object>
 				</property>
 
@@ -191,6 +194,9 @@
 
 				<property name="end-widget">
 					<object class="GtkBox">
+						<child>
+							<object class="GtkSeparator"></object>
+						</child>
 						<child>
 							<object class="EuphoniaVolumeKnob" id="vol_knob"/>
 						</child>

@@ -61,6 +61,9 @@ mod imp {
         pub stack: TemplateChild<gtk::Stack>,
 
         // Sidebar
+        // TODO: Replace with Libadwaita spinner when v1.6 hits stable
+        #[template_child]
+        pub logo_stack: TemplateChild<gtk::Stack>,
         #[template_child]
         pub title: TemplateChild<adw::WindowTitle>,
         #[template_child]
@@ -98,6 +101,7 @@ mod imp {
                 queue_view: TemplateChild::default(),
                 stack: TemplateChild::default(),
                 title: TemplateChild::default(),
+                logo_stack: TemplateChild::default(),
                 sidebar: TemplateChild::default(),
                 player_bar: TemplateChild::default(),
                 notify_position_id: RefCell::new(None),
@@ -132,11 +136,11 @@ impl EuphoniaWindow {
         win.restore_window_state();
         win.imp().queue_view.setup(
             app.get_player(),
-            app.get_album_art_cache()
+            app.get_cache()
         );
         win.imp().album_view.setup(
             app.get_library(),
-            app.get_album_art_cache()
+            app.get_cache()
         );
         win.imp().sidebar.setup(
             win.imp().stack.clone()
@@ -170,6 +174,7 @@ impl EuphoniaWindow {
         let client = self.downcast_application().get_client();
         let state = client.get_client_state();
         let title = self.imp().title.get();
+        let logo_stack = self.imp().logo_stack.get();
         state
             .bind_property(
                 "connection-state",
@@ -183,6 +188,18 @@ impl EuphoniaWindow {
                     ConnectionState::Unauthenticated => Some("Unauthenticated"),
                     ConnectionState::Connected => Some("Connected")
                 }
+            })
+            .sync_create()
+            .build();
+
+        state
+            .bind_property(
+                "busy",
+                &logo_stack,
+                "visible-child-name"
+            )
+            .transform_to(|_, busy: bool| {
+                if busy { return Some("spinner") } Some("logo")
             })
             .sync_create()
             .build();
