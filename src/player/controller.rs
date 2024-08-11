@@ -28,7 +28,6 @@ use glib::{
 };
 use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
-use mpd::output::Output;
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "EuphoniaPlaybackState")]
@@ -58,12 +57,16 @@ mod imp {
         pub current_song: RefCell<Option<Song>>,
         pub queue: RefCell<gio::ListStore>,
         pub format: RefCell<Option<AudioFormat>>,
+        // Rounded version, for sending to MPD.
+        // Changes not big enough to cause an integer change
+        // will not be sent to MPD.
+        pub volume: Cell<i8>,
         pub client_sender: OnceCell<Sender<MpdMessage>>,
         // Direct reference to the cache object for fast path to
         // album arts (else we'd have to wait for signals, then
         // loop through the whole queue & search for songs matching
         // that album URI to update their arts).
-        pub cache: OnceCell<Rc<Cache>>,
+        pub cache: OnceCell<Rc<Cache>>
     }
 
     #[glib::object_subclass]
@@ -81,6 +84,7 @@ mod imp {
                 format: RefCell::new(None),
                 client_sender: OnceCell::new(),
                 cache: OnceCell::new(),
+                volume: Cell::new(0)
             }
         }
     }
@@ -131,6 +135,11 @@ mod imp {
                 vec![
                     Signal::builder("outputs-changed")
                         .param_types([BoxedAnyObject::static_type()])
+                        .build(),
+                    // Reserved for EXTERNAL changes (i.e. changes made by this client won't
+                    // emit this).
+                    Signal::builder("volume-changed")
+                        .param_types([i8::static_type()])
                         .build()
                 ]
             })
@@ -329,6 +338,15 @@ impl Player {
                 self.notify("duration");
             }
         }
+
+        // Handle volume changes (might be external)
+        // TODO: Find a way to somewhat responsively update volume to external
+        // changes at all times rather than relying on the seekbar poller.
+        let new_vol = status.volume;
+        let old_vol = self.imp().volume.replace(new_vol);
+        if old_vol != new_vol {
+            self.emit_by_name::<()>("volume-changed", &[&new_vol]);
+        }
     }
 
     pub fn update_queue(&self, songs: &[Song]) {
@@ -354,7 +372,7 @@ impl Player {
 
     pub fn set_output(&self, id: u32, state: bool) {
         if let Some(sender) = self.imp().client_sender.get() {
-            sender.send_blocking(MpdMessage::Output(id, state));
+            let _ = sender.send_blocking(MpdMessage::Output(id, state));
         }
     }
 
@@ -494,6 +512,16 @@ impl Player {
     pub fn clear_queue(&self) {
         if let Err(msg) = self.send(MpdMessage::Clear) {
             println!("{}", msg);
+        }
+    }
+
+    pub fn set_volume(&self, val: i8) {
+        let old_vol = self.imp().volume.replace(val);
+        if old_vol != val {
+            println!("Changing volume from {} to {}", old_vol, val);
+            if let Err(msg) = self.send(MpdMessage::Volume(val)) {
+                println!("{}", msg);
+            }
         }
     }
 

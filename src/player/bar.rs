@@ -133,9 +133,52 @@ impl PlayerBar {
     }
 
     pub fn setup(&self, player: Player, sender: Sender<MpdMessage>) {
-        self.imp().vol_knob.setup();
+        self.setup_volume_knob(player.clone());
         self.bind_state(player.clone(), sender.clone());
         self.setup_seekbar(player, sender);
+    }
+
+    fn setup_volume_knob(&self, player: Player) {
+        let knob = self.imp().vol_knob.get();
+        knob.setup();
+        knob.connect_notify_local(
+            Some("value"),
+            clone!(
+                #[weak]
+                player,
+                move |knob: &VolumeKnob, _| {
+                    player.set_volume(knob.value().round() as i8);
+                }
+            )
+        );
+
+        knob.connect_notify_local(
+            Some("is-muted"),
+            clone!(
+                #[weak]
+                player,
+                move |knob: &VolumeKnob, _| {
+                    if knob.is_muted() {
+                        player.set_volume(0);
+                    }
+                    else {
+                        // Restore previous volume
+                        player.set_volume(knob.value().round() as i8);
+                    }
+                }
+            )
+        );
+
+        // Only fired for EXTERNAL changes.
+        player.connect_closure(
+            "volume-changed",
+            false,
+            closure_local!(
+                |_: Player, val: i8| {
+                    knob.sync_value(val);
+                }
+            )
+        );
     }
 
     fn bind_state(&self, player: Player, sender: Sender<MpdMessage>) {

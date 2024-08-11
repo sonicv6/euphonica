@@ -13,6 +13,11 @@
 		<value nick="desc" value="0"/>  <!-- Works as boolean too -->
 	</enum>
 
+	<enum id="org.euphonia.Euphonia.volumeunit">
+		<value nick="percents" value="0"/>
+		<value nick="decibels" value="1"/>  <!-- Works as boolean too -->
+	</enum>
+
 	<schema id="org.euphonia.Euphonia" path="/org/euphonia/Euphonia/">
 		<child schema="org.euphonia.Euphonia.state" name="state"/>
 		<child schema="org.euphonia.Euphonia.library" name="library"/>
@@ -67,6 +72,15 @@
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.appearance" path="/org/euphonia/Euphonia/appearance/">
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.controls" path="/org/euphonia/Euphonia/controls/">
+		<key name="vol-knob-sensitivity" type="d">
+			<default>1.0</default>
+		</key>
+		<key name="vol-knob-unit" enum='org.euphonia.Euphonia.volumeunit'>
+			<default>'percents'</default>
+		</key>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">

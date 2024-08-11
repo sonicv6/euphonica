@@ -80,6 +80,7 @@ pub enum MpdMessage {
 	Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
     AlbumContent(AlbumInfo), // Get list of songs in album with given tag name
+    Volume(i8),
 
     // Reserved for cache controller
     AlbumArt(String, PathBuf, PathBuf), // Download album art to the specified paths (hi-res and thumbnail)
@@ -348,6 +349,7 @@ impl MpdWrapper {
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
             MpdMessage::AlbumContent(album_info) => self.get_album_content(album_info),
+            MpdMessage::Volume(vol) => self.volume(vol),
             MpdMessage::AlbumArt(folder_uri, cache_path, thumb_cache_path) => {
                 self.queue_task(
                     BackgroundTask::DownloadAlbumArt(
@@ -462,6 +464,12 @@ impl MpdWrapper {
     pub fn add(&self, uri: &str) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.push(get_dummy_song(uri));
+        }
+    }
+
+    pub fn volume(&self, vol: i8) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.volume(vol);
         }
     }
 
