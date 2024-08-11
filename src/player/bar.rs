@@ -1,12 +1,13 @@
 use std::cell::{Cell, RefCell};
 use gtk::{
     glib,
-    gdk::{RGBA, Texture},
+    gdk,
     graphene,
     prelude::*,
     subclass::prelude::*,
     CompositeTemplate,
 };
+use adw::prelude::*;
 use glib::{
     clone,
     closure_local,
@@ -19,7 +20,7 @@ use crate::{
     utils::format_secs_as_duration,
     client::MpdMessage,
     player::Player,
-    common::QualityGrade
+    common::{QualityGrade, paintables::FadePaintable}
 };
 
 use super::{PlaybackState, VolumeKnob, MpdOutput};
@@ -76,6 +77,8 @@ mod imp {
         #[template_child]
         pub vol_knob: TemplateChild<VolumeKnob>,
 
+        // Kept here so we can access it in snapshot()
+        pub bg_paintable: FadePaintable,
         pub output_widgets: RefCell<Vec<MpdOutput>>,
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
@@ -113,31 +116,33 @@ mod imp {
     impl WidgetImpl for PlayerBar {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let widget = self.obj();
-            let w = widget.width() as f32 / 2.0;
-            let h = widget.height() as f32 / 2.0;
+            let width = widget.width() as f32;
+            let height = widget.height() as f32;
 
             // Bluuuuuur
-            // Proof of concept that snapshotting works
-            let red = RGBA::parse("red").unwrap();
-            let green = RGBA::parse("green").unwrap();
-            let yellow = RGBA::parse("yellow").unwrap();
-            let blue = RGBA::parse("blue").unwrap();
-            snapshot.append_color (
-                &red,
-                &graphene::Rect::new(0.0, 0.0, w, h)
-            );
-            snapshot.append_color (
-                &green,
-                &graphene::Rect::new(w, 0.0, w, h)
-            );
-            snapshot.append_color (
-                &yellow,
-                &graphene::Rect::new(0.0, h, w, h)
-            );
-            snapshot.append_color (
-                &blue,
-                &graphene::Rect::new(w, h, w, h)
-            );
+            // Adopted from Nanling Zheng's implementation for Gapless.
+            // TODO: Make blur level & opacity user-configurable
+            let bg_width = self.bg_paintable.intrinsic_width() as f32;
+            let bg_height = self.bg_paintable.intrinsic_height() as f32;
+            let scale_x = width / bg_width as f32;
+            let scale_y = height / bg_height as f32;
+            let scale_max = scale_x.max(scale_y);
+            let view_width = bg_width * scale_max;
+            let view_height = bg_height * scale_max;
+            let delta_x = (width - view_width) * 0.5;
+            let delta_y = (height - view_height) * 0.5;
+            snapshot.translate(&graphene::Point::new(
+                delta_x, delta_y
+            ));
+            // Blur & opacity nodes
+            snapshot.push_blur(10.0);
+            snapshot.push_opacity(0.3);
+            self.bg_paintable.snapshot(snapshot, view_width as f64, view_height as f64);
+            snapshot.pop();
+            snapshot.pop();
+            snapshot.translate(&graphene::Point::new(
+                -delta_x, -delta_y
+            ));
 
             // Call the parent class's snapshot() method to render child widgets
             self.parent_snapshot(snapshot);
@@ -412,7 +417,7 @@ impl PlayerBar {
             .sync_create()
             .build();
 
-        self.update_album_art(player.current_song_album_art().as_ref());
+        self.update_album_art(player.current_song_album_art());
         player.connect_notify_local(
             Some("album-art"),
             clone!(
@@ -421,7 +426,7 @@ impl PlayerBar {
                 #[weak]
                 player,
                 move |_, _| {
-                    this.update_album_art(player.current_song_album_art().as_ref());
+                    this.update_album_art(player.current_song_album_art());
                 }
             )
         );
@@ -475,16 +480,44 @@ impl PlayerBar {
         );
     }
 
-    fn update_album_art(&self, tex: Option<&Texture>) {
+    fn update_album_art(&self, tex: Option<gdk::Texture>) {
         // Use high-resolution version here
+        // Update cover paintable
         if tex.is_some() {
-            self.imp().albumart.set_paintable(tex);
+            self.imp().albumart.set_paintable(tex.as_ref());
         }
         else {
             self.imp().albumart.set_resource(
                 Some("/org/euphonia/Euphonia/albumart-placeholder.png")
             );
         }
+        // Update blurred background
+        let bg_paintable = self.imp().bg_paintable.clone();
+        if let Some(tex) = tex {
+            bg_paintable.set_new_paintable(Some(tex.upcast::<gdk::Paintable>()));
+        }
+        else {
+            bg_paintable.set_new_paintable(None);
+        }
+
+        // Run fade transition
+        // TODO: Make transition duration user-configurable.
+        let anim_target = adw::CallbackAnimationTarget::new(
+            clone!(
+                #[weak]
+                bg_paintable,
+                move |progress: f64| {
+                    bg_paintable.set_fade(progress);
+                }
+            )
+        );
+        let anim = adw::TimedAnimation::new(
+            self,
+            0.0, 1.0,
+            1000,
+            anim_target
+        );
+        anim.play();
     }
 
     fn update_outputs(&self, player: Player, outputs: &[Output]) {
