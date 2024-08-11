@@ -13,16 +13,23 @@
 		<file preprocess="xml-stripblanks">gtk/sidebar-button.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar.ui</file>
 		<file preprocess="xml-stripblanks">gtk/player-bar.ui</file>
+		<file preprocess="xml-stripblanks">gtk/output.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences.ui</file>
 		<file preprocess="xml-stripblanks">gtk/volume-knob.ui</file>
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
 	<gresource prefix="/org/euphonia/Euphonia/icons/scalable/actions/">
+		<file preprocess="xml-stripblanks" alias="alsa-symbolic.svg">gtk/icons/alsa-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="pulseaudio-symbolic.svg">gtk/icons/pulseaudio-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="pipewire-symbolic.svg">gtk/icons/pipewire-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="soundcard-symbolic.svg">gtk/icons/soundcard-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="brush-monitor-symbolic.svg">gtk/icons/brush-monitor-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="hourglass-symbolic.svg">gtk/icons/hourglass-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="up-symbolic.svg">gtk/icons/up-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="down-symbolic.svg">gtk/icons/down-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="left-symbolic.svg">gtk/icons/left-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="right-symbolic.svg">gtk/icons/right-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="month-symbolic.svg">gtk/icons/month-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="skip-backward-large-symbolic.svg">gtk/icons/skip-backward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-large-symbolic.svg">gtk/icons/play-large-symbolic.svg</file>

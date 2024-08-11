@@ -108,40 +108,54 @@
 								</child>
 							</object>
 						</child>
-						<child>
-							<object class="GtkSeparator"></object>
-						</child>
 					</object>
 				</property>
 
 				<property name="center-widget">
 					<!-- Playback controls -->
 					<object class="GtkBox">
-						<property name="margin-start">24</property>
-						<property name="margin-end">24</property>
 						<property name="hexpand">true</property>
 						<property name="valign">3</property>
-						<property name="orientation">1</property>
+						<property name="margin-start">24</property>
+						<property name="margin-end">24</property>
+						<property name="spacing">12</property>
 						<child>
-							<!-- Above: buttons -->
+							<object class="GtkSeparator"></object>
+						</child>
+						<child>
 							<object class="GtkBox">
-								<property name="halign">3</property>
+								<property name="hexpand">true</property>
+								<property name="orientation">1</property>
 								<child>
-									<object class="GtkButton" id="prev_btn">
-										<property name="icon-name">skip-backward-large-symbolic</property>
-										<style>
-											<class name="flat"/>
-										</style>
-									</object>
-								</child>
-								<child>
-									<object class="GtkButton" id="play_pause_btn">
+									<!-- Above: buttons -->
+									<object class="GtkBox">
+										<property name="halign">3</property>
 										<child>
-											<object class="GtkImage" id="play_pause_symbol">
-												<property name="icon-size">2</property>
-												<property name="visible">True</property>
-												<property name="icon-name">play-large-symbolic</property>
-												<property name="icon_size">1</property>
+											<object class="GtkButton" id="prev_btn">
+												<property name="icon-name">skip-backward-large-symbolic</property>
+												<style>
+													<class name="flat"/>
+												</style>
+											</object>
+										</child>
+										<child>
+											<object class="GtkButton" id="play_pause_btn">
+												<child>
+													<object class="GtkImage" id="play_pause_symbol">
+														<property name="icon-size">2</property>
+														<property name="visible">True</property>
+														<property name="icon-name">play-large-symbolic</property>
+														<property name="icon_size">1</property>
+														<style>
+															<class name="flat"/>
+														</style>
+													</object>
+												</child>
+											</object>
+										</child>
+										<child>
+											<object class="GtkButton" id="next_btn">
+												<property name="icon-name">skip-forward-large-symbolic</property>
 												<style>
 													<class name="flat"/>
 												</style>
@@ -149,51 +163,83 @@
 										</child>
 									</object>
 								</child>
+
 								<child>
-									<object class="GtkButton" id="next_btn">
-										<property name="icon-name">skip-forward-large-symbolic</property>
-										<style>
-											<class name="flat"/>
-										</style>
+									<!-- Bottom: seekbar -->
+									<object class="GtkCenterBox" id="seekbar_box">
+										<!-- TODO: elapsed/duration labels -->
+										<property name="start-widget">
+											<object class="GtkLabel" id="elapsed">
+											</object>
+										</property>
+										<property name="center-widget">
+											<object class="GtkScale" id="seekbar">
+												<property name="draw-value">false</property>
+												<property name="hexpand">true</property>
+												<property name="orientation">0</property>
+												<property name="width-request">240</property>
+												<property name="adjustment">
+													<object class="GtkAdjustment">
+														<property name="lower">0</property>
+														<property name="upper">0</property>
+														<property name="value">0</property>
+													</object>
+												</property>
+											</object>
+										</property>
+										<property name="end-widget">
+											<object class="GtkLabel" id="duration">
+											</object>
+										</property>
 									</object>
 								</child>
 							</object>
 						</child>
-
 						<child>
-							<!-- Bottom: seekbar -->
-							<object class="GtkCenterBox" id="seekbar_box">
-								<!-- TODO: elapsed/duration labels -->
-								<property name="start-widget">
-									<object class="GtkLabel" id="elapsed">
-									</object>
-								</property>
-								<property name="center-widget">
-									<object class="GtkScale" id="seekbar">
-										<property name="draw-value">false</property>
-										<property name="hexpand">true</property>
-										<property name="orientation">0</property>
-										<property name="width-request">240</property>
-										<property name="adjustment">
-											<object class="GtkAdjustment">
-												<property name="lower">0</property>
-												<property name="upper">0</property>
-												<property name="value">0</property>
-											</object>
-										</property>
-									</object>
-								</property>
-								<property name="end-widget">
-									<object class="GtkLabel" id="duration">
-									</object>
-								</property>
-							</object>
+							<object class="GtkSeparator"></object>
 						</child>
 					</object>
 				</property>
 
 				<property name="end-widget">
 					<object class="GtkBox">
+						<property name="halign">end</property>
+						<property name="spacing">12</property>
+						<child>
+							<object class="GtkBox" id="output_section">
+								<property name="spacing">6</property>
+								<property name="visible">false</property>
+								<child>
+									<object class="GtkButton" id="prev_output">
+										<property name="visible">false</property>
+										<property name="sensitive">false</property>
+										<property name="valign">center</property>
+										<property name="icon-name">left-symbolic</property>
+										<style>
+											<class name="flat"/>
+											<class name="circular"/>
+										</style>
+									</object>
+								</child>
+								<child>
+									<object class="GtkStack" id="output_stack">
+										<property name="transition-type">slide-left-right</property>
+									</object>
+								</child>
+								<child>
+									<object class="GtkButton" id="next_output">
+										<property name="visible">false</property>
+										<property name="sensitive">false</property>
+										<property name="valign">center</property>
+										<property name="icon-name">right-symbolic</property>
+										<style>
+											<class name="flat"/>
+											<class name="circular"/>
+										</style>
+									</object>
+								</child>
+							</object>
+						</child>
 						<child>
 							<object class="GtkSeparator"></object>
 						</child>

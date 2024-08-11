@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<template class="EuphoniaMpdOutput" parent="GtkBox">
+        <property name="orientation">1</property>
+		<property name="halign">center</property>
+		<property name="valign">center</property>
+		<property name="spacing">6</property>
+
+		<child>
+			<object class="GtkImage" id="icon">
+				<property name="icon-size">large</property>
+				<property name="icon-name">soundcard-symbolic</property>
+			</object>
+		</child>
+		<child>
+			<object class="GtkLabel" id="name">
+				<property name="ellipsize">end</property>
+				<style>
+					<class name="caption"/>
+				</style>
+			</object>
+		</child>
+		<child>
+			<object class="GtkSwitch" id="enable">
+				<property name="halign">center</property>
+			</object>
+		</child>
+	</template>
+</interface>
