@@ -1,7 +1,8 @@
 use std::cell::{Cell, RefCell};
 use gtk::{
     glib,
-    gdk::Texture,
+    gdk::{RGBA, Texture},
+    graphene,
     prelude::*,
     subclass::prelude::*,
     CompositeTemplate,
@@ -97,6 +98,7 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             klass.bind_template();
+            klass.set_layout_manager_type::<gtk::BoxLayout>();
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -108,7 +110,39 @@ mod imp {
     impl ObjectImpl for PlayerBar {}
 
     // Trait shared by all widgets
-    impl WidgetImpl for PlayerBar {}
+    impl WidgetImpl for PlayerBar {
+        fn snapshot(&self, snapshot: &gtk::Snapshot) {
+            let widget = self.obj();
+            let w = widget.width() as f32 / 2.0;
+            let h = widget.height() as f32 / 2.0;
+
+            // Bluuuuuur
+            // Proof of concept that snapshotting works
+            let red = RGBA::parse("red").unwrap();
+            let green = RGBA::parse("green").unwrap();
+            let yellow = RGBA::parse("yellow").unwrap();
+            let blue = RGBA::parse("blue").unwrap();
+            snapshot.append_color (
+                &red,
+                &graphene::Rect::new(0.0, 0.0, w, h)
+            );
+            snapshot.append_color (
+                &green,
+                &graphene::Rect::new(w, 0.0, w, h)
+            );
+            snapshot.append_color (
+                &yellow,
+                &graphene::Rect::new(0.0, h, w, h)
+            );
+            snapshot.append_color (
+                &blue,
+                &graphene::Rect::new(w, h, w, h)
+            );
+
+            // Call the parent class's snapshot() method to render child widgets
+            self.parent_snapshot(snapshot);
+        }
+    }
 
     // Trait shared by all boxes
     impl BoxImpl for PlayerBar {}
