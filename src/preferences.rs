@@ -45,6 +45,15 @@ mod imp {
         #[template_child]
         pub search_case_sensitive: TemplateChild<adw::SwitchRow>,
 
+        #[template_child]
+        pub use_album_art_as_bg: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub bg_blur_radius: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub bg_opacity: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub bg_transition_duration: TemplateChild<adw::SpinRow>,
+
         // pub signal_ids: RefCell<Vec<SignalHandlerId>>,
     }
 
@@ -175,6 +184,14 @@ impl Preferences {
                 let _ = sender.send_blocking(MpdMessage::Connect);
             }
         ));
+        let mpd_download_album_art = imp.mpd_download_album_art.get();
+        conn_settings
+            .bind(
+                "mpd-download-album-art",
+                &mpd_download_album_art,
+                "active"
+            )
+            .build();
 
         // Set up Last.fm settings
         let use_lastfm = imp.use_lastfm.get();
@@ -234,6 +251,46 @@ impl Preferences {
                 "active"
             )
             .build();
+
+        // Set up player settings
+        let use_album_art_as_bg = imp.use_album_art_as_bg.get();
+        let bg_blur_radius = imp.bg_blur_radius.get();
+        let bg_opacity = imp.bg_opacity.get();
+        let bg_transition_duration = imp.bg_transition_duration.get();
+
+        let player_settings = settings.child("player");
+        player_settings
+            .bind(
+                "use-album-art-as-bg",
+                &use_album_art_as_bg,
+                "active"
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "bg-blur-radius",
+                &bg_blur_radius.adjustment(),
+                "value"
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "bg-opacity",
+                &bg_opacity.adjustment(),
+                "value"
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "bg-transition-duration-s",
+                &bg_transition_duration.adjustment(),
+                "value"
+            )
+            .build();
+
         res
     }
 }

@@ -21,8 +21,8 @@
 	<schema id="org.euphonia.Euphonia" path="/org/euphonia/Euphonia/">
 		<child schema="org.euphonia.Euphonia.state" name="state"/>
 		<child schema="org.euphonia.Euphonia.library" name="library"/>
+		<child schema="org.euphonia.Euphonia.player" name="player"/>
 		<child schema="org.euphonia.Euphonia.client" name="client"/>
-		<child schema="org.euphonia.Euphonia.appearance" name="appearance"/>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.client" path="/org/euphonia/Euphonia/client/">
@@ -71,7 +71,19 @@
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.appearance" path="/org/euphonia/Euphonia/appearance/">
+	<schema id="org.euphonia.Euphonia.player" path="/org/euphonia/Euphonia/player/">
+		<key name="use-album-art-as-bg" type="b">
+			<default>true</default>
+		</key>
+		<key name="bg-blur-radius" type="u">
+			<default>24</default>
+		</key>
+		<key name="bg-opacity" type="d">
+			<default>0.5</default>
+		</key>
+		<key name="bg-transition-duration-s" type="d">
+			<default>1.0</default>
+		</key>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.controls" path="/org/euphonia/Euphonia/controls/">

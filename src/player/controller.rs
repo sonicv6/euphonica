@@ -307,15 +307,24 @@ impl Player {
                 for maybe_song in self.queue().iter::<Song>() {
                     let song = maybe_song.unwrap();
                     if song.get_queue_id() == new_queue_place.id.0 {
-                        println!("{:?}", song.get_quality_grade());
-                        let _ = self.imp().current_song.replace(Some(song.clone()));
+                        let maybe_old_song = self.imp().current_song.replace(Some(song.clone()));
                         self.notify("title");
                         self.notify("artist");
-                        self.notify("album");
-                        self.notify("album-art");
                         self.notify("duration");
                         self.notify("quality-grade");
                         self.notify("format-desc");
+                        // Avoid needlessly changing album art as it will cause the whole
+                        // bar to redraw (blurred background).
+                        if let Some(old_song) = maybe_old_song {
+                            if song.get_album() != old_song.get_album() {
+                                self.notify("album");
+                                self.notify("album-art");
+                            }
+                        }
+                        else {
+                            self.notify("album");
+                            self.notify("album-art");
+                        }
                         break;
                     }
                 }

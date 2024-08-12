@@ -17,7 +17,7 @@ use async_channel::Sender;
 use mpd::output::Output;
 
 use crate::{
-    utils::format_secs_as_duration,
+    utils::{settings_manager, format_secs_as_duration},
     client::MpdMessage,
     player::Player,
     common::{QualityGrade, paintables::FadePaintable}
@@ -26,6 +26,13 @@ use crate::{
 use super::{PlaybackState, VolumeKnob, MpdOutput};
 
 mod imp {
+    use glib::{
+        ParamSpec,
+        ParamSpecBoolean,
+        ParamSpecUInt,
+        ParamSpecDouble
+    };
+    use once_cell::sync::Lazy;
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
@@ -80,6 +87,11 @@ mod imp {
         // Kept here so we can access it in snapshot()
         pub bg_paintable: FadePaintable,
         pub output_widgets: RefCell<Vec<MpdOutput>>,
+        // Kept here so snapshot() does not have to query GSettings on every frame
+        pub use_album_art_bg: Cell<bool>,
+        pub blur_radius: Cell<u32>,
+        pub opacity: Cell<f64>,
+        pub transition_duration: Cell<f64>,
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
         pub output_count: Cell<usize>,
@@ -110,7 +122,73 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    impl ObjectImpl for PlayerBar {}
+    impl ObjectImpl for PlayerBar {
+        fn properties() -> &'static [ParamSpec] {
+            static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
+                vec![
+                    ParamSpecBoolean::builder("use-album-art-bg").build(),
+                    ParamSpecDouble::builder("transition-duration").build(),
+                    ParamSpecDouble::builder("opacity").build(),
+                    ParamSpecUInt::builder("blur-radius").build(),
+                ]
+            });
+            PROPERTIES.as_ref()
+        }
+
+        fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
+            match pspec.name() {
+                "use-album-art-bg" => self.use_album_art_bg.get().to_value(),
+                "transition-duration" => self.transition_duration.get().to_value(),
+                "opacity" => self.opacity.get().to_value(),
+                "blur-radius" => self.blur_radius.get().to_value(),
+                _ => unimplemented!(),
+            }
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            let obj = self.obj();
+            match pspec.name() {
+                "use-album-art-bg" => {
+                    // Always set to title tag
+                    if let Ok(b) = value.get::<bool>() {
+                        let old = self.use_album_art_bg.replace(b);
+                        if old != b {
+                            obj.notify("use-album-art-bg");
+                            obj.queue_draw();
+                        }
+                    }
+                }
+                "transition-duration" => {
+                    if let Ok(val) = value.get::<f64>() {
+                        let old = self.transition_duration.replace(val);
+                        if old != val {
+                            obj.notify("transition-duration");
+                            // No need to queue draw for this (no immediate change)
+                        }
+                    }
+                }
+                "opacity" => {
+                    if let Ok(val) = value.get::<f64>() {
+                        let old = self.opacity.replace(val);
+                        if old != val {
+                            obj.notify("opacity");
+                            obj.queue_draw();
+                        }
+                    }
+                }
+                "blur-radius" => {
+                    if let Ok(val) = value.get::<u32>() {
+                        let old = self.blur_radius.replace(val);
+                        if old != val {
+                            obj.notify("blur-radius");
+                            obj.queue_draw();
+                        }
+                    }
+                }
+                _ => unimplemented!(),
+            }
+        }
+    }
 
     // Trait shared by all widgets
     impl WidgetImpl for PlayerBar {
@@ -121,28 +199,44 @@ mod imp {
 
             // Bluuuuuur
             // Adopted from Nanling Zheng's implementation for Gapless.
-            // TODO: Make blur level & opacity user-configurable
-            let bg_width = self.bg_paintable.intrinsic_width() as f32;
-            let bg_height = self.bg_paintable.intrinsic_height() as f32;
-            let scale_x = width / bg_width as f32;
-            let scale_y = height / bg_height as f32;
-            let scale_max = scale_x.max(scale_y);
-            let view_width = bg_width * scale_max;
-            let view_height = bg_height * scale_max;
-            let delta_x = (width - view_width) * 0.5;
-            let delta_y = (height - view_height) * 0.5;
-            snapshot.translate(&graphene::Point::new(
-                delta_x, delta_y
-            ));
-            // Blur & opacity nodes
-            snapshot.push_blur(10.0);
-            snapshot.push_opacity(0.3);
-            self.bg_paintable.snapshot(snapshot, view_width as f64, view_height as f64);
-            snapshot.pop();
-            snapshot.pop();
-            snapshot.translate(&graphene::Point::new(
-                -delta_x, -delta_y
-            ));
+            if self.use_album_art_bg.get() {
+                let bg_width = self.bg_paintable.intrinsic_width() as f32;
+                let bg_height = self.bg_paintable.intrinsic_height() as f32;
+                let scale_x = width / bg_width as f32;
+                let scale_y = height / bg_height as f32;
+                let scale_max = scale_x.max(scale_y);
+                let view_width = bg_width * scale_max;
+                let view_height = bg_height * scale_max;
+                let delta_x = (width - view_width) * 0.5;
+                let delta_y = (height - view_height) * 0.5;
+                // Crop background to only the bottom bar
+                snapshot.push_clip(&graphene::Rect::new(
+                    0.0, 0.0, width, height
+                ));
+                snapshot.translate(&graphene::Point::new(
+                    delta_x, delta_y
+                ));
+                // Blur & opacity nodes
+                let blur_radius = self.blur_radius.get();
+                if blur_radius > 0 {
+                    snapshot.push_blur(blur_radius as f64);
+                }
+                let opacity = self.opacity.get();
+                if opacity < 1.0 {
+                    snapshot.push_opacity(opacity);
+                }
+                self.bg_paintable.snapshot(snapshot, view_width as f64, view_height as f64);
+                snapshot.translate(&graphene::Point::new(
+                    -delta_x, -delta_y
+                ));
+                snapshot.pop();
+                if opacity < 1.0 {
+                    snapshot.pop();
+                }
+                if blur_radius > 0 {
+                    snapshot.pop();
+                }
+            }
 
             // Call the parent class's snapshot() method to render child widgets
             self.parent_snapshot(snapshot);
@@ -172,9 +266,45 @@ impl PlayerBar {
     }
 
     pub fn setup(&self, player: Player, sender: Sender<MpdMessage>) {
+        self.bind_settings();
         self.setup_volume_knob(player.clone());
         self.bind_state(player.clone(), sender.clone());
         self.setup_seekbar(player, sender);
+    }
+
+    fn bind_settings(&self) {
+        let settings = settings_manager().child("player");
+        settings
+            .bind(
+                "use-album-art-as-bg",
+                self,
+                "use-album-art-bg"
+            )
+            .build();
+
+        settings
+            .bind(
+                "bg-blur-radius",
+                self,
+                "blur-radius"
+            )
+            .build();
+
+        settings
+            .bind(
+                "bg-opacity",
+                self,
+                "opacity"
+            )
+            .build();
+
+        settings
+            .bind(
+                "bg-transition-duration-s",
+                self,
+                "transition-duration"
+            )
+            .build();
     }
 
     fn setup_volume_knob(&self, player: Player) {
@@ -501,20 +631,23 @@ impl PlayerBar {
         }
 
         // Run fade transition
-        // TODO: Make transition duration user-configurable.
+        // Remember to queue draw too
         let anim_target = adw::CallbackAnimationTarget::new(
             clone!(
+                #[weak(rename_to = this)]
+                self,
                 #[weak]
                 bg_paintable,
                 move |progress: f64| {
                     bg_paintable.set_fade(progress);
+                    this.queue_draw();
                 }
             )
         );
         let anim = adw::TimedAnimation::new(
             self,
             0.0, 1.0,
-            1000,
+            (self.imp().transition_duration.get() * 1000.0).round() as u32,
             anim_target
         );
         anim.play();

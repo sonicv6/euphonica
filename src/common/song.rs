@@ -144,8 +144,7 @@ mod imp {
         ParamSpecInt64,
         ParamSpecBoolean,
         ParamSpecString,
-        ParamSpecObject,
-        ParamSpecVariant
+        ParamSpecObject
     };
     use once_cell::sync::Lazy;
     use super::*;
