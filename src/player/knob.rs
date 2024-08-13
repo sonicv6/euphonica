@@ -211,8 +211,11 @@ impl VolumeKnob {
             if let Ok(dbfs) = convert_to_dbfs(val) {
                 readout.set_label(&format!("{:.2}", dbfs));
             }
+            else if val > 0.0 {
+                readout.set_label("0");
+            }
             else {
-                readout.set_label("Muted");
+                readout.set_label("-∞");
             }
         }
         else {

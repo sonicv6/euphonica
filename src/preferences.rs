@@ -3,7 +3,7 @@ use async_channel::Sender;
 use adw::subclass::prelude::*;
 use adw::prelude::*;
 use gtk::{
-    glib,
+    glib::{self, Value, Variant},
     CompositeTemplate
 };
 
@@ -44,6 +44,19 @@ mod imp {
         pub sort_case_sensitive: TemplateChild<adw::SwitchRow>,
         #[template_child]
         pub search_case_sensitive: TemplateChild<adw::SwitchRow>,
+
+        #[template_child]
+        pub use_album_art_as_bg: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub bg_blur_radius: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub bg_opacity: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub bg_transition_duration: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub vol_knob_unit: TemplateChild<adw::ComboRow>,
+        #[template_child]
+        pub vol_knob_sensitivity: TemplateChild<adw::SpinRow>,
 
         // pub signal_ids: RefCell<Vec<SignalHandlerId>>,
     }
@@ -175,6 +188,14 @@ impl Preferences {
                 let _ = sender.send_blocking(MpdMessage::Connect);
             }
         ));
+        let mpd_download_album_art = imp.mpd_download_album_art.get();
+        conn_settings
+            .bind(
+                "mpd-download-album-art",
+                &mpd_download_album_art,
+                "active"
+            )
+            .build();
 
         // Set up Last.fm settings
         let use_lastfm = imp.use_lastfm.get();
@@ -232,6 +253,87 @@ impl Preferences {
                 "search-case-sensitive",
                 &search_case_sensitive,
                 "active"
+            )
+            .build();
+
+        // Set up player settings
+        let use_album_art_as_bg = imp.use_album_art_as_bg.get();
+        let bg_blur_radius = imp.bg_blur_radius.get();
+        let bg_opacity = imp.bg_opacity.get();
+        let bg_transition_duration = imp.bg_transition_duration.get();
+        for widget in [&bg_blur_radius, &bg_opacity, &bg_transition_duration] {
+            use_album_art_as_bg
+                .bind_property(
+                    "active",
+                    widget,
+                    "sensitive"
+                )
+                .sync_create()
+                .build();
+        }
+
+        let player_settings = settings.child("player");
+        player_settings
+            .bind(
+                "use-album-art-as-bg",
+                &use_album_art_as_bg,
+                "active"
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "bg-blur-radius",
+                &bg_blur_radius.adjustment(),
+                "value"
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "bg-opacity",
+                &bg_opacity.adjustment(),
+                "value"
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "bg-transition-duration-s",
+                &bg_transition_duration.adjustment(),
+                "value"
+            )
+            .build();
+
+        let vol_knob_unit = imp.vol_knob_unit.get();
+        let vol_knob_sensitivity = imp.vol_knob_sensitivity.get();
+        player_settings
+            .bind(
+                "vol-knob-unit",
+                &vol_knob_unit,
+                "selected"
+            )
+            .mapping(
+                |v: &Variant, _| { match v.get::<String>().unwrap().as_str() {
+                    "percents" => Some(0.to_value()),
+                    "decibels" => Some(1.to_value()),
+                    _ => unreachable!()
+                }}
+            )
+            .set_mapping(
+                |v: &Value, _| { match v.get::<u32>().ok() {
+                    Some(0) => Some("percents".to_variant()),
+                    Some(1) => Some("decibels".to_variant()),
+                    _ => unreachable!()
+                }}
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "vol-knob-sensitivity",
+                &vol_knob_sensitivity,
+                "value"
             )
             .build();
         res

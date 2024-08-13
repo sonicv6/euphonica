@@ -151,7 +151,6 @@ impl QueueView {
             child.bind(&item);
         });
 
-
         // When row goes out of sight, unbind from item to allow reuse with another.
         // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
         factory.connect_unbind(move |_, list_item| {
@@ -168,6 +167,8 @@ impl QueueView {
                 .item()
                 .and_downcast::<Song>()
                 .expect("The item has to be a common::Song.");
+            // Drop reference to GdkTexture
+            item.set_thumbnail(None);
             child.unbind(&item);
         });
 

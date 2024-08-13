@@ -502,6 +502,8 @@ impl AlbumView {
                 .item()
                 .and_downcast::<Album>()
                 .expect("The item has to be a common::Album.");
+            // Drop reference to GdkTexture
+            item.set_cover(None);
             child.unbind(&item);
         });
 
