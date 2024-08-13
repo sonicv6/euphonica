@@ -197,9 +197,14 @@ impl EuphoniaApplication {
             .developer_name("htkhiem2000")
             .version(VERSION)
             .developers(vec!["htkhiem2000"])
+            .license_type(gtk::License::Gpl30)
             .copyright("© 2024 htkhiem2000")
             .build();
 
+        about.add_credit_section(Some("Special Thanks"), &[
+            "Nanling Zheng (reference background blur implementation) <neithern@outlook.com>",
+            "Emmanuele Bassi (GTK, LibAdwaita, the Amberol project) https://www.bassi.io/"
+        ]);
         about.present(Some(&window));
     }
 

@@ -16,7 +16,13 @@ use gtk::{
 // old texture such that there is no visible shift when switching to the
 // new texture but standing at fade == 0.0 (i.e. the old texture is still
 // displayed at the same position and scale as before).
-// Adopted from Nanling Zheng's implementation for Gapless.
+// The new texture is always drawn first at 100% opacity, optionally followed
+// by the old texture (being faded out) to avoid the short dip in opacity half-
+// way through the transition.
+// Adopted with modifications from Nanling Zheng's implementation for Gapless.
+// The original implementation was in Vala and can be found at
+// https://gitlab.gnome.org/neithern/g4music/-/blob/master/src/ui/paintables.vala.
+// Both the original implementation and this one are licensed under GPLv3.
 mod imp {
     use super::*;
 
@@ -78,6 +84,20 @@ mod imp {
 
         fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
             let fade = self.fade.get();
+            // Check if there's a current texture.
+            if let Some(curr) = self.current.borrow().as_ref() {
+                if fade < 1.0 && self.previous.borrow().as_ref().is_none() {
+                    // If there is one, but nothing previously and fade is != 1,
+                    // then we're fading in from nothing.
+                    snapshot.push_opacity(fade);
+                    curr.snapshot(snapshot, width, height);
+                    snapshot.pop();
+                }
+                else {
+                    // Draw at full opacity (skip the opacity node).
+                    curr.snapshot(snapshot, width, height);
+                }
+            }
             if fade < 1.0 {
                 let delta_x: f64;
                 let delta_y: f64;
@@ -119,19 +139,6 @@ mod imp {
                             -delta_y as f32
                     ));
                 }
-                // Check if there's a current texture since we might be fading out
-                // (going from having a playing song to no song, for example)
-                if let Some(curr) = self.current.borrow().as_ref() {
-                    if fade < 1.0 {
-                        // Fade current in
-                        snapshot.push_opacity(fade);
-                        curr.snapshot(snapshot, width, height);
-                        snapshot.pop();
-                    }
-                }
-            }
-            else if let Some(curr) = self.current.borrow().as_ref() {
-                curr.snapshot(snapshot, width, height);
             }
         }
     }
