@@ -84,9 +84,6 @@
 		<key name="bg-transition-duration-s" type="d">
 			<default>1.0</default>
 		</key>
-	</schema>
-
-	<schema id="org.euphonia.Euphonia.controls" path="/org/euphonia/Euphonia/controls/">
 		<key name="vol-knob-sensitivity" type="d">
 			<default>1.0</default>
 		</key>

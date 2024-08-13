@@ -3,7 +3,7 @@ use async_channel::Sender;
 use adw::subclass::prelude::*;
 use adw::prelude::*;
 use gtk::{
-    glib,
+    glib::{self, Value, Variant},
     CompositeTemplate
 };
 
@@ -53,6 +53,10 @@ mod imp {
         pub bg_opacity: TemplateChild<adw::SpinRow>,
         #[template_child]
         pub bg_transition_duration: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub vol_knob_unit: TemplateChild<adw::ComboRow>,
+        #[template_child]
+        pub vol_knob_sensitivity: TemplateChild<adw::SpinRow>,
 
         // pub signal_ids: RefCell<Vec<SignalHandlerId>>,
     }
@@ -257,6 +261,16 @@ impl Preferences {
         let bg_blur_radius = imp.bg_blur_radius.get();
         let bg_opacity = imp.bg_opacity.get();
         let bg_transition_duration = imp.bg_transition_duration.get();
+        for widget in [&bg_blur_radius, &bg_opacity, &bg_transition_duration] {
+            use_album_art_as_bg
+                .bind_property(
+                    "active",
+                    widget,
+                    "sensitive"
+                )
+                .sync_create()
+                .build();
+        }
 
         let player_settings = settings.child("player");
         player_settings
@@ -291,6 +305,37 @@ impl Preferences {
             )
             .build();
 
+        let vol_knob_unit = imp.vol_knob_unit.get();
+        let vol_knob_sensitivity = imp.vol_knob_sensitivity.get();
+        player_settings
+            .bind(
+                "vol-knob-unit",
+                &vol_knob_unit,
+                "selected"
+            )
+            .mapping(
+                |v: &Variant, _| { match v.get::<String>().unwrap().as_str() {
+                    "percents" => Some(0.to_value()),
+                    "decibels" => Some(1.to_value()),
+                    _ => unreachable!()
+                }}
+            )
+            .set_mapping(
+                |v: &Value, _| { match v.get::<u32>().ok() {
+                    Some(0) => Some("percents".to_variant()),
+                    Some(1) => Some("decibels".to_variant()),
+                    _ => unreachable!()
+                }}
+            )
+            .build();
+
+        player_settings
+            .bind(
+                "vol-knob-sensitivity",
+                &vol_knob_sensitivity,
+                "value"
+            )
+            .build();
         res
     }
 }

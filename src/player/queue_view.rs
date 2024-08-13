@@ -168,6 +168,8 @@ impl QueueView {
                 .item()
                 .and_downcast::<Song>()
                 .expect("The item has to be a common::Song.");
+            // Drop reference to GdkTexture
+            item.set_thumbnail(None);
             child.unbind(&item);
         });
 

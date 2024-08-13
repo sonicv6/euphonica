@@ -1,11 +1,6 @@
 use std::cell::{Cell, RefCell};
 use gtk::{
-    glib,
-    gdk,
-    graphene,
-    prelude::*,
-    subclass::prelude::*,
-    CompositeTemplate,
+    gdk, glib::{self, Variant}, graphene, prelude::*, subclass::prelude::*, CompositeTemplate
 };
 use adw::prelude::*;
 use glib::{
@@ -308,8 +303,32 @@ impl PlayerBar {
     }
 
     fn setup_volume_knob(&self, player: Player) {
+        let settings = settings_manager().child("player");
         let knob = self.imp().vol_knob.get();
         knob.setup();
+
+        settings
+            .bind(
+                "vol-knob-unit",
+                &knob,
+                "use-dbfs"
+            )
+            .get_only()
+            .mapping(|v: &Variant, _| {
+                println!("use-dbfs: {:?}", v);
+                Some((v.get::<String>().unwrap().as_str() == "decibels").to_value())
+            })
+            .build();
+
+        settings
+            .bind(
+                "vol-knob-sensitivity",
+                &knob,
+                "sensitivity"
+            )
+            .mapping(|v: &Variant, _| { Some(v.get::<f64>().unwrap().to_value())})
+            .build();
+
         knob.connect_notify_local(
             Some("value"),
             clone!(

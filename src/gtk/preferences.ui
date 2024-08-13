@@ -155,6 +155,40 @@
 						</child>
 					</object>
 				</child>
+				<child>
+					<object class="AdwPreferencesGroup">
+						<property name="title" translatable="true">Volume Knob</property>
+						<child>
+							<object class="AdwComboRow" id="vol_knob_unit">
+								<property name="title" translatable="true">Display unit</property>
+								<property name="subtitle" translatable="true">MPD natively uses a 100-step volume scale. The precise gain curve used depends on each output plugin's mixer configuration. dBFS assumes that the 100 steps are treated as percents.</property>
+								<property name="model">
+									<object class="GtkStringList">
+										<items>
+											<item>%</item>
+											<item>dBFS</item>
+										</items>
+									</object>
+								</property>
+							</object>
+						</child>
+						<child>
+							<object class="AdwSpinRow" id="vol_knob_sensitivity">
+								<property name="title" translatable="true">Scroll sensitivity</property>
+								<property name="digits">1</property>
+								<property name="adjustment">
+									<object class="GtkAdjustment">
+										<property name="lower">0.1</property>
+										<property name="upper">3.0</property>
+										<property name="value">1.0</property>
+										<property name="page-increment">1.0</property>
+										<property name="step-increment">0.1</property>
+									</object>
+								</property>
+							</object>
+						</child>
+					</object>
+				</child>
 			</object>
 		</child>
 	</template>
