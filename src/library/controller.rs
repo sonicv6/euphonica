@@ -192,6 +192,16 @@ impl Library {
     pub fn push_album_content_page(&self, album: Album, songs: &[Song]) {
         let song_list = gio::ListStore::new::<Song>();
         song_list.extend_from_slice(songs);
+        // Try to get additional info (won't block; page will get notified of
+        // result later if one does arrive late).
+        if let Some(cache) = self.imp().cache.get() {
+            // Might queue a download but won't load anything into memory just yet.
+            cache.ensure_local_album_info(
+                album.get_mb_album_id(),
+                Some(album.get_title()),
+                album.get_artist()
+            );
+        }
         self.emit_by_name::<()>(
             "album-clicked",
             &[

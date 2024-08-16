@@ -1,4 +1,7 @@
-use std::cell::RefCell;
+use std::{
+    cell::{OnceCell, RefCell},
+    rc::Rc,
+};
 use time::{Date, format_description};
 use adw::subclass::prelude::*;
 use gtk::{
@@ -23,7 +26,9 @@ use super::{
 };
 use crate::{
     utils::format_secs_as_duration,
-    common::{Album, Song}
+    common::{Album, Song},
+    cache::Cache,
+    lastfm::models
 };
 
 mod imp {
@@ -58,6 +63,7 @@ mod imp {
         pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub cache: OnceCell<Rc<Cache>>
     }
 
     #[glib::object_subclass]
@@ -107,7 +113,8 @@ impl Default for AlbumContentView {
 }
 
 impl AlbumContentView {
-    pub fn setup(&self, library: Library) {
+    pub fn setup(&self, library: Library, cache: Rc<Cache>) {
+        let _ = self.imp().cache.set(cache);
         let infobox_revealer = self.imp().infobox_revealer.get();
         let collapse_infobox = self.imp().collapse_infobox.get();
         collapse_infobox
@@ -230,10 +237,21 @@ impl AlbumContentView {
     }
 
     pub fn bind(&self, album: Album) {
+        println!("Binding to album: {:?}", &album);
         let title_label = self.imp().title.get();
         let artist_label = self.imp().artist.get();
         let release_date_label = self.imp().release_date.get();
         let mut bindings = self.imp().bindings.borrow_mut();
+
+        // TODO: actually use this
+        let cache = self.imp().cache.get().unwrap().clone();
+        if let Some(info) = cache.load_local_album_info(
+            album.get_mb_album_id().as_deref(),
+            Some(album.get_title()).as_deref(),
+            album.get_artist().as_deref()
+        ) {
+            println!("{:?}", info.wiki);
+        }
 
         let title_binding = album
             .bind_property("title", &title_label, "label")

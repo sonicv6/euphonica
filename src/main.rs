@@ -24,6 +24,7 @@ mod player;
 mod config;
 mod window;
 mod client;
+mod lastfm;
 mod library;
 mod sidebar;
 mod utils;
