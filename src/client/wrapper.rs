@@ -89,6 +89,7 @@ pub enum MpdMessage {
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
 	AlbumArtDownloaded(String), // Notify which album art was downloaded and where it is
+    AlbumArtNotAvailable(String), // For triggering downloading from other sources
     AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model.
     DBUpdated
 }
@@ -224,7 +225,12 @@ impl MpdWrapper {
                                             let  _= dyn_img.thumbnail(64, 64).save(&thumb_cache_path);
                                         }
                                         sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri)).expect(
-                                            "Warning: cannot notify main client of new album art."
+                                            "Warning: cannot notify main client of album art download result."
+                                        );
+                                    }
+                                    else {
+                                        sender_to_fg.send_blocking(MpdMessage::AlbumArtNotAvailable(uri)).expect(
+                                            "Warning: cannot notify main client of album art download result."
                                         );
                                     }
                                 }
@@ -362,6 +368,10 @@ impl MpdWrapper {
             MpdMessage::FindAdd(terms) => self.find_add(terms),
             MpdMessage::AlbumArtDownloaded(folder_uri) => self.state.emit_result(
                 "album-art-downloaded",
+                folder_uri
+            ),
+            MpdMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
+                "album-art-not-available",
                 folder_uri
             ),
             MpdMessage::AlbumBasicInfoDownloaded(info) => self.state.emit_result(

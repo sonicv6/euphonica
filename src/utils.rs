@@ -2,15 +2,6 @@ use gtk::gio;
 use gtk::Ordering;
 use crate::config::APPLICATION_ID;
 use mpd::status::AudioFormat;
-use std::sync::OnceLock;
-use tokio::runtime::Runtime;
-
-pub fn runtime() -> &'static Runtime {
-    static RUNTIME: OnceLock<Runtime> = OnceLock::new();
-    RUNTIME.get_or_init(|| {
-        Runtime::new().expect("Setting up tokio runtime needs to succeed.")
-    })
-}
 
 pub fn settings_manager() -> gio::Settings {
     // Trim the .Devel suffix if exists

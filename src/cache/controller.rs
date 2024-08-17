@@ -19,7 +19,6 @@ use async_channel::{Sender, Receiver};
 use std::{
     fmt,
     rc::Rc,
-    sync::Arc,
     path::PathBuf,
     fs::create_dir_all
 };
@@ -39,7 +38,7 @@ use glib::{
 use fasthash::murmur2;
 
 use crate::{
-    utils::{settings_manager, runtime},
+    utils::settings_manager,
     client::{MpdMessage, ClientState},
     lastfm::{LastfmWrapper, models}
 };
@@ -82,10 +81,9 @@ pub struct Cache {
     mpd_sender: Sender<MpdMessage>,
     // receiver: RefCell<Receiver<CacheMessage>>,
     // TODO: Refactor into generic metadata providers for modularity
-    meta_provider: Arc<LastfmWrapper>,
+    meta_provider: Rc<LastfmWrapper>,
     state: CacheState,
-    settings: Settings,
-    sender: Sender<AsyncResponse>
+    settings: Settings
 }
 
 impl fmt::Debug for Cache {
@@ -120,7 +118,7 @@ impl Cache {
         // TODO: figure out max cost based on user-selectable RAM limit
         // TODO: figure out cost of textures based on user-selectable resolution
         let image_cache = stretto::Cache::new(10240, 1024).unwrap();
-        let meta_provider = Arc::new(LastfmWrapper::new());
+        let meta_provider = LastfmWrapper::new(sender.clone());
 
         let mut doc_path = app_cache_path.clone();
         doc_path.push("metadata.polodb");
@@ -140,8 +138,7 @@ impl Cache {
             meta_provider,
             mpd_sender,
             state: CacheState::default(),
-            settings: settings_manager().child("client"),
-            sender
+            settings: settings_manager().child("client")
         });
 
         res.clone().bind_state(mpd_state);
@@ -151,8 +148,7 @@ impl Cache {
     }
 
     fn setup_channel(self: Rc<Self>, receiver: Receiver<AsyncResponse>) {
-        // Set up a listener for updates from tokio-based async functions,
-        // as they are in a separate thread.
+        // Set up a listener for updates from metadata providers.
         glib::MainContext::default().spawn_local(clone!(
             #[weak(rename_to = this)]
             self,
@@ -192,6 +188,20 @@ impl Cache {
                 #[weak(rename_to = this)]
                 self,
                 move |_: ClientState, folder_uri: String| {
+                    this.state.emit_with_param("album-art-downloaded", &folder_uri);
+                }
+            )
+        );
+
+        // Daisy-chain
+        client_state.connect_closure(
+            "album-art-not-available",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: ClientState, folder_uri: String| {
+
                     this.state.emit_with_param("album-art-downloaded", &folder_uri);
                 }
             )
@@ -332,21 +342,7 @@ impl Cache {
             if let Ok(response) = result {
                 if response.is_none() {
                     // TODO: Refactor to accommodate multiple metadata providers
-                    let sender = self.sender.clone();
-                    let provider = self.meta_provider.clone();
-                    let folder_uri_owned = folder_uri.to_owned();
-                    runtime().spawn(
-                        async move {
-                            let response = provider.get_album_meta(
-                                key
-                            ).await;
-                            if let Ok(info) = response {
-                                let _ = sender.send_blocking(AsyncResponse::Album(folder_uri_owned, info));
-                            }
-                            else {
-                                println!("Cache error: {}", response.err().unwrap());
-                            }
-                        });
+                    self.meta_provider.get_album_meta(folder_uri, key);
                 }
                 else {
                     println!("Album info already cached, won't download again");
