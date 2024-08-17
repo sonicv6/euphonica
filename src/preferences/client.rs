@@ -169,6 +169,13 @@ impl ClientPreferences {
 
         // Set up Last.fm settings
         let use_lastfm = imp.use_lastfm.get();
+        conn_settings
+            .bind(
+                "use-lastfm",
+                &use_lastfm,
+                "active"
+            )
+            .build();
         let lastfm_key = imp.lastfm_key.get();
         let lastfm_user_agent = imp.lastfm_user_agent.get();
         let lastfm_download_album_art = imp.lastfm_download_album_art.get();

@@ -17,9 +17,9 @@ use crate::{
     },
     common::{
         Album,
-        AlbumInfo,
         Song
-    }
+    },
+    utils::settings_manager
 };
 use gtk::{
     glib,
@@ -27,7 +27,6 @@ use gtk::{
     prelude::*,
 };
 use glib::{
-    clone,
     closure_local,
     subclass::Signal
 };
@@ -194,14 +193,16 @@ impl Library {
         song_list.extend_from_slice(songs);
         // Try to get additional info (won't block; page will get notified of
         // result later if one does arrive late).
-        if let Some(cache) = self.imp().cache.get() {
-            // Might queue a download but won't load anything into memory just yet.
-            cache.ensure_local_album_meta(
-                album.get_mb_album_id(),
-                Some(album.get_title()),
-                album.get_artist(),
-                album.get_uri().as_ref()
-            );
+        if settings_manager().child("client").boolean("use-lastfm") {
+            if let Some(cache) = self.imp().cache.get() {
+                // Might queue a download but won't load anything into memory just yet.
+                cache.ensure_local_album_meta(
+                    album.get_mb_album_id(),
+                    Some(album.get_title()),
+                    album.get_artist(),
+                    album.get_uri().as_ref()
+                );
+            }
         }
         self.emit_by_name::<()>(
             "album-clicked",

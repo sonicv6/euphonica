@@ -26,7 +26,7 @@ use super::{
     AlbumSongRow
 };
 use crate::{
-    utils::format_secs_as_duration,
+    utils::{format_secs_as_duration, settings_manager},
     common::{Album, Song},
     cache::{Cache, CacheState}
 };
@@ -137,6 +137,7 @@ impl AlbumContentView {
     }
 
     pub fn setup(&self, library: Library, cache: Rc<Cache>) {
+        let client_settings = settings_manager().child("client");
         cache.get_cache_state().connect_closure(
             "album-meta-downloaded",
             false,
@@ -145,7 +146,7 @@ impl AlbumContentView {
                 self,
                 move |_: CacheState, folder_uri: String| {
                     if let Some(album) = this.imp().album.borrow().as_ref() {
-                        if folder_uri == album.get_uri() {
+                        if folder_uri == album.get_uri() && client_settings.boolean("use-lastfm") {
                             this.update_meta(album);
                         }
                     }
@@ -295,7 +296,9 @@ impl AlbumContentView {
         // Save binding
         bindings.push(artist_binding);
 
-        self.update_meta(&album);
+        if settings_manager().child("client").boolean("use-lastfm") {
+            self.update_meta(&album);
+        }
 
         let release_date_binding = album
             .bind_property("release_date", &release_date_label, "label")
