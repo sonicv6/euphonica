@@ -8,8 +8,14 @@ pub struct Tag {
 }
 // For some reason the taglist resides in a nested "tag" object.
 #[derive(Serialize, Deserialize)]
-struct TagsHelper {
+struct NestedTagList {
     tag: Vec<Tag>,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum TagsHelper {
+    String(String),
+    Nested(NestedTagList)
 }
 
 fn deserialize_tags<'de, D>(deserializer: D) -> Result<Vec<Tag>, D::Error>
@@ -17,14 +23,28 @@ where
     D: Deserializer<'de>,
 {
     let helper: TagsHelper = Deserialize::deserialize(deserializer)?;
-    Ok(helper.tag)
+    match helper {
+        TagsHelper::String(_) => Ok(Vec::with_capacity(0)),
+        TagsHelper::Nested(nested) => Ok(nested.tag)
+    }
 }
-fn serialize_tags<S>(tags: &Vec<Tag>, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_tags<S>(tags: &[Tag], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let helper = TagsHelper { tag: tags.clone() };
-    helper.serialize(serializer)
+    if tags.is_empty() {
+        let helper = TagsHelper::String("".to_owned());
+        helper.serialize(serializer)
+    }
+    else {
+        let helper = TagsHelper::Nested(
+            NestedTagList {
+                tag: tags.to_owned()
+            }
+        );
+        helper.serialize(serializer)
+    }
+
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -36,15 +56,14 @@ pub struct Image {
 
 // Album
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
 pub struct Wiki {
     pub summary: String,
     pub content: String,
-    #[serde(default)]
-    _other: ()
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[allow(clippy::manual_non_exhaustive)]
+#[non_exhaustive]
 pub struct Album {
     pub artist: String,
     // If queried using mbid, it won't be returned again
@@ -60,8 +79,6 @@ pub struct Album {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wiki: Option<Wiki>,
-    #[serde(default)]
-    _other: ()
 }
 #[derive(Deserialize)]
 pub struct AlbumResponse {

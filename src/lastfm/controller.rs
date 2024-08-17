@@ -1,3 +1,4 @@
+extern crate bson;
 use reqwest::{
     Client,
     Response,
@@ -51,7 +52,6 @@ impl LastfmWrapper {
                 .header(USER_AGENT, agent)
                 .send()
                 .await {
-                    println!("{:?}", resp);
                     return Some(resp);
                 }
             return None;
@@ -61,24 +61,14 @@ impl LastfmWrapper {
 
     pub async fn get_album_info(
         &self,
-        // Specify either this (preferred)
-        mbid: Option<&str>,
-        // Or BOTH of these
-        album: Option<&str>, artist: Option<&str>
+        key: bson::Document
     ) -> Result<models::Album, String> {
-        let params: Vec<(&str, String)>;
-        if let Some(id) = mbid {
-            params = vec!(("mbid", id.to_string()));
-        }
-        else if album.is_some() && artist.is_some() {
-            params = vec!(
-                ("album", album.unwrap().to_string()),
-                ("artist", artist.unwrap().to_string())
-            )
-        }
-        else {
-            panic!("Lastfm: either mbid or both of album and artist must be specified");
-        }
+        // Will panic if key document is not a simple map of String to String
+        let params: Vec<(&str, String)> = key.iter().map(
+            |kv: (&String, &bson::Bson)| {
+                (kv.0.as_ref(), kv.1.as_str().unwrap().to_owned())
+            }
+        ).collect();
         if let Some(resp) = self.get(
             "album.getinfo",
             &params
@@ -91,8 +81,17 @@ impl LastfmWrapper {
                             // Might have to put the mbid back in, as Last.fm won't return
                             // it if we queried using it in the first place.
                             let mut album: models::Album = parsed.album;
-                            if let Some(id) = mbid {
-                                album.mbid = Some(id.to_owned());
+                            if let Some(id) = key.get("mbid") {
+                                album.mbid = Some(id.as_str().unwrap().to_owned());
+                            }
+                            // Override album & artist names in case the returned values
+                            // are slightly different (casing, apostrophes, etc.), else
+                            // we won't be able to query it back using our own tags.
+                            if let Some(artist) = key.get("artist") {
+                                album.artist = artist.as_str().unwrap().to_owned();
+                            }
+                            if let Some(name) = key.get("album") {
+                                album.name = name.as_str().unwrap().to_owned();
                             }
                             Ok(album)
 

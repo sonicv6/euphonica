@@ -329,24 +329,16 @@ impl Cache {
             album.as_deref(),
             artist.as_deref()
         ) {
-            let result = self.album_info_cache.find_one(key);
+            let result = self.album_info_cache.find_one(key.clone());
             if let Ok(response) = result {
                 if response.is_none() {
                     // TODO: Refactor to accommodate multiple metadata providers
                     let sender = self.sender.clone();
                     let provider = self.meta_provider.clone();
-                    runtime().spawn(clone!(
-                        #[strong]
-                        mbid,
-                        #[strong]
-                        album,
-                        #[strong]
-                        artist,
+                    runtime().spawn(
                         async move {
                             let response = provider.get_album_info(
-                                mbid.as_deref(),
-                                album.as_deref(),
-                                artist.as_deref()
+                                key
                             ).await;
                             if let Ok(info) = response {
                                 let _ = sender.send_blocking(AsyncResponse::Album(info));
@@ -354,7 +346,7 @@ impl Cache {
                             else {
                                 println!("Cache error: {}", response.err().unwrap());
                             }
-                        }));
+                        });
                 }
                 else {
                     println!("Album info already cached, won't download again");
