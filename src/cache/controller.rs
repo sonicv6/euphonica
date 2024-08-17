@@ -16,7 +16,6 @@ extern crate bson;
 extern crate polodb_core;
 use once_cell::sync::Lazy;
 use async_channel::{Sender, Receiver};
-use tokio::sync::Mutex;
 use std::{
     fmt,
     rc::Rc,
@@ -297,7 +296,7 @@ impl Cache {
         // Specify either this (preferred)
         mbid: Option<&str>,
         // Or BOTH of these
-        album: Option<&str>, artist: Option<&str>
+        album: Option<&str>, artist: Option<&str>,
     ) -> Option<models::Album> {
         if let Ok(key) = self.get_album_key(mbid, album, artist) {
             let result = self.album_info_cache.find_one(key);
@@ -321,7 +320,9 @@ impl Cache {
         // Specify either this (preferred)
         mbid: Option<String>,
         // Or BOTH of these
-        album: Option<String>, artist: Option<String>
+        album: Option<String>, artist: Option<String>,
+        // Optional, for naming downloaded album art
+        folder_uri: Option<&str>
     ) {
         // Check whether we have this album cached
         if let Ok(key) = self.get_album_key(

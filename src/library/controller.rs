@@ -199,7 +199,8 @@ impl Library {
             cache.ensure_local_album_info(
                 album.get_mb_album_id(),
                 Some(album.get_title()),
-                album.get_artist()
+                album.get_artist(),
+                None
             );
         }
         self.emit_by_name::<()>(

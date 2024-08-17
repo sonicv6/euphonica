@@ -57,6 +57,9 @@
 		<key name="lastfm-user-agent" type="s">
 			<default>'Euphonia Dev (MPD client)'</default>
 		</key>
+		<key name="lastfm-download-album-art" type="b">
+			<default>true</default>
+		</key>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.library" path="/org/euphonia/Euphonia/library/">
