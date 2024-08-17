@@ -76,7 +76,7 @@ mod imp {
                             String::static_type()  // folder URI
                         ])
                         .build(),
-                    Signal::builder("album-info-downloaded")
+                    Signal::builder("album-meta-downloaded")
                         .param_types([
                             String::static_type()  // album tag
                         ])

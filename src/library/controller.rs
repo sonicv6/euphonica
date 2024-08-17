@@ -127,8 +127,8 @@ impl Default for Library {
 impl Library {
     pub fn setup(&self, sender: Sender<MpdMessage>, client_state: ClientState, cache: Rc<Cache>) {
         let cache_state: CacheState = cache.clone().get_cache_state();
-        self.imp().cache.set(cache);
-        self.imp().sender.set(sender);
+        let _ = self.imp().cache.set(cache);
+        let _ = self.imp().sender.set(sender);
         // Connect to ClientState signals that announce completion of requests
         cache_state.connect_closure(
             "album-art-downloaded",
@@ -196,11 +196,11 @@ impl Library {
         // result later if one does arrive late).
         if let Some(cache) = self.imp().cache.get() {
             // Might queue a download but won't load anything into memory just yet.
-            cache.ensure_local_album_info(
+            cache.ensure_local_album_meta(
                 album.get_mb_album_id(),
                 Some(album.get_title()),
                 album.get_artist(),
-                None
+                album.get_uri().as_ref()
             );
         }
         self.emit_by_name::<()>(

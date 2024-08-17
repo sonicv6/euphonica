@@ -7,6 +7,11 @@
     padding: 12px;
 }
 
+/* Useful for aligning scrollbars vertically */
+.padding-right-none {
+    padding-right: 0px;
+}
+
 .padding-6 {
     padding: 6px;
 }

@@ -39,7 +39,7 @@
 				                                </style>
 				                                <child>
 					                                <object class="GtkImage" id="cover">
-						                                <property name="pixel-size">128</property>
+						                                <property name="pixel-size">256</property>
 						                                <property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
 					                                </object>
 				                                </child>
@@ -48,6 +48,8 @@
                                         <child>
                                             <object class="GtkBox">
                                                 <property name="orientation">1</property>
+                                                <property name="spacing">6</property>
+                                                <property name="hexpand">true</property>
                                                 <child>
                                                     <object class="GtkLabel" id="title">
                                                         <property name="halign">start</property>
@@ -153,10 +155,26 @@
                                                         </child>
                                                     </object>
                                                 </child>
+                                                <child>
+                                                    <object class="GtkScrolledWindow">
+                                                        <property name="hscrollbar-policy">never</property>
+                                                        <property name="vexpand">true</property>
+                                                        <property name="child">
+                                                            <object class="GtkLabel" id="wiki">
+                                                                <property name="halign">start</property>
+                                                                <property name="wrap">true</property>
+                                                                <style>
+                                                                    <class name="caption"/>
+                                                                </style>
+                                                            </object>
+                                                        </property>
+                                                    </object>
+                                                </child>
                                             </object>
                                         </child>
                                         <style>
                                             <class name="padding-12"/>
+                                            <class name="padding-right-none"/>
                                         </style>
                                     </object>
                                 </property>
@@ -233,6 +251,7 @@
                         </child>
                         <child>
                             <object class="GtkScrolledWindow">
+                                <property name="height-request">50</property>
                                 <property name="hscrollbar-policy">never</property>
                                 <property name="vscrollbar-policy">automatic</property>
                                 <property name="propagate-natural-height">true</property>

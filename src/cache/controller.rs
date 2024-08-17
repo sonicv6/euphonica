@@ -53,7 +53,7 @@ pub enum CacheContentType {
 }
 
 pub enum AsyncResponse {
-    Album(models::Album)
+    Album(String, models::Album)  // folder URI and info
 }
 
 pub static ALBUMART_PLACEHOLDER: Lazy<Texture> = Lazy::new(|| {
@@ -78,7 +78,7 @@ pub struct Cache {
     // Embedded document database for caching responses from metadata providers.
     // Think MongoDB x SQLite x Rust.
     doc_cache: polodb_core::Database,
-    album_info_cache: polodb_core::Collection<models::Album>,
+    album_meta_cache: polodb_core::Collection<models::Album>,
     mpd_sender: Sender<MpdMessage>,
     // receiver: RefCell<Receiver<CacheMessage>>,
     // TODO: Refactor into generic metadata providers for modularity
@@ -127,7 +127,7 @@ impl Cache {
         let doc_cache = polodb_core::Database::open_file(doc_path)
             .expect("ERROR: cannot create a metadata database");
         // Init collection schema
-        let album_info_cache = doc_cache.collection("album");
+        let album_meta_cache = doc_cache.collection("album");
         // doc_cache.collection("artist");
         // doc_cache.collection("track");
 
@@ -136,7 +136,7 @@ impl Cache {
             avatar_path,
             image_cache,
             doc_cache,
-            album_info_cache,
+            album_meta_cache,
             meta_provider,
             mpd_sender,
             state: CacheState::default(),
@@ -163,22 +163,21 @@ impl Cache {
             let mut receiver = std::pin::pin!(receiver);
             while let Some(request) = receiver.next().await {
                 match request {
-                    AsyncResponse::Album(model) => this.on_album_info_downloaded(model)
+                    AsyncResponse::Album(folder_uri, model) => this.on_album_meta_downloaded(folder_uri.as_ref(), model)
                 }
             }
         }));
     }
 
-    fn on_album_info_downloaded(&self, model: models::Album) {
-        let tag = model.name.clone();
+    fn on_album_meta_downloaded(&self, folder_uri: &str, model: models::Album) {
         // Insert into cache
-        println!("Downloaded album info for {}. Caching...", &model.name);
-        let insert_res = self.album_info_cache.insert_one(model);
+        println!("Downloaded album meta for {}. Caching...", folder_uri);
+        let insert_res = self.album_meta_cache.insert_one(model);
         if let Err(msg) = insert_res {
             println!("{:?}", msg);
         }
         // Notify widgets
-        self.state.emit_with_param("album-info-downloaded", &tag);
+        self.state.emit_with_param("album-meta-downloaded", folder_uri);
     }
 
     pub fn get_cache_state(&self) -> CacheState {
@@ -190,7 +189,7 @@ impl Cache {
             "album-art-downloaded",
             false,
             closure_local!(
-                #[strong(rename_to = this)]
+                #[weak(rename_to = this)]
                 self,
                 move |_: ClientState, folder_uri: String| {
                     this.state.emit_with_param("album-art-downloaded", &folder_uri);
@@ -291,7 +290,7 @@ impl Cache {
         }
     }
 
-    pub fn load_local_album_info(
+    pub fn load_local_album_meta(
         &self,
         // Specify either this (preferred)
         mbid: Option<&str>,
@@ -299,7 +298,7 @@ impl Cache {
         album: Option<&str>, artist: Option<&str>,
     ) -> Option<models::Album> {
         if let Ok(key) = self.get_album_key(mbid, album, artist) {
-            let result = self.album_info_cache.find_one(key);
+            let result = self.album_meta_cache.find_one(key);
             if let Ok(res) = result {
                 if let Some(info) = res {
                     println!("Album info cache hit!");
@@ -315,14 +314,13 @@ impl Cache {
         None
     }
 
-    pub fn ensure_local_album_info(
+    pub fn ensure_local_album_meta(
         &self,
         // Specify either this (preferred)
         mbid: Option<String>,
         // Or BOTH of these
         album: Option<String>, artist: Option<String>,
-        // Optional, for naming downloaded album art
-        folder_uri: Option<&str>
+        folder_uri: &str
     ) {
         // Check whether we have this album cached
         if let Ok(key) = self.get_album_key(
@@ -330,19 +328,20 @@ impl Cache {
             album.as_deref(),
             artist.as_deref()
         ) {
-            let result = self.album_info_cache.find_one(key.clone());
+            let result = self.album_meta_cache.find_one(key.clone());
             if let Ok(response) = result {
                 if response.is_none() {
                     // TODO: Refactor to accommodate multiple metadata providers
                     let sender = self.sender.clone();
                     let provider = self.meta_provider.clone();
+                    let folder_uri_owned = folder_uri.to_owned();
                     runtime().spawn(
                         async move {
-                            let response = provider.get_album_info(
+                            let response = provider.get_album_meta(
                                 key
                             ).await;
                             if let Ok(info) = response {
-                                let _ = sender.send_blocking(AsyncResponse::Album(info));
+                                let _ = sender.send_blocking(AsyncResponse::Album(folder_uri_owned, info));
                             }
                             else {
                                 println!("Cache error: {}", response.err().unwrap());

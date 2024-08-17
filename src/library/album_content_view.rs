@@ -16,6 +16,7 @@ use gtk::{
 use gdk::Texture;
 use glib::{
     clone,
+    closure_local,
     Binding,
     signal::SignalHandlerId
 };
@@ -27,8 +28,7 @@ use super::{
 use crate::{
     utils::format_secs_as_duration,
     common::{Album, Song},
-    cache::Cache,
-    lastfm::models
+    cache::{Cache, CacheState}
 };
 
 mod imp {
@@ -49,6 +49,8 @@ mod imp {
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub wiki: TemplateChild<gtk::Label>,
         #[template_child]
         pub release_date: TemplateChild<gtk::Label>,
         #[template_child]
@@ -113,7 +115,43 @@ impl Default for AlbumContentView {
 }
 
 impl AlbumContentView {
+    fn update_meta(&self, album: &Album) {
+        let cache = self.imp().cache.get().unwrap().clone();
+        let wiki_label = self.imp().wiki.get();
+        if let Some(meta) = cache.load_local_album_meta(
+            album.get_mb_album_id().as_deref(),
+            Some(album.get_title()).as_deref(),
+            album.get_artist().as_deref()
+        ) {
+            if let Some(wiki) = meta.wiki {
+                wiki_label.set_visible(true);
+                wiki_label.set_markup(&wiki.content);
+            }
+            else {
+                wiki_label.set_visible(false);
+            }
+        }
+        else {
+            wiki_label.set_visible(true);
+        }
+    }
+
     pub fn setup(&self, library: Library, cache: Rc<Cache>) {
+        cache.get_cache_state().connect_closure(
+            "album-meta-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: CacheState, folder_uri: String| {
+                    if let Some(album) = this.imp().album.borrow().as_ref() {
+                        if folder_uri == album.get_uri() {
+                            this.update_meta(album);
+                        }
+                    }
+                }
+            )
+        );
         let _ = self.imp().cache.set(cache);
         let infobox_revealer = self.imp().infobox_revealer.get();
         let collapse_infobox = self.imp().collapse_infobox.get();
@@ -243,16 +281,6 @@ impl AlbumContentView {
         let release_date_label = self.imp().release_date.get();
         let mut bindings = self.imp().bindings.borrow_mut();
 
-        // TODO: actually use this
-        let cache = self.imp().cache.get().unwrap().clone();
-        if let Some(info) = cache.load_local_album_info(
-            album.get_mb_album_id().as_deref(),
-            Some(album.get_title()).as_deref(),
-            album.get_artist().as_deref()
-        ) {
-            println!("{:?}", info.wiki);
-        }
-
         let title_binding = album
             .bind_property("title", &title_label, "label")
             .sync_create()
@@ -266,6 +294,8 @@ impl AlbumContentView {
             .build();
         // Save binding
         bindings.push(artist_binding);
+
+        self.update_meta(&album);
 
         let release_date_binding = album
             .bind_property("release_date", &release_date_label, "label")
@@ -330,6 +360,10 @@ impl AlbumContentView {
                 album.disconnect(id);
             }
         }
+        // Unset metadata widgets
+        let wiki = self.imp().wiki.get();
+        wiki.set_markup("");
+        wiki.set_visible(false);
     }
 
     pub fn setup_content(&self, song_list: gio::ListStore) {
