@@ -527,7 +527,6 @@ impl Player {
     pub fn set_volume(&self, val: i8) {
         let old_vol = self.imp().volume.replace(val);
         if old_vol != val {
-            println!("Changing volume from {} to {}", old_vol, val);
             if let Err(msg) = self.send(MpdMessage::Volume(val)) {
                 println!("{}", msg);
             }

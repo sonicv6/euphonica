@@ -7,19 +7,12 @@
     padding: 12px;
 }
 
-/* Useful for aligning scrollbars vertically */
-.padding-right-none {
-    padding-right: 0px;
-}
-
 .padding-6 {
     padding: 6px;
 }
 
-.row {
-    padding: 6px;
-    padding-left: 12px;
-    padding-right: 12px;
+.padding-0 {
+    padding: 0px;
 }
 
 .border-radius-12 {

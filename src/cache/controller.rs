@@ -40,7 +40,12 @@ use fasthash::murmur2;
 use crate::{
     utils::settings_manager,
     client::{MpdMessage, ClientState},
-    lastfm::{LastfmWrapper, models}
+    meta_providers::{
+        prelude::*,
+        MetadataResponse,
+        models::AlbumMeta,
+        lastfm::LastfmWrapper
+    },
 };
 
 use super::CacheState;
@@ -49,10 +54,6 @@ pub enum CacheContentType {
     AlbumArt,
     AlbumArtThumbnail,
     Avatar
-}
-
-pub enum AsyncResponse {
-    Album(String, models::Album)  // folder URI and info
 }
 
 pub static ALBUMART_PLACEHOLDER: Lazy<Texture> = Lazy::new(|| {
@@ -77,7 +78,7 @@ pub struct Cache {
     // Embedded document database for caching responses from metadata providers.
     // Think MongoDB x SQLite x Rust.
     doc_cache: polodb_core::Database,
-    album_meta_cache: polodb_core::Collection<models::Album>,
+    album_meta_cache: polodb_core::Collection<AlbumMeta>,
     mpd_sender: Sender<MpdMessage>,
     // receiver: RefCell<Receiver<CacheMessage>>,
     // TODO: Refactor into generic metadata providers for modularity
@@ -104,7 +105,7 @@ impl Cache {
         let (
             sender,
             receiver
-        ): (Sender<AsyncResponse>, Receiver<AsyncResponse>) = async_channel::bounded(1);
+        ): (Sender<MetadataResponse>, Receiver<MetadataResponse>) = async_channel::bounded(1);
         let mut albumart_path = app_cache_path.clone();
         albumart_path.push("albumart");
         create_dir_all(&albumart_path)
@@ -118,7 +119,7 @@ impl Cache {
         // TODO: figure out max cost based on user-selectable RAM limit
         // TODO: figure out cost of textures based on user-selectable resolution
         let image_cache = stretto::Cache::new(10240, 1024).unwrap();
-        let meta_provider = LastfmWrapper::new(sender.clone());
+        let meta_provider = Rc::new(LastfmWrapper::new(sender.clone()));
 
         let mut doc_path = app_cache_path.clone();
         doc_path.push("metadata.polodb");
@@ -147,7 +148,7 @@ impl Cache {
         res
     }
 
-    fn setup_channel(self: Rc<Self>, receiver: Receiver<AsyncResponse>) {
+    fn setup_channel(self: Rc<Self>, receiver: Receiver<MetadataResponse>) {
         // Set up a listener for updates from metadata providers.
         glib::MainContext::default().spawn_local(clone!(
             #[weak(rename_to = this)]
@@ -159,13 +160,13 @@ impl Cache {
             let mut receiver = std::pin::pin!(receiver);
             while let Some(request) = receiver.next().await {
                 match request {
-                    AsyncResponse::Album(folder_uri, model) => this.on_album_meta_downloaded(folder_uri.as_ref(), model)
+                    MetadataResponse::Album(folder_uri, model) => this.on_album_meta_downloaded(folder_uri.as_ref(), model)
                 }
             }
         }));
     }
 
-    fn on_album_meta_downloaded(&self, folder_uri: &str, model: models::Album) {
+    fn on_album_meta_downloaded(&self, folder_uri: &str, model: AlbumMeta) {
         // Insert into cache
         println!("Downloaded album meta for {}. Caching...", folder_uri);
         let insert_res = self.album_meta_cache.insert_one(model);
@@ -306,7 +307,7 @@ impl Cache {
         mbid: Option<&str>,
         // Or BOTH of these
         album: Option<&str>, artist: Option<&str>,
-    ) -> Option<models::Album> {
+    ) -> Option<AlbumMeta> {
         if let Ok(key) = self.get_album_key(mbid, album, artist) {
             let result = self.album_meta_cache.find_one(key);
             if let Ok(res) = result {

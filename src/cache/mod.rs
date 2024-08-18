@@ -6,6 +6,5 @@ pub mod placeholders;
 
 pub use controller::{
     Cache,
-    CacheContentType,
-    AsyncResponse
+    CacheContentType
 };

@@ -49,14 +49,23 @@ mod imp {
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
+
         #[template_child]
-        pub wiki: TemplateChild<gtk::Label>,
+        pub wiki_box: TemplateChild<gtk::ScrolledWindow>,
+        #[template_child]
+        pub wiki_text: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub wiki_link: TemplateChild<gtk::LinkButton>,
+        #[template_child]
+        pub wiki_attrib: TemplateChild<gtk::Label>,
+
         #[template_child]
         pub release_date: TemplateChild<gtk::Label>,
         #[template_child]
         pub track_count: TemplateChild<gtk::Label>,
         #[template_child]
         pub runtime: TemplateChild<gtk::Label>,
+
         #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
         #[template_child]
@@ -117,27 +126,37 @@ impl Default for AlbumContentView {
 impl AlbumContentView {
     fn update_meta(&self, album: &Album) {
         let cache = self.imp().cache.get().unwrap().clone();
-        let wiki_label = self.imp().wiki.get();
+        let wiki_box = self.imp().wiki_box.get();
+        let wiki_text = self.imp().wiki_text.get();
+        let wiki_link = self.imp().wiki_link.get();
+        let wiki_attrib = self.imp().wiki_attrib.get();
         if let Some(meta) = cache.load_local_album_meta(
             album.get_mb_album_id().as_deref(),
             Some(album.get_title()).as_deref(),
             album.get_artist().as_deref()
         ) {
             if let Some(wiki) = meta.wiki {
-                wiki_label.set_visible(true);
-                wiki_label.set_markup(&wiki.content);
+                wiki_box.set_visible(true);
+                wiki_text.set_label(&wiki.content);
+                if let Some(url) = wiki.url.as_ref() {
+                    wiki_link.set_visible(true);
+                    wiki_link.set_uri(url);
+                }
+                else {
+                    wiki_link.set_visible(false);
+                }
+                wiki_attrib.set_label(&wiki.attribution);
             }
             else {
-                wiki_label.set_visible(false);
+                wiki_box.set_visible(false);
             }
         }
         else {
-            wiki_label.set_visible(true);
+            wiki_box.set_visible(false);
         }
     }
 
     pub fn setup(&self, library: Library, cache: Rc<Cache>) {
-        let client_settings = settings_manager().child("client");
         cache.get_cache_state().connect_closure(
             "album-meta-downloaded",
             false,
@@ -146,7 +165,7 @@ impl AlbumContentView {
                 self,
                 move |_: CacheState, folder_uri: String| {
                     if let Some(album) = this.imp().album.borrow().as_ref() {
-                        if folder_uri == album.get_uri() && client_settings.boolean("use-lastfm") {
+                        if folder_uri == album.get_uri() {
                             this.update_meta(album);
                         }
                     }
@@ -296,10 +315,7 @@ impl AlbumContentView {
         // Save binding
         bindings.push(artist_binding);
 
-        if settings_manager().child("client").boolean("use-lastfm") {
-            self.update_meta(&album);
-        }
-
+        self.update_meta(&album);
         let release_date_binding = album
             .bind_property("release_date", &release_date_label, "label")
             .transform_to(
@@ -364,9 +380,7 @@ impl AlbumContentView {
             }
         }
         // Unset metadata widgets
-        let wiki = self.imp().wiki.get();
-        wiki.set_markup("");
-        wiki.set_visible(false);
+        self.imp().wiki_box.set_visible(false);
     }
 
     pub fn setup_content(&self, song_list: gio::ListStore) {

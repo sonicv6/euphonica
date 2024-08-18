@@ -193,6 +193,7 @@ impl Library {
         song_list.extend_from_slice(songs);
         // Try to get additional info (won't block; page will get notified of
         // result later if one does arrive late).
+        // TODO: implement provider daisy-chaining on the cache side
         if settings_manager().child("client").boolean("use-lastfm") {
             if let Some(cache) = self.imp().cache.get() {
                 // Might queue a download but won't load anything into memory just yet.
