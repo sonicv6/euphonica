@@ -55,7 +55,7 @@ mod imp {
         #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
         #[template_child]
-        pub play_pause_symbol: TemplateChild<gtk::Image>,  // inside the play/pause button
+        pub play_pause_symbol: TemplateChild<gtk::Stack>,  // inside the play/pause button
         #[template_child]
         pub prev_btn: TemplateChild<gtk::Button>,
         #[template_child]
@@ -467,16 +467,16 @@ impl PlayerBar {
             .bind_property(
                 "playback-state",
                 &play_pause_symbol,
-                "icon-name"
+                "visible-child-name"
             )
             .transform_to(
                 |_, state: PlaybackState| {
                     match state {
 	                    PlaybackState::Playing => {
-	                        Some("pause-large-symbolic")
+	                        Some("play")
                         },
 	                    PlaybackState::Paused | PlaybackState::Stopped => {
-	                        Some("play-large-symbolic")
+	                        Some("pause")
 	                    },
 	                }
                 }
