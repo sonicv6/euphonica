@@ -128,10 +128,10 @@ impl AlbumView {
     pub fn setup(&self, library: Library, cache: Rc<Cache>) {
         self.setup_sort();
         self.setup_search();
-        self.setup_gridview(library.clone(), cache);
+        self.setup_gridview(library.clone(), cache.clone());
 
         let content_view = self.imp().content_view.get();
-        content_view.setup(library.clone());
+        content_view.setup(library.clone(), cache);
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
             content_view.clear_content();

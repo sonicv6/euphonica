@@ -12,7 +12,10 @@
 //   from Last.fm.
 extern crate stretto;
 extern crate fasthash;
+extern crate bson;
+extern crate polodb_core;
 use once_cell::sync::Lazy;
+use async_channel::{Sender, Receiver};
 use std::{
     fmt,
     rc::Rc,
@@ -33,24 +36,19 @@ use glib::{
     closure_local
 };
 use fasthash::murmur2;
-use async_channel::{Sender, Receiver};
 
 use crate::{
     utils::settings_manager,
-    client::{MpdMessage, ClientState}
+    client::{MpdMessage, ClientState},
+    meta_providers::{
+        prelude::*,
+        MetadataResponse,
+        models::AlbumMeta,
+        lastfm::LastfmWrapper
+    },
 };
 
 use super::CacheState;
-
-#[derive(Debug)]
-pub enum CacheMessage {
-    AlbumArt(String, bool), // folder-level URI. If bool is true then will return 256x thumbnail.
-    AlbumWiki(String), // album name, not URI
-    ArtistAvatar(String), // Artist tag only
-    ArtistBio(String), // album name, not URI
-    AlbumArtistAvatar(String), // for AlbumArtist tag only
-    AlbumArtistBio(String), // album name, not URI
-}
 
 pub enum CacheContentType {
     AlbumArt,
@@ -77,8 +75,14 @@ pub struct Cache {
     // This cache's keys are the folder-level URIs (for album arts) or raw artist
     // name (for avatars).
     image_cache: stretto::Cache<(String, bool), Texture>,
+    // Embedded document database for caching responses from metadata providers.
+    // Think MongoDB x SQLite x Rust.
+    doc_cache: polodb_core::Database,
+    album_meta_cache: polodb_core::Collection<AlbumMeta>,
     mpd_sender: Sender<MpdMessage>,
     // receiver: RefCell<Receiver<CacheMessage>>,
+    // TODO: Refactor into generic metadata providers for modularity
+    meta_provider: Rc<LastfmWrapper>,
     state: CacheState,
     settings: Settings
 }
@@ -98,30 +102,79 @@ impl Cache {
         mpd_sender: Sender<MpdMessage>,
         mpd_state: ClientState,
     ) -> Rc<Self> {
+        let (
+            sender,
+            receiver
+        ): (Sender<MetadataResponse>, Receiver<MetadataResponse>) = async_channel::bounded(1);
         let mut albumart_path = app_cache_path.clone();
         albumart_path.push("albumart");
-        create_dir_all(&albumart_path).expect("ERROR: cannot create albumart cache folder");
+        create_dir_all(&albumart_path)
+            .expect("ERROR: cannot create albumart cache folder");
 
         let mut avatar_path = app_cache_path.clone();
         avatar_path.push("avatar");
-        create_dir_all(&avatar_path).expect("ERROR: cannot create albumart cache folder");
+        create_dir_all(&avatar_path)
+            .expect("ERROR: cannot create albumart cache folder");
 
         // TODO: figure out max cost based on user-selectable RAM limit
         // TODO: figure out cost of textures based on user-selectable resolution
         let image_cache = stretto::Cache::new(10240, 1024).unwrap();
+        let meta_provider = Rc::new(LastfmWrapper::new(sender.clone()));
+
+        let mut doc_path = app_cache_path.clone();
+        doc_path.push("metadata.polodb");
+        let doc_cache = polodb_core::Database::open_file(doc_path)
+            .expect("ERROR: cannot create a metadata database");
+        // Init collection schema
+        let album_meta_cache = doc_cache.collection("album");
+        // doc_cache.collection("artist");
+        // doc_cache.collection("track");
 
         let res = Rc::new(Self {
             albumart_path,
             avatar_path,
             image_cache,
+            doc_cache,
+            album_meta_cache,
+            meta_provider,
             mpd_sender,
             state: CacheState::default(),
             settings: settings_manager().child("client")
         });
 
         res.clone().bind_state(mpd_state);
+        res.clone().setup_channel(receiver);
 
         res
+    }
+
+    fn setup_channel(self: Rc<Self>, receiver: Receiver<MetadataResponse>) {
+        // Set up a listener for updates from metadata providers.
+        glib::MainContext::default().spawn_local(clone!(
+            #[weak(rename_to = this)]
+            self,
+            async move {
+            use futures::prelude::*;
+            // Allow receiver to be mutated, but keep it at the same memory address.
+            // See Receiver::next doc for why this is needed.
+            let mut receiver = std::pin::pin!(receiver);
+            while let Some(request) = receiver.next().await {
+                match request {
+                    MetadataResponse::Album(folder_uri, model) => this.on_album_meta_downloaded(folder_uri.as_ref(), model)
+                }
+            }
+        }));
+    }
+
+    fn on_album_meta_downloaded(&self, folder_uri: &str, model: AlbumMeta) {
+        // Insert into cache
+        println!("Downloaded album meta for {}. Caching...", folder_uri);
+        let insert_res = self.album_meta_cache.insert_one(model);
+        if let Err(msg) = insert_res {
+            println!("{:?}", msg);
+        }
+        // Notify widgets
+        self.state.emit_with_param("album-meta-downloaded", folder_uri);
     }
 
     pub fn get_cache_state(&self) -> CacheState {
@@ -133,10 +186,24 @@ impl Cache {
             "album-art-downloaded",
             false,
             closure_local!(
-                #[strong(rename_to = this)]
+                #[weak(rename_to = this)]
                 self,
                 move |_: ClientState, folder_uri: String| {
-                    this.state.emit_album_art_downloaded(&folder_uri);
+                    this.state.emit_with_param("album-art-downloaded", &folder_uri);
+                }
+            )
+        );
+
+        // Daisy-chain
+        client_state.connect_closure(
+            "album-art-not-available",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: ClientState, folder_uri: String| {
+
+                    this.state.emit_with_param("album-art-downloaded", &folder_uri);
                 }
             )
         );
@@ -211,14 +278,80 @@ impl Cache {
         }
     }
 
-    pub fn get_album_art(&self, folder_uri: &str, thumbnail: bool) -> Option<Texture> {
-        // Convenience method to either load locally or queue download from remote sources.
-        if let Some(tex) = self.load_local_album_art(folder_uri, thumbnail) {
-            return Some(tex);
+    fn get_album_key(
+        &self,
+        // Specify either this (preferred)
+        mbid: Option<&str>,
+        // Or BOTH of these
+        album: Option<&str>, artist: Option<&str>
+    ) -> Result<bson::Document, &str> {
+        if let Some(id) = mbid {
+            Ok(bson::doc! {
+                "mbid": id.to_string()
+            })
         }
-        // Album art not available locally
-        self.ensure_local_album_art(folder_uri);
-        // TODO: Implement Lastfm album art downloading too (but prioritise MPD version if available)
+        else if album.is_some() && artist.is_some() {
+            Ok(bson::doc! {
+                "name": album.unwrap().to_string(),
+                "artist": artist.unwrap().to_string()
+            })
+        }
+        else {
+            Err("If no mbid is available, both album name and artist must be specified")
+        }
+    }
+
+    pub fn load_local_album_meta(
+        &self,
+        // Specify either this (preferred)
+        mbid: Option<&str>,
+        // Or BOTH of these
+        album: Option<&str>, artist: Option<&str>,
+    ) -> Option<AlbumMeta> {
+        if let Ok(key) = self.get_album_key(mbid, album, artist) {
+            let result = self.album_meta_cache.find_one(key);
+            if let Ok(res) = result {
+                if let Some(info) = res {
+                    println!("Album info cache hit!");
+                    return Some(info);
+                }
+                println!("Album info cache miss");
+                return None;
+            }
+            println!("{:?}", result.err());
+            return None;
+        }
+        println!("No key!");
         None
+    }
+
+    pub fn ensure_local_album_meta(
+        &self,
+        // Specify either this (preferred)
+        mbid: Option<String>,
+        // Or BOTH of these
+        album: Option<String>, artist: Option<String>,
+        folder_uri: &str
+    ) {
+        // Check whether we have this album cached
+        if let Ok(key) = self.get_album_key(
+            mbid.as_deref(),
+            album.as_deref(),
+            artist.as_deref()
+        ) {
+            let result = self.album_meta_cache.find_one(key.clone());
+            if let Ok(response) = result {
+                if response.is_none() {
+                    // TODO: Refactor to accommodate multiple metadata providers
+                    self.meta_provider.get_album_meta(folder_uri, key);
+                }
+                else {
+                    println!("Album info already cached, won't download again");
+                }
+            }
+            else {
+                println!("{:?}", result.err());
+            }
+        }
     }
 }

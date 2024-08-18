@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
 	<template class="EuphoniaAlbumSongRow" parent="GtkBox">
+		<style>
+			<class name="padding-6"/>
+		</style>
 		<child>
 			<object class="GtkLabel" id="track_index">
 				<property name="label">NaN</property>
@@ -16,7 +19,7 @@
 					<object class="GtkBox">
 						<property name="orientation">vertical</property>
 						<property name="spacing">6</property>
-						<property name="margin-start">12</property>
+						<property name="margin-start">6</property>
 						<child>
 							<object class="GtkBox">
 								<property name="spacing">6</property>
@@ -101,8 +104,5 @@
 				</property>
 			</object>
 		</child>
-		<style>
-			<class name="row" />
-		</style>
 	</template>
 </interface>

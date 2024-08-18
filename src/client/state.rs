@@ -93,6 +93,11 @@ mod imp {
                             String::static_type(),  // folder URI
                         ])
                         .build(),
+                    Signal::builder("album-art-not-available")
+                        .param_types([
+                            String::static_type(),  // folder URI
+                        ])
+                        .build(),
                     Signal::builder("outputs-changed")
                         .param_types([BoxedAnyObject::static_type()])  // Vec<mpd::output::Output>
                         .build(),

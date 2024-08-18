@@ -75,6 +75,16 @@ mod imp {
                         .param_types([
                             String::static_type()  // folder URI
                         ])
+                        .build(),
+                    Signal::builder("album-meta-downloaded")
+                        .param_types([
+                            String::static_type()  // album tag
+                        ])
+                        .build(),
+                    Signal::builder("artist-info-downloaded")
+                        .param_types([
+                            String::static_type()  // artist tag
+                        ])
                         .build()
                 ]
             })
@@ -94,11 +104,11 @@ impl Default for CacheState {
 
 impl CacheState {
     // Convenience emit wrapper
-    pub fn emit_album_art_downloaded(&self, folder_uri: &str) {
+    pub fn emit_with_param(&self, name: &str, tag: &str) {
         self.emit_by_name::<()>(
-            "album-art-downloaded",
+            name,
             &[
-                &folder_uri
+                &tag
             ]
         );
     }

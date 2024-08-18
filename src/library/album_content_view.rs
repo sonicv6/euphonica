@@ -1,4 +1,7 @@
-use std::cell::RefCell;
+use std::{
+    cell::{OnceCell, RefCell},
+    rc::Rc,
+};
 use time::{Date, format_description};
 use adw::subclass::prelude::*;
 use gtk::{
@@ -13,6 +16,7 @@ use gtk::{
 use gdk::Texture;
 use glib::{
     clone,
+    closure_local,
     Binding,
     signal::SignalHandlerId
 };
@@ -22,8 +26,9 @@ use super::{
     AlbumSongRow
 };
 use crate::{
-    utils::format_secs_as_duration,
-    common::{Album, Song}
+    utils::{format_secs_as_duration, settings_manager},
+    common::{Album, Song},
+    cache::{Cache, CacheState}
 };
 
 mod imp {
@@ -44,12 +49,23 @@ mod imp {
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
+
+        #[template_child]
+        pub wiki_box: TemplateChild<gtk::ScrolledWindow>,
+        #[template_child]
+        pub wiki_text: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub wiki_link: TemplateChild<gtk::LinkButton>,
+        #[template_child]
+        pub wiki_attrib: TemplateChild<gtk::Label>,
+
         #[template_child]
         pub release_date: TemplateChild<gtk::Label>,
         #[template_child]
         pub track_count: TemplateChild<gtk::Label>,
         #[template_child]
         pub runtime: TemplateChild<gtk::Label>,
+
         #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
         #[template_child]
@@ -58,6 +74,7 @@ mod imp {
         pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub cache: OnceCell<Rc<Cache>>
     }
 
     #[glib::object_subclass]
@@ -107,7 +124,55 @@ impl Default for AlbumContentView {
 }
 
 impl AlbumContentView {
-    pub fn setup(&self, library: Library) {
+    fn update_meta(&self, album: &Album) {
+        let cache = self.imp().cache.get().unwrap().clone();
+        let wiki_box = self.imp().wiki_box.get();
+        let wiki_text = self.imp().wiki_text.get();
+        let wiki_link = self.imp().wiki_link.get();
+        let wiki_attrib = self.imp().wiki_attrib.get();
+        if let Some(meta) = cache.load_local_album_meta(
+            album.get_mb_album_id().as_deref(),
+            Some(album.get_title()).as_deref(),
+            album.get_artist().as_deref()
+        ) {
+            if let Some(wiki) = meta.wiki {
+                wiki_box.set_visible(true);
+                wiki_text.set_label(&wiki.content);
+                if let Some(url) = wiki.url.as_ref() {
+                    wiki_link.set_visible(true);
+                    wiki_link.set_uri(url);
+                }
+                else {
+                    wiki_link.set_visible(false);
+                }
+                wiki_attrib.set_label(&wiki.attribution);
+            }
+            else {
+                wiki_box.set_visible(false);
+            }
+        }
+        else {
+            wiki_box.set_visible(false);
+        }
+    }
+
+    pub fn setup(&self, library: Library, cache: Rc<Cache>) {
+        cache.get_cache_state().connect_closure(
+            "album-meta-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: CacheState, folder_uri: String| {
+                    if let Some(album) = this.imp().album.borrow().as_ref() {
+                        if folder_uri == album.get_uri() {
+                            this.update_meta(album);
+                        }
+                    }
+                }
+            )
+        );
+        let _ = self.imp().cache.set(cache);
         let infobox_revealer = self.imp().infobox_revealer.get();
         let collapse_infobox = self.imp().collapse_infobox.get();
         collapse_infobox
@@ -230,6 +295,7 @@ impl AlbumContentView {
     }
 
     pub fn bind(&self, album: Album) {
+        println!("Binding to album: {:?}", &album);
         let title_label = self.imp().title.get();
         let artist_label = self.imp().artist.get();
         let release_date_label = self.imp().release_date.get();
@@ -249,6 +315,7 @@ impl AlbumContentView {
         // Save binding
         bindings.push(artist_binding);
 
+        self.update_meta(&album);
         let release_date_binding = album
             .bind_property("release_date", &release_date_label, "label")
             .transform_to(
@@ -312,6 +379,8 @@ impl AlbumContentView {
                 album.disconnect(id);
             }
         }
+        // Unset metadata widgets
+        self.imp().wiki_box.set_visible(false);
     }
 
     pub fn setup_content(&self, song_list: gio::ListStore) {

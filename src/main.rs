@@ -1,6 +1,6 @@
 /* main.rs
  *
- * Copyright 2024 Work
+ * Copyright 2024 htkhiem2000
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@ mod player;
 mod config;
 mod window;
 mod client;
+mod meta_providers;
 mod library;
 mod sidebar;
 mod utils;
