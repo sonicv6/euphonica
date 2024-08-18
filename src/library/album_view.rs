@@ -34,7 +34,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/album-view.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-view.ui")]
     pub struct AlbumView {
         #[template_child]
         pub nav_view: TemplateChild<adw::NavigationView>,

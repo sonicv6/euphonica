@@ -26,7 +26,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/album-song-row.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-song-row.ui")]
     pub struct AlbumSongRow {
         #[template_child]
         pub quality_grade: TemplateChild<gtk::Image>,

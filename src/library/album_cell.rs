@@ -34,7 +34,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/album-cell.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-cell.ui")]
     pub struct AlbumCell {
         #[template_child]
         pub cover: TemplateChild<gtk::Picture>,  // Use high-resolution version

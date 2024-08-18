@@ -3,22 +3,26 @@
 	<gresource prefix="/org/euphonia/Euphonia">
 		<file preprocess="xml-stripblanks">window.ui</file>
 		<file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
-		<file preprocess="xml-stripblanks">gtk/library-view.ui</file>
-		<file preprocess="xml-stripblanks">gtk/album-view.ui</file>
-		<file preprocess="xml-stripblanks">gtk/album-cell.ui</file>
-		<file preprocess="xml-stripblanks">gtk/album-song-row.ui</file>
-		<file preprocess="xml-stripblanks">gtk/album-content-view.ui</file>
-		<file preprocess="xml-stripblanks">gtk/queue-view.ui</file>
-		<file preprocess="xml-stripblanks">gtk/queue-row.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar-button.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar.ui</file>
-		<file preprocess="xml-stripblanks">gtk/player-bar.ui</file>
-		<file preprocess="xml-stripblanks">gtk/output.ui</file>
+
+		<file preprocess="xml-stripblanks">gtk/library-view.ui</file>
+		<file preprocess="xml-stripblanks">gtk/library/album-view.ui</file>
+		<file preprocess="xml-stripblanks">gtk/library/album-cell.ui</file>
+		<file preprocess="xml-stripblanks">gtk/library/album-song-row.ui</file>
+		<file preprocess="xml-stripblanks">gtk/library/album-content-view.ui</file>
+
+		<file preprocess="xml-stripblanks">gtk/player/queue-view.ui</file>
+		<file preprocess="xml-stripblanks">gtk/player/queue-row.ui</file>
+		<file preprocess="xml-stripblanks">gtk/player/player-bar.ui</file>
+		<file preprocess="xml-stripblanks">gtk/player/output.ui</file>
+		<file preprocess="xml-stripblanks">gtk/player/volume-knob.ui</file>
+
 		<file preprocess="xml-stripblanks">gtk/preferences/dialog.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences/client.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences/library.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences/player.ui</file>
-		<file preprocess="xml-stripblanks">gtk/volume-knob.ui</file>
+
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>

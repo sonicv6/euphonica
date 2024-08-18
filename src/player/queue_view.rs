@@ -31,7 +31,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/queue-view.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
