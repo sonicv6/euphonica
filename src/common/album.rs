@@ -1,13 +1,11 @@
-use std::cell::RefCell;
+use std::cell::OnceCell;
 use time::Date;
 use gtk::glib;
 use gtk::gdk::Texture;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use crate::utils::strip_filename_linux;
 use super::{
-    Song,
     QualityGrade,
     ArtistInfo,
     parse_mb_artist_tag,
@@ -74,9 +72,15 @@ mod imp {
     use once_cell::sync::Lazy;
     use super::*;
 
+    /// The GObject Song wrapper.
+    /// By nesting info inside another struct, we enforce tag editing to be
+    /// atomic. Tag editing is performed by first cloning the whole SongInfo
+    /// struct to a mutable variable, modify it, then create a new Song wrapper
+    /// from the modified SongInfo struct (no copy required this time).
+    /// This design also avoids a RefCell.
     #[derive(Default, Debug)]
     pub struct Album {
-        pub info: RefCell<AlbumInfo>
+        pub info: OnceCell<AlbumInfo>
     }
 
     #[glib::object_subclass]
@@ -86,7 +90,7 @@ mod imp {
 
         fn new() -> Self {
             Self {
-                info: RefCell::new(AlbumInfo::default())
+                info: OnceCell::new()
             }
         }
     }
@@ -128,50 +132,37 @@ glib::wrapper! {
 }
 
 impl Album {
-    pub fn get_info(&self) -> AlbumInfo {
-        self.imp().info.borrow().clone()
+    // ALL of the getters below require that the info field be initialised!
+    pub fn get_info(&self) -> &AlbumInfo {
+        &self.imp().info.get().unwrap()
     }
 
-    pub fn get_uri(&self) -> String {
-        self.imp().info.borrow().uri.clone()
+    pub fn get_uri(&self) -> &str {
+        &self.get_info().uri
     }
 
-    pub fn get_title(&self) -> String {
-        self.imp().info.borrow().title.clone()
+    pub fn get_title(&self) -> &str {
+        &self.get_info().title
     }
 
-    pub fn get_artists(&self) -> Vec<ArtistInfo> {
-        self.imp().info.borrow().artists.clone()
+    pub fn get_artists(&self) -> &[ArtistInfo] {
+        &self.get_info().artists
     }
 
     pub fn get_artist_str(&self) -> Option<String> {
-        artists_to_string(&self.imp().info.borrow().artists)
+        artists_to_string(&self.get_info().artists)
     }
 
-    pub fn get_mbid(&self) -> Option<String> {
-        self.imp().info.borrow().mbid.clone()
-    }
-
-    pub fn get_cover(&self) -> Option<Texture> {
-        self.imp().info.borrow().cover.clone()
+    pub fn get_mbid(&self) -> Option<&str> {
+        self.get_info().mbid.as_deref()
     }
 
     pub fn get_release_date(&self) -> Option<Date> {
-        self.imp().info.borrow().release_date.clone()
+        self.get_info().release_date.clone()
     }
 
     pub fn get_quality_grade(&self) -> QualityGrade {
-        self.imp().info.borrow().quality_grade
-    }
-
-    pub fn set_cover(&self, maybe_tex: Option<Texture>) {
-        if let Some(tex) = maybe_tex {
-            self.imp().info.borrow_mut().cover.replace(tex);
-        }
-        else {
-            let _ = self.imp().info.borrow_mut().cover.take();
-        }
-        self.notify("cover");
+        self.get_info().quality_grade.clone()
     }
 }
 
@@ -184,7 +175,7 @@ impl Default for Album {
 impl From<AlbumInfo> for Album {
     fn from(info: AlbumInfo) -> Self {
         let res = glib::Object::builder::<Self>().build();
-        res.imp().info.replace(info);
+        res.imp().info.set(info);
         res
     }
 }

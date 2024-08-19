@@ -2,8 +2,7 @@ use time::{Date, Month};
 use core::time::Duration;
 use std::{
     path::Path,
-    cell::{Ref, Cell, RefCell},
-    ops::Deref,
+    cell::{Cell, OnceCell},
     ffi::OsStr
 };
 use gtk::glib;
@@ -91,7 +90,7 @@ fn parse_date(datestr: &str) -> Option<Date> {
 pub struct SongInfo {
     // TODO: Might want to refactor to Into<Cow<'a, str>>
     uri: String,
-    title: Option<String>,
+    title: String, // Might just be filename
     // last_mod: RefCell<Option<u64>>,
     artists: Vec<ArtistInfo>,
     album_artists: Vec<ArtistInfo>,
@@ -123,7 +122,7 @@ impl Default for SongInfo {
     fn default() -> Self {
         Self {
             uri: String::from(""),
-            title: None,
+            title: String::from("Untitled Song"),
             artists: Vec::new(),
             album_artists: Vec::new(),
             duration: None,
@@ -154,9 +153,16 @@ mod imp {
     use once_cell::sync::Lazy;
     use super::*;
 
+    /// The GObject Song wrapper.
+    /// By nesting info inside another struct, we enforce tag editing to be
+    /// atomic. Tag editing is performed by first cloning the whole SongInfo
+    /// struct to a mutable variable, modify it, then create a new Song wrapper
+    /// from the modified SongInfo struct (no copy required this time).
+    /// This design also avoids a RefCell.
     #[derive(Default, Debug)]
     pub struct Song {
-        pub info: RefCell<SongInfo>
+        pub info: OnceCell<SongInfo>,
+        pub is_playing: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -166,7 +172,8 @@ mod imp {
 
         fn new() -> Self {
             Self {
-                info: RefCell::new(SongInfo::default())
+                info: OnceCell::new(),
+                is_playing: Cell::new(false)
             }
         }
     }
@@ -216,7 +223,6 @@ mod imp {
                 // "release_date" => obj.get_release_date.to_value(),
                 "is-playing" => obj.is_playing().to_value(),
                 "quality-grade" => obj.get_quality_grade().to_value(),
-                "thumbnail" => obj.get_thumbnail().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -238,64 +244,61 @@ impl Song {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn get_uri(&self) -> String {
-        self.imp().info.borrow().uri.clone()
+
+    // ALL of the getters below require that the info field be initialised!
+    pub fn get_info(&self) -> &SongInfo {
+        &self.imp().info.get().unwrap()
     }
 
-    pub fn get_name(&self) -> Option<String> {
-        // Get title tag or filename without extension in case there's no title tag.
-        // Prefer song name in tag over filename
-        if let Some(title) = self.imp().info.borrow().title.as_ref() {
-            return Some(title.clone());
-        }
-        // Else extract from URI
-        else if let Some(stem) = Path::new(&self.get_uri()).file_stem() {
-            return Some(String::from(stem.to_str().unwrap()));
-        }
-        None
+    pub fn get_uri(&self) -> &str {
+        &self.get_info().uri
+    }
+
+    pub fn get_name(&self) -> &str {
+        &self.get_info().title
     }
 
     pub fn get_duration(&self) -> u64 {
-        if let Some(dur) = self.imp().info.borrow().duration.as_ref() {
+        if let Some(dur) = self.get_info().duration.as_ref() {
             return dur.as_secs();
         }
         0
     }
 
-    pub fn get_artists(&self) -> Vec<ArtistInfo> {
-        self.imp().info.borrow().artists.clone()
+    pub fn get_artists(&self) -> &[ArtistInfo] {
+        &self.get_info().artists
     }
 
     pub fn get_artist_str(&self) -> Option<String> {
-        artists_to_string(&self.imp().info.borrow().artists)
+        artists_to_string(&self.get_info().artists)
     }
 
-    pub fn get_album_artists(&self) -> Vec<ArtistInfo> {
-        self.imp().info.borrow().album_artists.clone()
+    pub fn get_album_artists(&self) -> &[ArtistInfo] {
+        &self.get_info().album_artists
     }
 
     pub fn get_album_artist_str(&self) -> Option<String> {
-        artists_to_string(&self.imp().info.borrow().album_artists)
+        artists_to_string(&self.get_info().album_artists)
     }
 
     pub fn get_queue_id(&self) -> u32 {
-        if let Some(id) = self.imp().info.borrow().queue_id {
+        if let Some(id) = self.get_info().queue_id {
             return id;
         }
         0
     }
 
     pub fn is_queued(&self) -> bool {
-        self.imp().info.borrow().queue_id.is_some()
+        self.get_info().queue_id.is_some()
     }
 
-    pub fn get_album(&self) -> Option<AlbumInfo> {
-        self.imp().info.borrow().album.clone()
+    pub fn get_album(&self) -> Option<&AlbumInfo> {
+        self.get_info().album.as_ref()
     }
 
-    pub fn get_album_title(&self) -> Option<String> {
-        if let Some(album) = &self.imp().info.borrow().album {
-            Some(album.title.clone())
+    pub fn get_album_title(&self) -> Option<&str> {
+        if let Some(album) = &self.get_info().album {
+            Some(album.title.as_ref())
         }
         else {
             None
@@ -303,46 +306,34 @@ impl Song {
     }
 
     pub fn get_track(&self) -> i64 {
-        self.imp().info.borrow().track.get()
+        self.get_info().track.get()
     }
 
     pub fn get_disc(&self) -> i64 {
-        self.imp().info.borrow().disc.get()
-    }
-
-    pub fn get_thumbnail(&self) -> Option<Texture> {
-        self.imp().info.borrow().thumbnail.clone()
-    }
-
-    pub fn set_thumbnail(&self, tex: Option<Texture>) {
-        {
-            let mut info = self.imp().info.borrow_mut();
-            info.thumbnail = tex;
-        }
-        self.notify("thumbnail");
+        self.get_info().disc.get()
     }
 
     pub fn is_playing(&self) -> bool {
-        self.imp().info.borrow().is_playing.get()
+        self.imp().is_playing.get()
     }
 
-    pub fn set_is_playing(&self, val: bool) {
-        let old_val = self.imp().info.borrow().is_playing.replace(val);
-        if old_val != val {
+    pub fn set_is_playing(&self, new: bool) {
+        let old = self.imp().is_playing.replace(new);
+        if old != new {
             self.notify("is-playing");
         }
     }
 
     pub fn get_quality_grade(&self) -> QualityGrade {
-        self.imp().info.borrow().quality_grade
+        self.get_info().quality_grade
     }
 
     pub fn get_release_date(&self) -> Option<Date> {
-        self.imp().info.borrow().release_date
+        self.get_info().release_date
     }
 
-    pub fn get_mbid(&self) -> Option<String> {
-        self.imp().info.borrow().mbid.clone()
+    pub fn get_mbid(&self) -> Option<&str> {
+        self.get_info().mbid.as_deref()
     }
 }
 
@@ -361,9 +352,20 @@ impl From<mpd::song::Song> for SongInfo {
         else {
             artists = Vec::with_capacity(0);
         }
+        let name: String;
+        if let Some(title) = song.title {
+            name = title;
+        }
+        // Else extract from URI
+        else if let Some(stem) = Path::new(&song.file).file_stem() {
+            name = String::from(stem.to_str().unwrap());
+        }
+        else {
+            name = String::from("Untitled Song");
+        }
         let mut res = Self {
             uri: song.file,
-            title: song.title,
+            title: name,
             artists,
             album_artists: Vec::with_capacity(0),
             duration: song.duration,
@@ -377,6 +379,7 @@ impl From<mpd::song::Song> for SongInfo {
             quality_grade: QualityGrade::Unknown,
             mbid: None
         };
+
         if let Some(place) = song.place {
             let _ = res.queue_id.replace(place.id.0);
         }
@@ -510,7 +513,7 @@ impl From<mpd::song::Song> for Song {
     fn from(song: mpd::song::Song) -> Self {
         let info = SongInfo::from(song);
         let res = glib::Object::new::<Self>();
-        res.imp().info.replace(info);
+        res.imp().info.set(info);
         res
     }
 }

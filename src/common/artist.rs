@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::cell::RefCell;
+use std::cell::OnceCell;
 use time::Date;
 use gtk::glib;
 use gtk::gdk::Texture;
@@ -104,7 +104,7 @@ mod imp {
 
     #[derive(Default, Debug)]
     pub struct Artist {
-        pub info: RefCell<ArtistInfo>
+        pub info: OnceCell<ArtistInfo>
     }
 
     #[glib::object_subclass]
@@ -114,7 +114,7 @@ mod imp {
 
         fn new() -> Self {
             Self {
-                info: RefCell::new(ArtistInfo::default())
+                info: OnceCell::new()
             }
         }
     }
@@ -125,10 +125,7 @@ mod imp {
                 vec![
                     ParamSpecString::builder("name")
                         .read_only()
-                        .build(),
-                    ParamSpecObject::builder::<Texture>("avatar")
-                        .read_only()
-                        .build(),
+                        .build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -138,7 +135,7 @@ mod imp {
             let obj = self.obj();
             match pspec.name() {
                 "name" => obj.get_name().to_value(),
-                "avatar" => obj.get_avatar().to_value(),
+                // "avatar" => obj.get_avatar().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -150,34 +147,20 @@ glib::wrapper! {
 }
 
 impl Artist {
-    pub fn get_info(&self) -> ArtistInfo {
-        self.imp().info.borrow().clone()
+    pub fn get_info(&self) -> &ArtistInfo {
+        &self.imp().info.get().unwrap()
     }
 
-    pub fn get_name(&self) -> String {
-        self.imp().info.borrow().name.clone()
+    pub fn get_name(&self) -> &str {
+        &self.get_info().name
     }
 
-    pub fn get_mbid(&self) -> Option<String> {
-        self.imp().info.borrow().mbid.clone()
-    }
-
-    pub fn get_avatar(&self) -> Option<Texture> {
-        self.imp().info.borrow().avatar.clone()
-    }
-
-    pub fn set_avatar(&self, maybe_tex: Option<Texture>) {
-        if let Some(tex) = maybe_tex {
-            self.imp().info.borrow_mut().avatar.replace(tex);
-        }
-        else {
-            let _ = self.imp().info.borrow_mut().avatar.take();
-        }
-        self.notify("avatar");
+    pub fn get_mbid(&self) -> Option<&str> {
+        self.get_info().mbid.as_deref()
     }
 
     pub fn is_composer(&self) -> bool {
-        self.imp().info.borrow().is_composer
+        self.get_info().is_composer
     }
 }
 
@@ -190,7 +173,7 @@ impl Default for Artist {
 impl From<ArtistInfo> for Artist {
     fn from(info: ArtistInfo) -> Self {
         let res = glib::Object::builder::<Self>().build();
-        res.imp().info.replace(info);
+        res.imp().info.set(info);
         res
     }
 }
