@@ -131,9 +131,9 @@ impl AlbumContentView {
         let wiki_link = self.imp().wiki_link.get();
         let wiki_attrib = self.imp().wiki_attrib.get();
         if let Some(meta) = cache.load_local_album_meta(
-            album.get_mb_album_id().as_deref(),
+            album.get_mbid().as_deref(),
             Some(album.get_title()).as_deref(),
-            album.get_artist().as_deref()
+            album.get_artist_str().as_deref()
         ) {
             if let Some(wiki) = meta.wiki {
                 wiki_box.set_visible(true);

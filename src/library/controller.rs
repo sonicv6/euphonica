@@ -198,9 +198,9 @@ impl Library {
             if let Some(cache) = self.imp().cache.get() {
                 // Might queue a download but won't load anything into memory just yet.
                 cache.ensure_local_album_meta(
-                    album.get_mb_album_id(),
+                    album.get_mbid(),
                     Some(album.get_title()),
-                    album.get_artist(),
+                    album.get_artist_str(),
                     album.get_uri().as_ref()
                 );
             }

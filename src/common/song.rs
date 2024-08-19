@@ -1,8 +1,9 @@
 use time::{Date, Month};
 use core::time::Duration;
 use std::{
-    path::{Path},
-    cell::{Cell, RefCell},
+    path::Path,
+    cell::{Ref, Cell, RefCell},
+    ops::Deref,
     ffi::OsStr
 };
 use gtk::glib;
@@ -10,6 +11,15 @@ use gtk::gdk::Texture;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use mpd::status::AudioFormat;
+
+use crate::utils::strip_filename_linux;
+
+use super::{
+    ArtistInfo,
+    AlbumInfo,
+    parse_mb_artist_tag,
+    artists_to_string
+};
 
 // Mostly for eyecandy
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
@@ -75,21 +85,20 @@ fn parse_date(datestr: &str) -> Option<Date> {
     None
 }
 
-// We define our own Song struct for more convenient handling, especially with
-// regards to optional fields and tags such as albums.
-
+/// We define our own Song struct for more convenient handling, especially with
+/// regards to optional fields and tags such as albums.
 #[derive(Debug, Clone)]
 pub struct SongInfo {
     // TODO: Might want to refactor to Into<Cow<'a, str>>
     uri: String,
     title: Option<String>,
     // last_mod: RefCell<Option<u64>>,
-    artist: Option<String>,
-    album_artist: Option<String>,
+    artists: Vec<ArtistInfo>,
+    album_artists: Vec<ArtistInfo>,
     duration: Option<Duration>, // Default to 0 if somehow the option in mpd's Song is None
     queue_id: Option<u32>,
     // range: Option<Range>,
-    album: Option<String>,
+    album: Option<AlbumInfo>,
     track: Cell<i64>,
     disc: Cell<i64>,
     // TODO: add albumsort
@@ -101,9 +110,7 @@ pub struct SongInfo {
     thumbnail: Option<Texture>,
     quality_grade: QualityGrade,
     // MusicBrainz stuff
-    mb_track_id: Option<String>,
-    mb_artist_ids: Vec<String>,
-    mb_album_id: Option<String>,
+    mbid: Option<String>,
 }
 
 impl SongInfo {
@@ -117,8 +124,8 @@ impl Default for SongInfo {
         Self {
             uri: String::from(""),
             title: None,
-            artist: None,
-            album_artist: None,
+            artists: Vec::new(),
+            album_artists: Vec::new(),
             duration: None,
             queue_id: None,
             album: None,
@@ -128,9 +135,7 @@ impl Default for SongInfo {
             is_playing: Cell::new(false),
             thumbnail: None,
             quality_grade: QualityGrade::Unknown,
-            mb_track_id: None,
-            mb_artist_ids: Vec::new(),
-            mb_album_id: None,
+            mbid: None,
         }
     }
 }
@@ -171,24 +176,18 @@ mod imp {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
                     ParamSpecString::builder("uri").read_only().build(),
-                    ParamSpecString::builder("name").build(),
+                    ParamSpecString::builder("name").read_only().build(),
                     // ParamSpecString::builder("last_mod").build(),
-                    ParamSpecString::builder("artist").build(),
-                    ParamSpecString::builder("album-artist").build(),
+                    ParamSpecString::builder("artist").read_only().build(),
+                    ParamSpecString::builder("album-artist").read_only().build(),
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").build(),
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
-                    ParamSpecString::builder("album").build(),
-                    ParamSpecInt64::builder("track").build(),
-                    ParamSpecInt64::builder("disc").build(),
-                    ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").build(),  // boxes Option<time::Date>
+                    ParamSpecString::builder("album").read_only().build(),
+                    ParamSpecInt64::builder("track").read_only().build(),
+                    ParamSpecInt64::builder("disc").read_only().build(),
+                    ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").read_only().build(),  // boxes Option<time::Date>
                     ParamSpecString::builder("quality-grade").read_only().build(),
-                    ParamSpecString::builder("mb-track-id").read_only().build(),
-                    ParamSpecString::builder("mb-album-id").read_only().build(),
-                    // TODO: Find a way other than concatenating these
-                    ParamSpecString::builder("mb-artist-ids").read_only().build(),  // comma-separated
-                    // ParamSpecString::builder("release_date").build(),
-                    ParamSpecBoolean::builder("is-playing").build(),
                     ParamSpecObject::builder::<Texture>("thumbnail")
                         .read_only()
                         .build(),
@@ -199,22 +198,20 @@ mod imp {
 
         fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
             let obj = self.obj();
-            let name = pspec.name();
             match pspec.name() {
                 "uri" => obj.get_uri().to_value(),
                 "name" => obj.get_name().to_value(),
                 // "last_mod" => obj.get_last_mod().to_value(),
-                "artist" => obj.get_artist().to_value(),
-                "album-artist" => obj.get_album_artist().to_value(),
+                // Represented in MusicBrainz format, i.e. Composer; Performer, Performer,...
+                // The composer part is optional.
+                "artist" => obj.get_artist_str().to_value(),
+                "album-artist" => obj.get_album_artist_str().to_value(),
                 "duration" => obj.get_duration().to_value(),
                 "queue-id" => obj.get_queue_id().to_value(),
                 "is-queued" => obj.is_queued().to_value(),
-                "album" => obj.get_album().to_value(),
+                "album" => obj.get_album_title().to_value(),
                 "track" => obj.get_track().to_value(),
                 "disc" => obj.get_disc().to_value(),
-                "mb-track-id" => obj.get_mb_track_id().to_value(),
-                "mb-album-id" => obj.get_mb_album_id().to_value(),
-                "mb-artist-ids" => obj.get_mb_artist_ids().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
                 "is-playing" => obj.is_playing().to_value(),
@@ -224,37 +221,12 @@ mod imp {
             }
         }
 
-        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
-            let obj = self.obj();
-            match pspec.name() {
-                "name" => {
-                    // Always set to title tag
-                    if let Ok(name) = value.get::<&str>() {
-                        self.info.borrow_mut().title.replace(name.to_owned());
-                    }
-                    obj.notify("name");
-                }
-                "artist" => {
-                    if let Ok(a) = value.get::<&str>() {
-                        self.info.borrow_mut().artist.replace(a.to_owned());
-                    }
-                    obj.notify("artist");
-                }
-                "album-artist" => {
-                    if let Ok(a) = value.get::<&str>() {
-                        self.info.borrow_mut().album_artist.replace(a.to_owned());
-                    }
-                    obj.notify("album-artist");
-                }
-                "album" => {
-                    if let Ok(album) = value.get::<&str>() {
-                        self.info.borrow_mut().album.replace(album.to_owned());
-                    }
-                    obj.notify("album");
-                }
-                _ => unimplemented!(),
-            }
-        }
+        // fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+        //     let obj = self.obj();
+        //     match pspec.name() {
+        //         _ => unimplemented!(),
+        //     }
+        // }
     }
 }
 
@@ -272,9 +244,6 @@ impl Song {
 
     pub fn get_name(&self) -> Option<String> {
         // Get title tag or filename without extension in case there's no title tag.
-        // Returns a clone since
-        // 1. Song names are (usually) short
-        // 2. There might be no name tag, in which case we'll have to extract from the path.
         // Prefer song name in tag over filename
         if let Some(title) = self.imp().info.borrow().title.as_ref() {
             return Some(title.clone());
@@ -293,12 +262,20 @@ impl Song {
         0
     }
 
-    pub fn get_artist(&self) -> Option<String> {
-        self.imp().info.borrow().artist.clone()
+    pub fn get_artists(&self) -> Vec<ArtistInfo> {
+        self.imp().info.borrow().artists.clone()
     }
 
-    pub fn get_album_artist(&self) -> Option<String> {
-        self.imp().info.borrow().album_artist.clone()
+    pub fn get_artist_str(&self) -> Option<String> {
+        artists_to_string(&self.imp().info.borrow().artists)
+    }
+
+    pub fn get_album_artists(&self) -> Vec<ArtistInfo> {
+        self.imp().info.borrow().album_artists.clone()
+    }
+
+    pub fn get_album_artist_str(&self) -> Option<String> {
+        artists_to_string(&self.imp().info.borrow().album_artists)
     }
 
     pub fn get_queue_id(&self) -> u32 {
@@ -312,8 +289,17 @@ impl Song {
         self.imp().info.borrow().queue_id.is_some()
     }
 
-    pub fn get_album(&self) -> Option<String> {
+    pub fn get_album(&self) -> Option<AlbumInfo> {
         self.imp().info.borrow().album.clone()
+    }
+
+    pub fn get_album_title(&self) -> Option<String> {
+        if let Some(album) = &self.imp().info.borrow().album {
+            Some(album.title.clone())
+        }
+        else {
+            None
+        }
     }
 
     pub fn get_track(&self) -> i64 {
@@ -355,20 +341,8 @@ impl Song {
         self.imp().info.borrow().release_date
     }
 
-    pub fn get_mb_track_id(&self) -> Option<String> {
-        self.imp().info.borrow().mb_track_id.clone()
-    }
-
-    pub fn get_mb_album_id(&self) -> Option<String> {
-        self.imp().info.borrow().mb_album_id.clone()
-    }
-
-    pub fn get_mb_artist_ids(&self) -> Vec<String> {
-        self.imp().info.borrow().mb_artist_ids.clone()
-    }
-
-    pub fn get_mb_artist_id_list(&self) -> String {
-        self.imp().info.borrow().mb_artist_ids.join(",")
+    pub fn get_mbid(&self) -> Option<String> {
+        self.imp().info.borrow().mbid.clone()
     }
 }
 
@@ -380,11 +354,18 @@ impl Default for Song {
 
 impl From<mpd::song::Song> for SongInfo {
     fn from(song: mpd::song::Song) -> Self {
+        let artists: Vec<ArtistInfo>;
+        if let Some(artist_str) = song.artist {
+            artists = parse_mb_artist_tag(&artist_str);
+        }
+        else {
+            artists = Vec::with_capacity(0);
+        }
         let mut res = Self {
             uri: song.file,
             title: song.title,
-            artist: song.artist,
-            album_artist: None,
+            artists,
+            album_artists: Vec::with_capacity(0),
             duration: song.duration,
             queue_id: None,
             album: None,
@@ -393,10 +374,8 @@ impl From<mpd::song::Song> for SongInfo {
             release_date: None,
             is_playing: Cell::new(false),
             thumbnail: None,
-            mb_track_id: None,
-            mb_album_id: None,
-            mb_artist_ids: Vec::new(),
-            quality_grade: QualityGrade::Unknown
+            quality_grade: QualityGrade::Unknown,
+            mbid: None
         };
         if let Some(place) = song.place {
             let _ = res.queue_id.replace(place.id.0);
@@ -415,10 +394,34 @@ impl From<mpd::song::Song> for SongInfo {
                 res.quality_grade = QualityGrade::DSD;
             }
         }
+        let mut artist_mbids: Vec<String> = Vec::new();
+        let mut album_artist_str: Option<String> = None;
+        let mut album_artist_mbids: Vec<String> = Vec::new();
+        let mut album_mbid: Option<String> = None;
         for (tag, val) in song.tags.into_iter() {
             match tag.to_lowercase().as_str() {
-                "album" => {let _ = res.album.replace(val);},
-                "albumartist" => {let _ = res.album_artist.replace(val);},
+                "album" => {
+                    if res.album.is_none() {
+                        let _ = res.album.replace(
+                            AlbumInfo::new(
+                                strip_filename_linux(&res.uri),
+                                &val,
+                                Vec::with_capacity(0)
+                            )
+                        );
+                    }
+                    else {
+                        panic!("Multiple Album tags found. Only one per song is supported.");
+                    }
+                },
+                "albumartist" => {
+                    if album_artist_str.is_none() {
+                        let _ = album_artist_str.replace(val);
+                    }
+                    else {
+                        panic!("Multiple AlbumArtist tags found. Only one per song is supported (use MusicBrainz syntax to specify multiple artists).");
+                    }
+                },
                 // "date" => res.imp().release_date.replace(Some(val.clone())),
                 "format" => {
                     if let Some(extension) = maybe_extension {
@@ -451,20 +454,54 @@ impl From<mpd::song::Song> for SongInfo {
                         let _ = res.disc.replace(idx);
                     }
                 }
-                // Beets use uppercase version
+                // Beets might use uppercase versions of these keys but we're
+                // converting all to lowercase
                 "musicbrainz_trackid" => {
-                    res.mb_track_id.replace(val);
+                    let _ = res.mbid.replace(val);
                 }
                 "musicbrainz_albumid" => {
-                    res.mb_album_id.replace(val);
+                    // Can encounter this before initialising the album object
+                    if album_mbid.is_none() {
+                        let _ = album_mbid.replace(val);
+                    }
+                    else {
+                        panic!("Multiple musicbrainz_albumid tags found. Only one per song is supported.");
+                    }
                 }
                 "musicbrainz_artistid" => {
-                    // Can encounter this multiple times
-                    res.mb_artist_ids.push(val);
+                    // Can encounter this multiple times and/or before
+                    // initialising the artist objects
+                    artist_mbids.push(val);
+                }
+                "musicbrainz_albumartistid" => {
+                    // Can encounter this multiple times and/or before
+                    // initialising the albumartist objects
+                    album_artist_mbids.push(val);
                 }
                 _ => {}
             }
         }
+
+        // Assume the artist IDs are given in the same order as the artist tags
+        for (idx, id) in artist_mbids.drain(..).enumerate() {
+            if idx < res.artists.len() {
+                let _ = res.artists[idx].mbid.replace(id);
+            }
+        }
+
+        if let Some(album) = res.album.as_mut() {
+            album.mbid = album_mbid;
+            // Assume the albumartist IDs are given in the same order as the albumartist tags
+            if let Some(s) = album_artist_str.as_mut() {
+                album.set_artists_from_string(s);
+                for (idx, id) in album_artist_mbids.drain(..).enumerate() {
+                    if idx < album.artists.len() {
+                        let _ = album.artists[idx].mbid.replace(id);
+                    }
+                }
+            }
+        }
+
         res
     }
 }

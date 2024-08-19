@@ -316,7 +316,7 @@ impl Player {
                         // Avoid needlessly changing album art as it will cause the whole
                         // bar to redraw (blurred background).
                         if let Some(old_song) = maybe_old_song {
-                            if song.get_album() != old_song.get_album() {
+                            if song.get_album().title != old_song.get_album().title {
                                 self.notify("album");
                                 self.notify("album-art");
                             }

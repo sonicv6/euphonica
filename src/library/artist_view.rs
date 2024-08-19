@@ -26,7 +26,7 @@ use super::{
 };
 use crate::{
     common::Album,
-    client::albumart::AlbumArtCache,
+    cache::Cache,
     utils::{settings_manager, g_cmp_str_options, g_cmp_options, g_search_substr}
 };
 
@@ -34,7 +34,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/album-view.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/library/artist-view.ui")]
     pub struct ArtistView {
         #[template_child]
         pub nav_view: TemplateChild<adw::NavigationView>,
@@ -125,14 +125,13 @@ impl ArtistView {
         res
     }
 
-    pub fn setup(&self, library: Library) {
-        // Huge TODO: fetch artist avatars from MusicBrainz or Last.fm
+    pub fn setup(&self, library: Library, cache: Rc<Cache>) {
         self.setup_sort();
         self.setup_search();
-        self.setup_gridview(library.clone(), albumart);
+        self.setup_gridview(library.clone(), cache.clone());
 
         let content_view = self.imp().content_view.get();
-        content_view.setup(library.clone());
+        content_view.setup(library.clone(), cache);
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
             content_view.clear_content();
@@ -376,38 +375,38 @@ impl ArtistView {
     }
 
     fn bind_state(&self, library: Library) {
-        // Here we will listen to the album-clicked signal of Library.
-        // Upon receiving that signal, create a new AlbumContentView page and push it onto the stack.
+        // Here we will listen to the artist-clicked signal of Library.
+        // Upon receiving that signal, create a new ArtistContentView page and push it onto the stack.
         // The view (ArtistView):
 
         // - Upon receiving click signal, get the list item at the indicated activate index.
-        // - Extract album from that list item.
-        // - Extract a non-GObject AlbumInfo sub-struct from that album object (implemented as GObject).
-        // - Call a method of the Library controller, passing that AlbumInfo struct.
+        // - Extract artist object from that list item.
+        // - Extract a non-GObject ArtistInfo sub-struct from that artist object (implemented as GObject).
+        // - Call a method of the Library controller, passing that ArtistInfo struct.
         // The controller (Library):
-        // - When called with that AlbumInfoStruct, send that AlbumInfo to client wrapper via MpdMessage.
-        //   This is why we had to extract the AlbumInfo struct out instead of sending the whole Album object:
+        // - When called with that ArtistInfoStruct, send that ArtistInfo to client wrapper via MpdMessage.
+        //   This is why we had to extract the ArtistInfo struct out instead of sending the whole Artist object:
         //   GObjects are not thread-safe, and while this action is not multithreaded, the MpdMessage enum
         //   has to remain thread safe as a whole since we're also using it to send results from the child
         //   client back to the main one. As such, the MpdMessage enum cannot carry any GObject in any of
         //   its variants, not just the variants used by child threads.
-        // - Client fetches all songs with album tag matching given name in AlbumInfo.
+        // - Client fetches all songs with artist tag matching given name in ArtistInfo.
         // - Client replies by calling another method of the Library controller & passing the list of songs
         //   it received, since the Library controller did not directly call any method of the client
         //   (it used a message instead) and as such cannot receive results in the normal return-value way.
         // Back to controller (Library):
-        // - Upon being called by client wrapper with that list of songs, reconstruct the album GObject,
+        // - Upon being called by client wrapper with that list of songs, reconstruct the artist GObject,
         //   construct a gio::ListStore of those Songs, then send them both over a custom signal. The
-        //   reason we're back to albums instead of AlbumInfos is that signal parameters must be GObjects
+        //   reason we're back to artists instead of ArtistInfos is that signal parameters must be GObjects
         //   (or sth implementing glib::ToValue trait).
         // Back to the view (ArtistView):
-        // - Listen to that custom signal. Upon that signal triggering, construct an AlbumContentView,
+        // - Listen to that custom signal. Upon that signal triggering, construct an ArtistContentView,
         //   populate it with the songs, then push it to the NavigationView inside ArtistView.
         let this = self.clone();
         library.connect_closure(
-            "album-clicked",
+            "artist-clicked",
             false,
-            closure_local!(move |_: Library, album: Album, song_list: gio::ListStore| {
+            closure_local!(move |_: Library, artist: Artist, song_list: gio::ListStore| {
                 let content_view = this.imp().content_view.get();
                 content_view.set_album(album, song_list);
                 this.imp().nav_view.push_by_tag("content");
@@ -415,7 +414,7 @@ impl ArtistView {
         );
     }
 
-    fn setup_gridview(&self, library: Library, albumart: Rc<AlbumArtCache>) {
+    fn setup_gridview(&self, library: Library, cache: Rc<Cache>) {
         // Setup search bar
         let search_bar = self.imp().search_bar.get();
         let search_entry = self.imp().search_entry.get();
@@ -443,69 +442,68 @@ impl ArtistView {
         // Set up factory
         let factory = SignalListItemFactory::new();
 
-        // Create an empty `AlbumCell` during setup
+        // Create an empty `ArtistCell` during setup
         factory.connect_setup(move |_, list_item| {
-            let album_cell = AlbumCell::new();
+            let album_cell = ArtistCell::new();
             list_item
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem")
                 .set_child(Some(&album_cell));
         });
-        // Tell factory how to bind `AlbumCell` to one of our Album GObjects
-        factory.connect_bind(
-            clone!(
-                #[weak]
-                albumart,
-                move |_, list_item| {
+
+        // Tell factory how to bind `ArtistCell` to one of our Artist GObjects
+        factory.connect_bind(move |_, list_item| {
             // Get `Song` from `ListItem` (that is, the data side)
-            let item: Album = list_item
+            let item: Artist = list_item
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem")
                 .item()
-                .and_downcast::<Album>()
-                .expect("The item has to be a common::Album.");
+                .and_downcast::<Artist>()
+                .expect("The item has to be a common::Artist.");
 
             // This album is about to be displayed. Cache its album art (if any) now.
             // Might result in a cache miss, in which case the file will be immediately loaded
             // from disk.
             // Note that this does not trigger any downloading. That's done by the Player
             // controller upon receiving queue updates.
-            // Note 2: Album GObjects contain folder-level URIs, so there is no need to strip filename.
+            // Note 2: Artist GObjects contain folder-level URIs, so there is no need to strip filename.
             if item.get_cover().is_none() {
-                if let Some(tex) = albumart.get_for(&item.get_uri(), false) {
+                if let Some(tex) = cache.load_local_album_art(&item.get_uri(), false) {
                     item.set_cover(Some(tex));
                 }
             }
 
-            // Get `AlbumCell` from `ListItem` (the UI widget)
-            let child: AlbumCell = list_item
+            // Get `ArtistCell` from `ListItem` (the UI widget)
+            let child: ArtistCell = list_item
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem")
                 .child()
-                .and_downcast::<AlbumCell>()
-                .expect("The child has to be an `AlbumCell`.");
+                .and_downcast::<ArtistCell>()
+                .expect("The child has to be an `ArtistCell`.");
 
             // Within this binding fn is where the cached album art texture gets used.
             child.bind(&item);
-        }));
+        });
 
 
         // When cell goes out of sight, unbind from item to allow reuse with another.
         // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
         factory.connect_unbind(move |_, list_item| {
-            // Get `AlbumCell` from `ListItem` (the UI widget)
-            let child: AlbumCell = list_item
+            // Get `ArtistCell` from `ListItem` (the UI widget)
+            let child: ArtistCell = list_item
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem")
                 .child()
-                .and_downcast::<AlbumCell>()
-                .expect("The child has to be an `AlbumCell`.");
-            let item: Album = list_item
+                .and_downcast::<ArtistCell>()
+                .expect("The child has to be an `ArtistCell`.");
+            let item: Artist = list_item
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem")
                 .item()
-                .and_downcast::<Album>()
-                .expect("The item has to be a common::Album.");
+                .and_downcast::<Artist>()
+                .expect("The item has to be a common::Artist.");
+            // Drop reference to GdkTexture
+            item.set_cover(None);
             child.unbind(&item);
         });
 
@@ -518,8 +516,8 @@ impl ArtistView {
             let model = grid_view.model().expect("The model has to exist.");
             let album = model
                 .item(position)
-                .and_downcast::<Album>()
-                .expect("The item has to be a `common::Album`.");
+                .and_downcast::<Artist>()
+                .expect("The item has to be a `common::Artist`.");
 
             // Increase "number" of `IntegerObject`
             library.on_album_clicked(album);

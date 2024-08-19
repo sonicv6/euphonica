@@ -224,8 +224,8 @@ impl AlbumView {
                         4 => {
                             // AlbumArtist
                             g_cmp_str_options(
-                                album1.get_artist().as_deref(),
-                                album2.get_artist().as_deref(),
+                                album1.get_artist_str().as_deref(),
+                                album2.get_artist_str().as_deref(),
                                 nulls_first,
                                 asc,
                                 case_sensitive
@@ -306,7 +306,7 @@ impl AlbumView {
                                 &search_term,
                                 case_sensitive
                             ) || g_search_substr(
-                                album.get_artist().as_deref(),
+                                album.get_artist_str().as_deref(),
                                 &search_term,
                                 case_sensitive
                             )
@@ -322,7 +322,7 @@ impl AlbumView {
                         2 => {
                             // Match only AlbumArtist (albums without such tag will never match)
                             g_search_substr(
-                                album.get_artist().as_deref(),
+                                album.get_artist_str().as_deref(),
                                 &search_term,
                                 case_sensitive
                             )

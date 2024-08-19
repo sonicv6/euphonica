@@ -248,7 +248,7 @@ impl MpdWrapper {
                                                     let first_song = Song::from(std::mem::take(&mut songs[0]));
                                                     let _ = sender_to_fg.send_blocking(
                                                         MpdMessage::AlbumBasicInfoDownloaded(
-                                                            AlbumInfo::from(first_song)
+                                                            first_song.get_album().unwrap()
                                                         )
                                                     );
                                                 }

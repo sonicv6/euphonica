@@ -6,7 +6,13 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
 use crate::utils::strip_filename_linux;
-use super::{Song, QualityGrade};
+use super::{
+    Song,
+    QualityGrade,
+    ArtistInfo,
+    parse_mb_artist_tag,
+    artists_to_string
+};
 
 // This is a model class for queue view displays.
 // It does not contain any actual song in terms of data.
@@ -17,24 +23,28 @@ pub struct AlbumInfo {
     pub title: String,
     // Folder-based URI, acquired from the first song found with this album's tag.
     pub uri: String,
-    pub artist: Option<String>,  // use AlbumArtist tag
+    pub artists: Vec<ArtistInfo>, // parse from AlbumArtist tag please, not Artist.
     pub cover: Option<Texture>,
     pub release_date: Option<Date>,
     pub quality_grade: QualityGrade,
-    pub mb_album_id: Option<String>
+    pub mbid: Option<String>
 }
 
 impl AlbumInfo {
-    pub fn new(uri: &str, title: &str, artist: Option<&str>) -> Self {
+    pub fn new(uri: &str, title: &str, artists: Vec<ArtistInfo>) -> Self {
         Self {
             uri: uri.to_owned(),
-            artist: artist.map(str::to_string),
+            artists,
             title: title.to_owned(),
             cover: None,
             release_date: None,
             quality_grade: QualityGrade::Unknown,
-            mb_album_id: None
+            mbid: None
         }
+    }
+
+    pub fn set_artists_from_string(&mut self, tag: &str) {
+        self.artists = parse_mb_artist_tag(tag);
     }
 }
 
@@ -43,11 +53,11 @@ impl Default for AlbumInfo {
         AlbumInfo {
             title: "Untitled Album".to_owned(),
             uri: "".to_owned(),
-            artist: None,
+            artists: Vec::with_capacity(0),
             cover: None,
             release_date: None,
             quality_grade: QualityGrade::Unknown,
-            mb_album_id: None
+            mbid: None
         }
     }
 }
@@ -85,10 +95,10 @@ mod imp {
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
-                    ParamSpecString::builder("uri").construct_only().build(),
-                    ParamSpecString::builder("title").build(),
-                    ParamSpecString::builder("artist").build(),
-                    ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").build(),
+                    ParamSpecString::builder("uri").read_only().build(),
+                    ParamSpecString::builder("title").read_only().build(),
+                    ParamSpecString::builder("artist").read_only().build(),
+                    ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").read_only().build(),
                     ParamSpecString::builder("quality-grade").read_only().build(),
                     ParamSpecObject::builder::<Texture>("cover")
                         .read_only()
@@ -103,35 +113,10 @@ mod imp {
             match pspec.name() {
                 "uri" => obj.get_uri().to_value(),
                 "title" => obj.get_title().to_value(),
-                "artist" => obj.get_artist().to_value(),
+                "artist" => obj.get_artist_str().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 "quality-grade" => obj.get_quality_grade().to_value(),
                 "cover" => obj.get_cover().to_value(),
-                _ => unimplemented!(),
-            }
-        }
-
-        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
-            let obj = self.obj();
-            match pspec.name() {
-                "uri" => {
-                    if let Ok(uri) = value.get::<&str>() {
-                        uri.clone_into(&mut self.info.borrow_mut().uri);
-                    }
-                    obj.notify("uri");
-                }
-                "title" => {
-                    if let Ok(title) = value.get::<&str>() {
-                        title.clone_into(&mut self.info.borrow_mut().title);
-                    }
-                    obj.notify("title");
-                }
-                "artist" => {
-                    if let Ok(artist) = value.get::<&str>() {
-                        self.info.borrow_mut().artist.replace(artist.to_owned());
-                    }
-                    obj.notify("artist");
-                }
                 _ => unimplemented!(),
             }
         }
@@ -155,12 +140,16 @@ impl Album {
         self.imp().info.borrow().title.clone()
     }
 
-    pub fn get_artist(&self) -> Option<String> {
-        self.imp().info.borrow().artist.clone()
+    pub fn get_artists(&self) -> Vec<ArtistInfo> {
+        self.imp().info.borrow().artists.clone()
     }
 
-    pub fn get_mb_album_id(&self) -> Option<String> {
-        self.imp().info.borrow().mb_album_id.clone()
+    pub fn get_artist_str(&self) -> Option<String> {
+        artists_to_string(&self.imp().info.borrow().artists)
+    }
+
+    pub fn get_mbid(&self) -> Option<String> {
+        self.imp().info.borrow().mbid.clone()
     }
 
     pub fn get_cover(&self) -> Option<Texture> {
@@ -189,29 +178,6 @@ impl Album {
 impl Default for Album {
     fn default() -> Self {
         glib::Object::new()
-    }
-}
-
-impl From<Song> for AlbumInfo {
-    fn from(song: Song) -> Self {
-        Self {
-            title: song.get_album().unwrap_or("".to_owned()),
-            uri: strip_filename_linux(&song.get_uri()).to_owned(),
-            artist: song.get_album_artist(),
-            cover: None,
-            release_date: song.get_release_date(),
-            quality_grade: song.get_quality_grade(),
-            mb_album_id: song.get_mb_album_id()
-        }
-    }
-}
-
-impl From<Song> for Album {
-    fn from(song: Song) -> Self {
-        let res = glib::Object::builder::<Self>().build();
-        let info = AlbumInfo::from(song);
-        res.imp().info.replace(info);
-        res
     }
 }
 
