@@ -166,7 +166,6 @@ impl Player {
         cache: Rc<Cache>
     ) {
         let _ = self.imp().client_sender.set(client_sender);
-        let cache_state: CacheState = cache.get_cache_state();
         let _ = self.imp().cache.set(cache);
         // Connect to ClientState signals that announce completion of requests
         client_state.connect_closure(
@@ -200,17 +199,6 @@ impl Player {
                 move |_: ClientState, boxed: BoxedAnyObject| {
                     // Forward to bar
                     this.update_outputs(boxed);
-                }
-            )
-        );
-        cache_state.connect_closure(
-            "album-art-downloaded",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: CacheState, folder_uri: &str| {
-                    this.update_queue_album_arts(folder_uri);
                 }
             )
         );
@@ -316,7 +304,7 @@ impl Player {
                         // Avoid needlessly changing album art as it will cause the whole
                         // bar to redraw (blurred background).
                         if let Some(old_song) = maybe_old_song {
-                            if song.get_album().title != old_song.get_album().title {
+                            if song.get_album() != old_song.get_album() {
                                 self.notify("album");
                                 self.notify("album-art");
                             }
@@ -385,49 +373,29 @@ impl Player {
         }
     }
 
-    fn update_queue_album_arts(&self, folder_uri: &str) {
-        // TODO: batch this too.
-        // This fn is only for updating album art AFTER the songs have already been displayed
-        // in the queue (for example, after finishing downloading their album arts).
-        // Songs whose album arts have already been downloaded will not need this fn.
-        // Instead, their album arts are loaded on-demand from disk or cache by the queue view.
-        // Iterate through the queue to see if we can update album art for any of them.
-        if let Some(cache) = self.imp().cache.get() {
-            if let Some(tex) = cache.load_local_album_art(folder_uri, true) {
-                for song in self.imp().queue.borrow().iter::<Song>().flatten() {
-                    if song.get_thumbnail().is_none() && strip_filename_linux(&song.get_uri()) == folder_uri {
-                        song.set_thumbnail(Some(tex.clone()));
-                        // If currently playing, then also update the sidebar.
-                        // Note: sidebar will use the high-resolution verison.
-                        if song.is_playing() {
-                            self.notify("album-art");
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // Here we try to define getters and setters in terms of the GObject
     // properties as defined above in mod imp {} instead of the actual
     // internal fields.
     pub fn title(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return song.get_name();
+            return Some(song.get_name().to_owned());
         }
         None
     }
 
     pub fn artist(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return song.get_artist();
+            return song.get_artist_str();
         }
         None
     }
 
     pub fn album(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return song.get_album();
+            if let Some(album) = song.get_album() {
+                return Some(album.title.clone());
+            }
+            return None;
         }
         None
     }

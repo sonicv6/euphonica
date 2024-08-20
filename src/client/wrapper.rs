@@ -13,7 +13,7 @@ use gtk::{glib, gio};
 
 use crate::{
     utils,
-    common::{Album, AlbumInfo, Song}
+    common::{Album, AlbumInfo, Song, SongInfo}
 };
 
 use super::state::{ClientState, ConnectionState};
@@ -79,7 +79,7 @@ pub enum MpdMessage {
     FindAdd(Query<'static>),
 	Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
-    AlbumContent(AlbumInfo), // Get list of songs in album with given tag name
+    AlbumContent(String), // Get list of songs with given album tag
     Volume(i8),
 
     // Reserved for cache controller
@@ -245,10 +245,10 @@ impl MpdWrapper {
                                                 Window::from((0, 1))
                                             ) {
                                                 if !songs.is_empty() {
-                                                    let first_song = Song::from(std::mem::take(&mut songs[0]));
+                                                    let first_song = SongInfo::from(std::mem::take(&mut songs[0]));
                                                     let _ = sender_to_fg.send_blocking(
                                                         MpdMessage::AlbumBasicInfoDownloaded(
-                                                            first_song.get_album().unwrap()
+                                                            first_song.into_album_info().unwrap_or_default()
                                                         )
                                                     );
                                                 }
@@ -354,7 +354,7 @@ impl MpdWrapper {
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
-            MpdMessage::AlbumContent(album_info) => self.get_album_content(album_info),
+            MpdMessage::AlbumContent(tag) => self.get_album_content(tag),
             MpdMessage::Volume(vol) => self.volume(vol),
             MpdMessage::AlbumArt(folder_uri, cache_path, thumb_cache_path) => {
                 self.queue_task(
@@ -493,7 +493,7 @@ impl MpdWrapper {
 
     fn set_output(&self, id: u32, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            client.output(id, state);
+            let _ = client.output(id, state);
         }
     }
 
@@ -584,10 +584,10 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_album_content(&self, info: AlbumInfo) {
+    pub fn get_album_content(&self, tag: String) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let songs: Vec<Song> = client.find(
-                Query::new().and(Term::Tag(Cow::Borrowed("album")), info.title.clone()),
+                Query::new().and(Term::Tag(Cow::Borrowed("album")), tag.clone()),
                 Window::from((0, 4096))
             ).unwrap().iter_mut().map(|mpd_song| {Song::from(std::mem::take(mpd_song))}).collect();
 
@@ -596,7 +596,7 @@ impl MpdWrapper {
                 self.state.emit_by_name::<()>(
                     "album-content-downloaded",
                     &[
-                        &Album::from(info),
+                        &tag,
                         &BoxedAnyObject::new(songs)
                     ]
                 );

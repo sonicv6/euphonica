@@ -7,13 +7,11 @@ use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
     gio,
-    gdk,
     glib,
     CompositeTemplate,
     SignalListItemFactory,
     ListItem,
 };
-use gdk::Texture;
 use glib::{
     clone,
     closure_local,
@@ -26,9 +24,14 @@ use super::{
     AlbumSongRow
 };
 use crate::{
-    utils::{format_secs_as_duration, settings_manager},
+    utils::format_secs_as_duration,
     common::{Album, Song},
-    cache::{Cache, CacheState}
+    cache::{
+        Cache,
+        CacheState,
+        placeholders::ALBUMART_PLACEHOLDER
+    },
+    client::ClientState
 };
 
 mod imp {
@@ -74,7 +77,8 @@ mod imp {
         pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
-        pub cache: OnceCell<Rc<Cache>>
+        pub cache: OnceCell<Rc<Cache>>,
+
     }
 
     #[glib::object_subclass]
@@ -156,7 +160,7 @@ impl AlbumContentView {
         }
     }
 
-    pub fn setup(&self, library: Library, cache: Rc<Cache>) {
+    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
         cache.get_cache_state().connect_closure(
             "album-meta-downloaded",
             false,
@@ -172,6 +176,22 @@ impl AlbumContentView {
                 }
             )
         );
+        client_state.connect_closure(
+            "album-content-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: ClientState, tag: String, songs: glib::BoxedAnyObject| {
+                    if let Some(album) = this.imp().album.borrow().as_ref() {
+                        if album.get_title() == tag {
+                            this.setup_content(songs.borrow::<Vec<Song>>().as_ref());
+                        }
+                    }
+                }
+            )
+        );
+
         let _ = self.imp().cache.set(cache);
         let infobox_revealer = self.imp().infobox_revealer.get();
         let collapse_infobox = self.imp().collapse_infobox.get();
@@ -282,15 +302,18 @@ impl AlbumContentView {
         self.imp().content.set_factory(Some(&factory));
     }
 
-    pub fn set_album(&self, album: Album, song_list: gio::ListStore) {
-        self.setup_content(song_list);
+    pub fn set_album(&self, album: Album) {
         self.bind(album);
     }
 
-    fn update_cover(&self, tex: Option<&Texture>) {
-        // Use high-resolution version here
-        if tex.is_some() {
-            self.imp().cover.set_paintable(tex);
+    fn update_cover(&self, folder_uri: &str) {
+        if let Some(cache) = self.imp().cache.get() {
+            if let Some(tex) = cache.load_local_album_art(folder_uri, false) {
+                self.imp().cover.set_paintable(Some(&tex));
+            }
+            else {
+                self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER))
+            }
         }
     }
 
@@ -349,7 +372,7 @@ impl AlbumContentView {
         // Save binding
         bindings.push(release_date_viz_binding);
 
-        self.update_cover(album.get_cover().as_ref());
+        self.update_cover(album.get_uri());
         self.imp().cover_signal_id.replace(Some(
             album.connect_notify_local(
                 Some("cover"),
@@ -359,7 +382,7 @@ impl AlbumContentView {
                     #[weak]
                     album,
                     move |_, _| {
-                        this.update_cover(album.get_cover().as_ref());
+                        this.update_cover(album.get_uri());
                     }
                 )
             )
@@ -383,7 +406,9 @@ impl AlbumContentView {
         self.imp().wiki_box.set_visible(false);
     }
 
-    pub fn setup_content(&self, song_list: gio::ListStore) {
+    pub fn setup_content(&self, songs: &[Song]) {
+        let song_list = gio::ListStore::new::<Song>();
+        song_list.extend_from_slice(songs);
         self.imp().track_count.set_label(&song_list.n_items().to_string());
         self.imp().runtime.set_label(
             &format_secs_as_duration(

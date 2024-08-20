@@ -110,7 +110,7 @@ mod imp {
                     // AlbumContentView for it.
                     Signal::builder("album-content-downloaded")
                         .param_types([
-                            Album::static_type(),
+                            String::static_type(),
                             BoxedAnyObject::static_type()  // Vec<Song>
                         ])
                         .build(),

@@ -3,7 +3,7 @@ pub mod album;
 pub mod artist;
 pub mod paintables;
 
-pub use song::{Song, QualityGrade};
+pub use song::{SongInfo, Song, QualityGrade};
 pub use album::{AlbumInfo, Album};
 pub use artist::{
     ArtistInfo,

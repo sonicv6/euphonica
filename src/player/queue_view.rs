@@ -16,7 +16,11 @@ use gdk::Texture;
 use glib::clone;
 
 use crate::{
-    cache::Cache,
+    cache::{
+        Cache,
+        CacheState,
+        placeholders::ALBUMART_PLACEHOLDER
+    },
     utils::strip_filename_linux,
     common::Song
 };
@@ -119,58 +123,51 @@ impl QueueView {
                 .set_child(Some(&queue_row));
         });
         // Tell factory how to bind `QueueRow` to one of our Song GObjects
-        factory.connect_bind(move |_, list_item| {
-            // Get `Song` from `ListItem` (that is, the data side)
-            let item: Song = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .item()
-                .and_downcast::<Song>()
-                .expect("The item has to be a common::Song.");
+        factory.connect_bind(clone!(
+            #[weak]
+            cache,
+            move |_, list_item| {
+                // Get `Song` from `ListItem` (that is, the data side)
+                let item: Song = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .item()
+                    .and_downcast::<Song>()
+                    .expect("The item has to be a common::Song.");
 
-            // This song is about to be displayed. Cache its album art (if any) now.
-            // Might result in a cache miss, in which case the file will be immediately loaded
-            // from disk.
-            // Note that this does not trigger any downloading. That's done by the Player
-            // controller upon receiving queue updates.
-            if item.get_thumbnail().is_none() {
-                if let Some(tex) = cache.load_local_album_art(strip_filename_linux(&item.get_uri()), true) {
-                    item.set_thumbnail(Some(tex));
-                }
-            }
+                // This song row is about to be displayed. Try to ensure that we
+                // have a local copy of its album art. This might incur an API call.
+                cache.ensure_local_album_art(strip_filename_linux(item.get_uri()));
 
-            // Get `QueueRow` from `ListItem` (the UI widget)
-            let child: QueueRow = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .child()
-                .and_downcast::<QueueRow>()
-                .expect("The child has to be a `QueueRow`.");
+                // Get `QueueRow` from `ListItem` (the UI widget)
+                let child: QueueRow = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .child()
+                    .and_downcast::<QueueRow>()
+                    .expect("The child has to be a `QueueRow`.");
 
-            // Within this binding fn is where the cached album art texture gets used.
-            child.bind(&item);
-        });
+                // Within this binding fn is where the cached album art texture gets used.
+                child.bind(&item, cache.clone());
+            })
+        );
 
         // When row goes out of sight, unbind from item to allow reuse with another.
         // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
-        factory.connect_unbind(move |_, list_item| {
-            // Get `QueueRow` from `ListItem` (the UI widget)
-            let child: QueueRow = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .child()
-                .and_downcast::<QueueRow>()
-                .expect("The child has to be a `QueueRow`.");
-            let item: Song = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .item()
-                .and_downcast::<Song>()
-                .expect("The item has to be a common::Song.");
-            // Drop reference to GdkTexture
-            item.set_thumbnail(None);
-            child.unbind(&item);
-        });
+        factory.connect_unbind(clone!(
+            #[weak]
+            cache,
+            move |_, list_item| {
+                // Get `QueueRow` from `ListItem` (the UI widget)
+                let child: QueueRow = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .child()
+                    .and_downcast::<QueueRow>()
+                    .expect("The child has to be a `QueueRow`.");
+                child.unbind(cache);
+            })
+        );
 
         // Set the factory of the list view
         self.imp().queue.set_factory(Some(&factory));

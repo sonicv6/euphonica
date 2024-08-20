@@ -1,4 +1,7 @@
-use std::cell::RefCell;
+use std::{
+    cell::RefCell,
+    rc::Rc
+};
 use gtk::{
     glib,
     gdk,
@@ -10,6 +13,7 @@ use gtk::{
 };
 use gdk::Texture;
 use glib::{
+    closure_local,
     Object,
     Binding,
     signal::SignalHandlerId
@@ -20,15 +24,12 @@ use crate::{
         Album,
         QualityGrade
     },
-    cache::placeholders::ALBUMART_PLACEHOLDER
-};
-
-fn maybe_get_cover(album: &Album) -> Option<Texture> {
-    if let Some(cover) = album.get_cover() {
-        return Some(cover);
+    cache::{
+        Cache,
+        CacheState,
+        placeholders::ALBUMART_PLACEHOLDER
     }
-    Some(ALBUMART_PLACEHOLDER.clone())
-}
+};
 
 mod imp {
     use super::*;
@@ -93,23 +94,41 @@ impl AlbumCell {
         Object::builder().build()
     }
 
-    pub fn bind(&self, album: &Album) {
+    fn update_album_art(&self, folder_uri: &str, cache: Rc<Cache>) {
+        if let Some(tex) = cache.load_local_album_art(folder_uri, false) {
+            self.imp().cover.set_paintable(Some(&tex));
+        }
+        else {
+            self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER))
+        }
+    }
+
+    pub fn bind(&self, album: &Album, cache: Rc<Cache>) {
         // Get state
-        let cover_image = self.imp().cover.get();
         let title_label = self.imp().title.get();
         let artist_label = self.imp().artist.get();
         let quality_grade = self.imp().quality_grade.get();
         let mut bindings = self.imp().bindings.borrow_mut();
 
         // Set once first (like sync_create)
-        cover_image.set_paintable(maybe_get_cover(album).as_ref());
-        let cover_binding = album
-            .connect_notify_local(
-                Some("cover"),
-                move |this_album, _| {
-                    cover_image.set_paintable(maybe_get_cover(this_album).as_ref());
-                },
-            );
+        self.update_album_art(album.get_uri(), cache.clone());
+        let cover_binding = cache.get_cache_state().connect_closure(
+            "album-art-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                #[strong]
+                album,
+                #[weak]
+                cache,
+                move |_: CacheState, folder_uri: String| {
+                    if album.get_uri() == folder_uri {
+                        this.update_album_art(folder_uri.as_ref(), cache)
+                    }
+                }
+            )
+        );
         self.imp().cover_signal_id.replace(Some(cover_binding));
 
         let title_binding = album
@@ -153,13 +172,13 @@ impl AlbumCell {
         bindings.push(quality_grade_binding);
     }
 
-    pub fn unbind(&self, album: &Album) {
+    pub fn unbind(&self, cache: Rc<Cache>) {
         // Unbind all stored bindings
         for binding in self.imp().bindings.borrow_mut().drain(..) {
             binding.unbind();
         }
         if let Some(id) = self.imp().cover_signal_id.take() {
-            album.disconnect(id);
+            cache.get_cache_state().disconnect(id);
         }
     }
 }

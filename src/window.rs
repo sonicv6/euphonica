@@ -140,7 +140,8 @@ impl EuphoniaWindow {
         );
         win.imp().album_view.setup(
             app.get_library(),
-            app.get_cache()
+            app.get_cache(),
+            app.get_client().get_client_state()
         );
         win.imp().sidebar.setup(
             win.imp().stack.clone()

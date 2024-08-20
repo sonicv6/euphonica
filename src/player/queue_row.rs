@@ -1,5 +1,6 @@
 use std::{
-    cell::{RefCell},
+    cell::RefCell,
+    rc::Rc,
     f64::consts::PI
 };
 use gtk::{
@@ -11,12 +12,21 @@ use gtk::{
     Image
 };
 use glib::{
+    closure_local,
     Object,
     Binding,
     signal::SignalHandlerId
 };
 
-use crate::common::Song;
+use crate::{
+    utils::strip_filename_linux,
+    common::Song,
+    cache::{
+        Cache,
+        CacheState,
+        placeholders::ALBUMART_PLACEHOLDER
+    }
+};
 
 // fn ease_in_out_sine(progress: f64) -> f64 {
 //     (1.0 - (progress * PI).cos()) / 2.0
@@ -176,7 +186,16 @@ impl QueueRow {
     //     );
     // }
 
-    pub fn bind(&self, song: &Song) {
+    fn update_thumbnail(&self, folder_uri: &str, cache: Rc<Cache>) {
+        if let Some(tex) = cache.load_local_album_art(folder_uri, true) {
+            self.imp().thumbnail.set_paintable(Some(&tex));
+        }
+        else {
+            self.imp().thumbnail.set_paintable(Some(&*ALBUMART_PLACEHOLDER))
+        }
+    }
+
+    pub fn bind(&self, song: &Song, cache: Rc<Cache>) {
         // Get state
         let thumbnail_image = self.imp().thumbnail.get();
         let song_name_label = self.imp().song_name.get();
@@ -186,18 +205,24 @@ impl QueueRow {
         let mut bindings = self.imp().bindings.borrow_mut();
 
         // Set once first (like sync_create)
-        let thumbnail = song.get_thumbnail();
-        // println!("Thumbnail exists: {}", thumbnail.is_some());
-        thumbnail_image.set_paintable(thumbnail.as_ref());
-        let thumbnail_binding = song
-            .connect_notify_local(
-                Some("thumbnail"),
-                move |this_song, _| {
-                    let thumbnail = this_song.get_thumbnail();
-                    // println!("Thumbnail exists: {}", thumbnail.is_some());
-                    thumbnail_image.set_paintable(thumbnail.as_ref());
-                },
-            );
+        self.update_thumbnail(strip_filename_linux(song.get_uri()), cache.clone());
+        let thumbnail_binding = cache.get_cache_state().connect_closure(
+            "album-art-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                #[strong]
+                song,
+                #[weak]
+                cache,
+                move |_: CacheState, folder_uri: String| {
+                    if strip_filename_linux(song.get_uri()) == folder_uri {
+                        this.update_thumbnail(folder_uri.as_ref(), cache)
+                    }
+                }
+            )
+        );
         self.imp().thumbnail_signal_id.replace(Some(thumbnail_binding));
 
         let song_name_binding = song
@@ -247,13 +272,13 @@ impl QueueRow {
         // self.imp().playing_signal_id.replace(Some(playing_binding));
     }
 
-    pub fn unbind(&self, song: &Song) {
+    pub fn unbind(&self, cache: Rc<Cache>) {
         // Unbind all stored bindings
         for binding in self.imp().bindings.borrow_mut().drain(..) {
             binding.unbind();
         }
         if let Some(id) = self.imp().thumbnail_signal_id.take() {
-            song.disconnect(id);
+            cache.get_cache_state().disconnect(id);
         }
 
         // if let Some(id) = self.imp().playing_signal_id.take() {

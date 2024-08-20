@@ -4,7 +4,4 @@ mod state;
 pub use state::CacheState;
 pub mod placeholders;
 
-pub use controller::{
-    Cache,
-    CacheContentType
-};
+pub use controller::Cache;

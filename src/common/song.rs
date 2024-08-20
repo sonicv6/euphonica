@@ -93,7 +93,6 @@ pub struct SongInfo {
     title: String, // Might just be filename
     // last_mod: RefCell<Option<u64>>,
     artists: Vec<ArtistInfo>,
-    album_artists: Vec<ArtistInfo>,
     duration: Option<Duration>, // Default to 0 if somehow the option in mpd's Song is None
     queue_id: Option<u32>,
     // range: Option<Range>,
@@ -116,6 +115,10 @@ impl SongInfo {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn into_album_info(self) -> Option<AlbumInfo> {
+        self.album
+    }
 }
 
 impl Default for SongInfo {
@@ -124,7 +127,6 @@ impl Default for SongInfo {
             uri: String::from(""),
             title: String::from("Untitled Song"),
             artists: Vec::new(),
-            album_artists: Vec::new(),
             duration: None,
             queue_id: None,
             album: None,
@@ -186,10 +188,10 @@ mod imp {
                     ParamSpecString::builder("name").read_only().build(),
                     // ParamSpecString::builder("last_mod").build(),
                     ParamSpecString::builder("artist").read_only().build(),
-                    ParamSpecString::builder("album-artist").read_only().build(),
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").build(),
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
+                    ParamSpecBoolean::builder("is-playing").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
                     ParamSpecInt64::builder("track").read_only().build(),
                     ParamSpecInt64::builder("disc").read_only().build(),
@@ -212,16 +214,15 @@ mod imp {
                 // Represented in MusicBrainz format, i.e. Composer; Performer, Performer,...
                 // The composer part is optional.
                 "artist" => obj.get_artist_str().to_value(),
-                "album-artist" => obj.get_album_artist_str().to_value(),
                 "duration" => obj.get_duration().to_value(),
                 "queue-id" => obj.get_queue_id().to_value(),
                 "is-queued" => obj.is_queued().to_value(),
+                "is-playing" => obj.is_playing().to_value(),
                 "album" => obj.get_album_title().to_value(),
                 "track" => obj.get_track().to_value(),
                 "disc" => obj.get_disc().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
-                "is-playing" => obj.is_playing().to_value(),
                 "quality-grade" => obj.get_quality_grade().to_value(),
                 _ => unimplemented!(),
             }
@@ -271,14 +272,6 @@ impl Song {
 
     pub fn get_artist_str(&self) -> Option<String> {
         artists_to_string(&self.get_info().artists)
-    }
-
-    pub fn get_album_artists(&self) -> &[ArtistInfo] {
-        &self.get_info().album_artists
-    }
-
-    pub fn get_album_artist_str(&self) -> Option<String> {
-        artists_to_string(&self.get_info().album_artists)
     }
 
     pub fn get_queue_id(&self) -> u32 {
@@ -367,7 +360,6 @@ impl From<mpd::song::Song> for SongInfo {
             uri: song.file,
             title: name,
             artists,
-            album_artists: Vec::with_capacity(0),
             duration: song.duration,
             queue_id: None,
             album: None,

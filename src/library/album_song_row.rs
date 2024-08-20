@@ -183,7 +183,7 @@ impl AlbumSongRow {
         bindings.push(quality_viz_binding);
 
         // Bind the queue buttons
-        let uri = song.get_uri();
+        let uri = song.get_uri().to_owned();
         if let Some(old_id) = self.imp().replace_queue_id.replace(
             Some(
                 self.imp().replace_queue.connect_clicked(

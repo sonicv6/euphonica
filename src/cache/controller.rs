@@ -328,16 +328,16 @@ impl Cache {
     pub fn ensure_local_album_meta(
         &self,
         // Specify either this (preferred)
-        mbid: Option<String>,
+        mbid: Option<&str>,
         // Or BOTH of these
-        album: Option<String>, artist: Option<String>,
+        album: Option<&str>, artist: Option<&str>,
         folder_uri: &str
     ) {
         // Check whether we have this album cached
         if let Ok(key) = self.get_album_key(
-            mbid.as_deref(),
-            album.as_deref(),
-            artist.as_deref()
+            mbid,
+            album,
+            artist
         ) {
             let result = self.album_meta_cache.find_one(key.clone());
             if let Ok(response) = result {

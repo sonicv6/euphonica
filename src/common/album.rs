@@ -8,6 +8,7 @@ use gtk::subclass::prelude::*;
 use super::{
     QualityGrade,
     ArtistInfo,
+    SongInfo,
     parse_mb_artist_tag,
     artists_to_string
 };
@@ -15,7 +16,7 @@ use super::{
 // This is a model class for queue view displays.
 // It does not contain any actual song in terms of data.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AlbumInfo {
     // TODO: Might want to refactor to Into<Cow<'a, str>>
     pub title: String,
@@ -57,6 +58,12 @@ impl Default for AlbumInfo {
             quality_grade: QualityGrade::Unknown,
             mbid: None
         }
+    }
+}
+
+impl From<SongInfo> for AlbumInfo {
+    fn from(song_info: SongInfo) -> Self {
+        song_info.into_album_info().unwrap()
     }
 }
 
@@ -103,10 +110,7 @@ mod imp {
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").read_only().build(),
-                    ParamSpecString::builder("quality-grade").read_only().build(),
-                    ParamSpecObject::builder::<Texture>("cover")
-                        .read_only()
-                        .build(),
+                    ParamSpecString::builder("quality-grade").read_only().build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -120,7 +124,6 @@ mod imp {
                 "artist" => obj.get_artist_str().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 "quality-grade" => obj.get_quality_grade().to_value(),
-                "cover" => obj.get_cover().to_value(),
                 _ => unimplemented!(),
             }
         }

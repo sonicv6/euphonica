@@ -10,7 +10,7 @@ use crate::utils::strip_filename_linux;
 use super::{Song, QualityGrade};
 
 /// Artist struct, for use with both Artist and AlbumArtist tags.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ArtistInfo {
     // TODO: Might want to refactor to Into<Cow<'a, str>>
     pub name: String, // Artist tag, not AlbumArtist
