@@ -351,13 +351,11 @@ impl Player {
         let queue = self.imp().queue.borrow();
         queue.remove_all();
         if let Some(cache) = self.imp().cache.get() {
-            for song in songs {
-                let uri = song.get_uri();
-                let folder_uri = strip_filename_linux(&uri);
-                // Might queue downloads, depending on user settings, but
-                // will not actually load anything into memory just yet.
-                cache.ensure_local_album_art(folder_uri);
-            }
+            // Might queue downloads, depending on user settings, but will not
+            // actually load anything into memory just yet.
+            cache.ensure_local_album_arts(songs.iter().map(|song| {
+                strip_filename_linux(song.get_uri()).to_owned()
+            }).collect());
         }
         queue.extend_from_slice(songs);
         // Downstream widgets should now receive an item-changed signal.

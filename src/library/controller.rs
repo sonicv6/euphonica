@@ -1,5 +1,5 @@
 use std::{
-    cell::{OnceCell, RefCell},
+    cell::OnceCell,
     rc::Rc,
     vec::Vec,
     sync::OnceLock,
@@ -11,13 +11,10 @@ use crate::{
         ClientState,
         MpdMessage
     },
-    cache::{
-        CacheState,
-        Cache
-    },
+    cache::Cache,
     common::{
         Album,
-        Song
+        Artist
     },
     utils::settings_manager
 };
@@ -62,7 +59,8 @@ mod imp {
         // 4.3. Send AlbumInfo class to main thread via MpdMessage.
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
-        pub albums: RefCell<gio::ListStore>,
+        pub albums: gio::ListStore,
+        pub artists: gio::ListStore,
         pub cache: OnceCell<Rc<Cache>>,
     }
 
@@ -72,10 +70,12 @@ mod imp {
         type Type = super::Library;
 
         fn new() -> Self {
-            let albums = RefCell::new(gio::ListStore::new::<Album>());
+            let albums = gio::ListStore::new::<Album>();
+            let artists = gio::ListStore::new::<Artist>();
             Self {
                 sender: OnceCell::new(),
                 albums,
+                artists,
                 cache: OnceCell::new()
             }
         }
@@ -138,27 +138,40 @@ impl Library {
                 }
             )
         );
+        client_state.connect_closure(
+            "artist-basic-info-downloaded",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                move |_: ClientState, artist: Artist| {
+                    this.add_artist(artist);
+                }
+            )
+        );
     }
 
+    /// Get a reference to the Album ListStore.
     pub fn albums(&self) -> gio::ListStore {
-        self.imp().albums.borrow().clone()
+        self.imp().albums.clone()
     }
 
+    /// Add an album to the ListStore.
     pub fn add_album(&self, album: Album) {
         let folder_uri = album.get_uri();
         if let Some(cache) = self.imp().cache.get() {
             // Might queue a download but won't load anything into memory just yet.
             cache.ensure_local_album_art(&folder_uri);
         }
-        self.imp().albums.borrow().append(
+        self.imp().albums.append(
             &album
         );
     }
 
+    /// Get all the information available about an album & its contents (won't block;
+    /// UI will get notified of result later if one does arrive late).
+    /// TODO: implement provider daisy-chaining on the cache side
     pub fn init_album(&self, album: Album) {
-        // This function gets all the information available about an album & its contents
-        // (won't block; UI will get notified of result later if one does arrive late).
-        // TODO: implement provider daisy-chaining on the cache side
         if settings_manager().child("client").boolean("use-lastfm") {
             if let Some(cache) = self.imp().cache.get() {
                 cache.ensure_local_album_meta(
@@ -174,6 +187,7 @@ impl Library {
         }
     }
 
+    /// Queue all songs in a given album by track order.
     pub fn queue_album(&self, album: Album, replace: bool, play: bool) {
         if let Some(sender) = self.imp().sender.get() {
             if replace {
@@ -185,6 +199,40 @@ impl Library {
             if replace && play {
                 let _ = sender.send_blocking(MpdMessage::PlayPos(0));
             }
+        }
+    }
+
+    /// Get a reference to the Artist ListStore.
+    pub fn artists(&self) -> gio::ListStore {
+        self.imp().artists.clone()
+    }
+
+    /// Add an artist to the ListStore.
+    pub fn add_artist(&self, artist: Artist) {
+        // if let Some(cache) = self.imp().cache.get() {
+        //     // Might queue a download but won't load anything into memory just yet.
+        //     cache.ensure_local_artist_avatar(artist.get_name());
+        // }
+        self.imp().artists.append(
+            &artist
+        );
+    }
+
+    /// Get all the information available about an artist (won't block;
+    /// UI will get notified of result later via signals).
+    /// TODO: implement provider daisy-chaining on the cache side
+    pub fn init_artist(&self, artist: Artist) {
+        if settings_manager().child("client").boolean("use-lastfm") {
+            if let Some(cache) = self.imp().cache.get() {
+                cache.ensure_local_artist_meta(
+                    artist.get_mbid(),
+                    Some(artist.get_name())
+                );
+            }
+        }
+        if let Some(sender) = self.imp().sender.get() {
+            // Will get both albums (Discography sub-view) and songs (All Songs sub-view)
+            let _ = sender.send_blocking(MpdMessage::ArtistContent(artist.get_name().to_owned()));
         }
     }
 

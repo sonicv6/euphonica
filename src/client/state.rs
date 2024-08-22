@@ -12,7 +12,7 @@ use glib::{
     BoxedAnyObject
 };
 
-use crate::common::Album;
+use crate::common::{Album, Artist};
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, glib::Enum)]
 #[enum_type(name = "EuphoniaConnectionState")]
@@ -90,7 +90,9 @@ mod imp {
                 vec![
                     Signal::builder("album-art-downloaded")
                         .param_types([
-                            String::static_type(),  // folder URI
+                            String::static_type(),         // folder URI
+                            BoxedAnyObject::static_type(), // hires
+                            BoxedAnyObject::static_type()  // thumbnail
                         ])
                         .build(),
                     Signal::builder("album-art-not-available")
@@ -106,12 +108,30 @@ mod imp {
                     Signal::builder("album-basic-info-downloaded")
                         .param_types([Album::static_type()])
                         .build(),
-                    // An album's song list has been downloaded. We can now push an
-                    // AlbumContentView for it.
-                    Signal::builder("album-content-downloaded")
+                    // A chunk of an album's songs have been retrieved. Emit this
+                    // to make AlbumContentView append this chunk.
+                    Signal::builder("album-songs-downloaded")
                         .param_types([
                             String::static_type(),
                             BoxedAnyObject::static_type()  // Vec<Song>
+                        ])
+                        .build(),
+                    // ArtistInfo downloaded. Should probably queue metadata retrieval.
+                    Signal::builder("artist-basic-info-downloaded")
+                        .param_types([Artist::static_type()])
+                        .build(),
+                    // A chunk of an artist's songs have been retrieved. Emit this
+                    // to make ArtistContentView append this chunk.
+                    Signal::builder("artist-songs-downloaded")
+                        .param_types([
+                            String::static_type(),
+                            BoxedAnyObject::static_type()  // Vec<Song>
+                        ])
+                        .build(),
+                    Signal::builder("artist-album-basic-info-downloaded")
+                        .param_types([
+                            String::static_type(),
+                            Album::static_type()
                         ])
                         .build(),
                     Signal::builder("status-changed")

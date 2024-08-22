@@ -8,26 +8,25 @@ use adw::subclass::prelude::*;
 use gtk::{
     gio,
     glib,
+    Widget,
     CompositeTemplate,
     SingleSelection,
     SignalListItemFactory,
     ListItem,
 };
 
-use glib::{
-    clone,
-    closure_local
-};
+use glib::clone;
 
 use super::{
     Library,
-    AlbumCell,
-    AlbumContentView
+    ArtistCell,
+    ArtistContentView
 };
 use crate::{
-    common::Album,
+    common::Artist,
     cache::Cache,
-    utils::{settings_manager, g_cmp_str_options, g_cmp_options, g_search_substr}
+    client::ClientState,
+    utils::{settings_manager, g_cmp_str_options, g_search_substr}
 };
 
 mod imp {
@@ -43,11 +42,7 @@ mod imp {
         #[template_child]
         pub sort_dir: TemplateChild<gtk::Image>,
         #[template_child]
-        pub sort_mode: TemplateChild<gtk::Label>,
-        #[template_child]
         pub search_btn: TemplateChild<gtk::ToggleButton>,
-        #[template_child]
-        pub search_mode: TemplateChild<gtk::DropDown>,
         #[template_child]
         pub search_bar: TemplateChild<gtk::SearchBar>,
         #[template_child]
@@ -59,7 +54,7 @@ mod imp {
         #[template_child]
         pub content_page: TemplateChild<adw::NavigationPage>,
         #[template_child]
-        pub content_view: TemplateChild<AlbumContentView>,
+        pub content_view: TemplateChild<ArtistContentView>,
 
         // Search & filter models
         pub search_filter: gtk::CustomFilter,
@@ -80,10 +75,7 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             Self::bind_template(klass);
-
             klass.set_layout_manager_type::<gtk::BinLayout>();
-            // klass.set_css_name("albumview");
-            klass.set_accessible_role(gtk::AccessibleRole::Group);
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -121,38 +113,32 @@ impl Default for ArtistView {
 impl ArtistView {
     pub fn new() -> Self {
         let res: Self = glib::Object::new();
-
         res
     }
 
-    pub fn setup(&self, library: Library, cache: Rc<Cache>) {
+    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
         self.setup_sort();
         self.setup_search();
         self.setup_gridview(library.clone(), cache.clone());
 
         let content_view = self.imp().content_view.get();
-        content_view.setup(library.clone(), cache);
+        content_view.setup(library.clone(), cache, client_state);
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
-            content_view.clear_content();
         });
-        self.bind_state(library);
     }
 
     fn setup_sort(&self) {
         // TODO: use albumsort & albumartistsort tags where available
         // Setup sort widget & actions
         let settings = settings_manager();
-        let state = settings.child("state").child("albumview");
+        let state = settings.child("state").child("artistview");
         let library_settings = settings.child("library");
         let actions = gio::SimpleActionGroup::new();
         actions.add_action(
-            &state.create_action("sort-by")
-        );
-        actions.add_action(
             &state.create_action("sort-direction")
         );
-        self.insert_action_group("albumview", Some(&actions));
+        self.insert_action_group("artistview", Some(&actions));
         let sort_dir = self.imp().sort_dir.get();
         state
             .bind(
@@ -168,24 +154,7 @@ impl ArtistView {
                 }
             })
             .build();
-        let sort_mode = self.imp().sort_mode.get();
-        state
-            .bind(
-                "sort-by",
-                &sort_mode,
-                "label",
-            )
-            .get_only()
-            .mapping(|val, _| {
-                // TODO: i18n
-                match val.get::<String>().unwrap().as_ref() {
-                    "album-title" => Some("Title".to_value()),
-                    "album-artist" => Some("AlbumArtist".to_value()),
-                    "release-date" => Some("Release date".to_value()),
-                    _ => unreachable!()
-                }
-            })
-            .build();
+
         self.imp().sorter.set_sort_func(
             clone!(
                 #[strong]
@@ -193,13 +162,13 @@ impl ArtistView {
                 #[strong]
                 state,
                 move |obj1, obj2| {
-                    let album1 = obj1
-                        .downcast_ref::<Album>()
-                        .expect("Sort obj has to be a common::Album.");
+                    let artist1 = obj1
+                        .downcast_ref::<Artist>()
+                        .expect("Sort obj has to be a common::Artist.");
 
-                    let album2 = obj2
-                        .downcast_ref::<Album>()
-                        .expect("Sort obj has to be a common::Album.");
+                    let artist2 = obj2
+                        .downcast_ref::<Artist>()
+                        .expect("Sort obj has to be a common::Artist.");
 
                     // Should we sort ascending?
                     let asc = state.enum_("sort-direction") > 0;
@@ -208,56 +177,18 @@ impl ArtistView {
                     // Should nulls be put first or last?
                     let nulls_first = library_settings.boolean("sort-nulls-first");
 
-                    // Vary behaviour depending on sort menu
-                    match state.enum_("sort-by") {
-                        // Refer to the org.euphonia.Euphonia.sortby enum the gschema
-                        3 => {
-                            // Album title
-                            g_cmp_str_options(
-                                Some(album1.get_title()).as_deref(),
-                                Some(album2.get_title()).as_deref(),
-                                nulls_first,
-                                asc,
-                                case_sensitive
-                            )
-                        }
-                        4 => {
-                            // AlbumArtist
-                            g_cmp_str_options(
-                                album1.get_artist().as_deref(),
-                                album2.get_artist().as_deref(),
-                                nulls_first,
-                                asc,
-                                case_sensitive
-                            )
-                        }
-                        5 => {
-                            // Release date
-                            g_cmp_options(
-                                album1.get_release_date().as_ref(),
-                                album2.get_release_date().as_ref(),
-                                nulls_first,
-                                asc
-                            )
-                        }
-                        _ => unreachable!()
-                    }
+                    g_cmp_str_options(
+                        Some(artist1.get_name()),
+                        Some(artist2.get_name()),
+                        nulls_first,
+                        asc,
+                        case_sensitive
+                    )
                 }
             )
         );
 
         // Update when changing sort settings
-        state.connect_changed(
-            Some("sort-by"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |_, _| {
-                    println!("Updating sort...");
-                    this.imp().sorter.changed(gtk::SorterChange::Different);
-                }
-            )
-        );
         state.connect_changed(
             Some("sort-direction"),
             clone!(
@@ -285,9 +216,9 @@ impl ArtistView {
                 #[upgrade_or]
                 true,
                 move |obj| {
-                    let album = obj
-                        .downcast_ref::<Album>()
-                        .expect("Search obj has to be a common::Album.");
+                    let artist = obj
+                        .downcast_ref::<Artist>()
+                        .expect("Search obj has to be a common::Artist.");
 
                     let search_term = this.imp().search_entry.text();
                     if search_term.is_empty() {
@@ -297,43 +228,15 @@ impl ArtistView {
                     // Should the searching be case-sensitive?
                     let case_sensitive = library_settings.boolean("search-case-sensitive");
                     // Vary behaviour depending on dropdown
-                    match this.imp().search_mode.selected() {
-                        // Keep these indices in sync with the GtkStringList in the UI file
-                        0 => {
-                            // Match either album title or AlbumArtist (not artist tag)
-                            g_search_substr(
-                                Some(album.get_title()).as_deref(),
-                                &search_term,
-                                case_sensitive
-                            ) || g_search_substr(
-                                album.get_artist().as_deref(),
-                                &search_term,
-                                case_sensitive
-                            )
-                        }
-                        1 => {
-                            // Match only album title
-                            g_search_substr(
-                                Some(album.get_title()).as_deref(),
-                                &search_term,
-                                case_sensitive
-                            )
-                        }
-                        2 => {
-                            // Match only AlbumArtist (albums without such tag will never match)
-                            g_search_substr(
-                                album.get_artist().as_deref(),
-                                &search_term,
-                                case_sensitive
-                            )
-                        }
-                        _ => true
-                    }
+                    g_search_substr(
+                        Some(artist.get_name()),
+                        &search_term,
+                        case_sensitive
+                    )
                 }
             )
         );
 
-        // TODO: Maybe let user choose case-sensitivity too (too verbose?)
         // Connect search entry to filter. Filter will later be put in GtkSearchModel.
         // That GtkSearchModel will listen to the filter's changed signal.
         let search_entry = self.imp().search_entry.get();
@@ -359,59 +262,30 @@ impl ArtistView {
                 }
             )
         );
-
-        let search_mode = self.imp().search_mode.get();
-        search_mode.connect_notify_local(
-            Some("selected"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |_, _| {
-                    println!("Changed search mode");
-                    this.imp().search_filter.changed(gtk::FilterChange::Different);
-                }
-            )
-        );
     }
 
-    fn bind_state(&self, library: Library) {
-        // Here we will listen to the artist-clicked signal of Library.
-        // Upon receiving that signal, create a new ArtistContentView page and push it onto the stack.
-        // The view (ArtistView):
-
+    fn on_artist_clicked(&self, artist: Artist, library: Library) {
         // - Upon receiving click signal, get the list item at the indicated activate index.
-        // - Extract artist object from that list item.
-        // - Extract a non-GObject ArtistInfo sub-struct from that artist object (implemented as GObject).
-        // - Call a method of the Library controller, passing that ArtistInfo struct.
-        // The controller (Library):
-        // - When called with that ArtistInfoStruct, send that ArtistInfo to client wrapper via MpdMessage.
-        //   This is why we had to extract the ArtistInfo struct out instead of sending the whole Artist object:
-        //   GObjects are not thread-safe, and while this action is not multithreaded, the MpdMessage enum
-        //   has to remain thread safe as a whole since we're also using it to send results from the child
-        //   client back to the main one. As such, the MpdMessage enum cannot carry any GObject in any of
-        //   its variants, not just the variants used by child threads.
-        // - Client fetches all songs with artist tag matching given name in ArtistInfo.
-        // - Client replies by calling another method of the Library controller & passing the list of songs
-        //   it received, since the Library controller did not directly call any method of the client
-        //   (it used a message instead) and as such cannot receive results in the normal return-value way.
-        // Back to controller (Library):
-        // - Upon being called by client wrapper with that list of songs, reconstruct the artist GObject,
-        //   construct a gio::ListStore of those Songs, then send them both over a custom signal. The
-        //   reason we're back to artists instead of ArtistInfos is that signal parameters must be GObjects
-        //   (or sth implementing glib::ToValue trait).
-        // Back to the view (ArtistView):
-        // - Listen to that custom signal. Upon that signal triggering, construct an ArtistContentView,
-        //   populate it with the songs, then push it to the NavigationView inside ArtistView.
-        let this = self.clone();
-        library.connect_closure(
-            "artist-clicked",
-            false,
-            closure_local!(move |_: Library, artist: Artist, song_list: gio::ListStore| {
-                let content_view = this.imp().content_view.get();
-                content_view.set_album(album, song_list);
-                this.imp().nav_view.push_by_tag("content");
-            })
-        );
+        // - Extract artist from that list item.
+        // - Bind ArtistContentView to that album. This will cause the ArtistContentView to start listening
+        //   to the cache & client (MpdWrapper) states for arrival of avatar, album arts, etc.
+        // - Try to ensure existence of local metadata by queuing download if necessary. Since
+        //   ArtistContentView is now listening to the relevant signals, it will immediately update itself
+        //   in an asynchronous manner.
+        // - Schedule client to fetch the following:
+        //   - All songs of this artist (for the "all songs" tab),
+        //   - All albums of this artist (for the discography tab),
+        //   - Art of the above albums, and
+        //   - Artist metadata: bio, avatar, etc.
+        // - Now we can push the AlbumContentView. At this point, it must already have been bound to at
+        //   least the album's basic information (title, artist, etc). If we're lucky, it might also have
+        //   its song list and wiki initialised, but that's not mandatory.
+        // NOTE: We do not ensure local album art again in the above steps, since we have already done so
+        // once when adding this album to the ListStore for the GridView.
+        let content_view = self.imp().content_view.get();
+        content_view.bind(artist.clone());
+        library.init_artist(artist);
+        self.imp().nav_view.push_by_tag("content");
     }
 
     fn setup_gridview(&self, library: Library, cache: Rc<Cache>) {
@@ -431,7 +305,7 @@ impl ArtistView {
             .build();
 
         // Chain search & sort. Put sort after search to reduce number of sort items.
-        let search_model = gtk::FilterListModel::new(Some(library.albums()), Some(self.imp().search_filter.clone()));
+        let search_model = gtk::FilterListModel::new(Some(library.artists()), Some(self.imp().search_filter.clone()));
         search_model.set_incremental(true);
         let sort_model = gtk::SortListModel::new(Some(search_model), Some(self.imp().sorter.clone()));
         sort_model.set_incremental(true);
@@ -444,83 +318,92 @@ impl ArtistView {
 
         // Create an empty `ArtistCell` during setup
         factory.connect_setup(move |_, list_item| {
-            let album_cell = ArtistCell::new();
-            list_item
+            let artist_cell = ArtistCell::new();
+            let item = list_item
                 .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .set_child(Some(&album_cell));
+                .expect("Needs to be ListItem");
+            item
+                .set_child(Some(&artist_cell));
+            item
+                .property_expression("item")
+                .chain_property::<Artist>("name")
+                .bind(&artist_cell, "name", Widget::NONE);
         });
 
-        // Tell factory how to bind `ArtistCell` to one of our Artist GObjects
-        factory.connect_bind(move |_, list_item| {
-            // Get `Song` from `ListItem` (that is, the data side)
-            let item: Artist = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .item()
-                .and_downcast::<Artist>()
-                .expect("The item has to be a common::Artist.");
+        // Artist name has already been taken care of by the above property expression.
+        // Here we only need to start listening to the cache for artist images.
+        factory.connect_bind(clone!(
+            #[weak]
+            cache,
+            move |_, list_item| {
+                // Get `Song` from `ListItem` (that is, the data side)
+                let item: Artist = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .item()
+                    .and_downcast::<Artist>()
+                    .expect("The item has to be a common::Artist.");
 
-            // This album is about to be displayed. Cache its album art (if any) now.
-            // Might result in a cache miss, in which case the file will be immediately loaded
-            // from disk.
-            // Note that this does not trigger any downloading. That's done by the Player
-            // controller upon receiving queue updates.
-            // Note 2: Artist GObjects contain folder-level URIs, so there is no need to strip filename.
-            if item.get_cover().is_none() {
-                if let Some(tex) = cache.load_local_album_art(&item.get_uri(), false) {
-                    item.set_cover(Some(tex));
-                }
-            }
+                // This artist cell is about to be displayed. Try to ensure that we
+                // have a local copy of this artist's avatar.
+                // Unlike album arts, artist avatars must be downloaded as part of
+                // artist metadata.
+                // This might incur an API call.
+                cache.ensure_local_artist_meta(
+                    item.get_mbid(),
+                    Some(item.get_name())
+                );
 
-            // Get `ArtistCell` from `ListItem` (the UI widget)
-            let child: ArtistCell = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .child()
-                .and_downcast::<ArtistCell>()
-                .expect("The child has to be an `ArtistCell`.");
+                // Get `ArtistCell` from `ListItem` (the UI widget)
+                let child: ArtistCell = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .child()
+                    .and_downcast::<ArtistCell>()
+                    .expect("The child has to be an `ArtistCell`.");
 
-            // Within this binding fn is where the cached album art texture gets used.
-            child.bind(&item);
-        });
+                // Within this binding fn is where the cached album art texture gets used.
+                child.bind(&item, cache);
+            })
+        );
 
 
         // When cell goes out of sight, unbind from item to allow reuse with another.
         // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
-        factory.connect_unbind(move |_, list_item| {
-            // Get `ArtistCell` from `ListItem` (the UI widget)
-            let child: ArtistCell = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .child()
-                .and_downcast::<ArtistCell>()
-                .expect("The child has to be an `ArtistCell`.");
-            let item: Artist = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .item()
-                .and_downcast::<Artist>()
-                .expect("The item has to be a common::Artist.");
-            // Drop reference to GdkTexture
-            item.set_cover(None);
-            child.unbind(&item);
-        });
+        factory.connect_unbind(clone!(
+            #[weak]
+            cache,
+            move |_, list_item| {
+                // Get `ArtistCell` from `ListItem` (the UI widget)
+                let child: ArtistCell = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .child()
+                    .and_downcast::<ArtistCell>()
+                    .expect("The child has to be an `ArtistCell`.");
+                // Un-listen to cache, so that we don't update album art for cells that are not in view
+                child.unbind(cache);
+            })
+        );
 
         // Set the factory of the list view
         self.imp().grid_view.set_factory(Some(&factory));
 
         // Setup click action
-        self.imp().grid_view.connect_activate(move |grid_view, position| {
-            // Get `IntegerObject` from model
-            let model = grid_view.model().expect("The model has to exist.");
-            let album = model
-                .item(position)
-                .and_downcast::<Artist>()
-                .expect("The item has to be a `common::Artist`.");
-
-            // Increase "number" of `IntegerObject`
-            library.on_album_clicked(album);
-        });
+        self.imp().grid_view.connect_activate(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[weak]
+            library,
+            move |grid_view, position| {
+                let model = grid_view.model().expect("The model has to exist.");
+                let artist = model
+                    .item(position)
+                    .and_downcast::<Artist>()
+                    .expect("The item has to be a `common::Artist`.");
+                println!("Clicked on {:?}", &artist);
+                this.on_artist_clicked(artist, library);
+            })
+        );
     }
 }

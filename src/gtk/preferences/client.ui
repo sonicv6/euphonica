@@ -67,8 +67,14 @@
 				</child>
                 <child>
 					<object class="AdwSwitchRow" id="lastfm_download_album_art">
-						<property name="title" translatable="true">Download album art</property>
+						<property name="title" translatable="true">Download album arts</property>
                         <property name="subtitle" translatable="true">Album arts downloaded from external sources will only be applied locally.</property>
+					</object>
+				</child>
+				<child>
+					<object class="AdwSwitchRow" id="lastfm_download_artist_avatar">
+						<property name="title" translatable="true">Download artist avatars</property>
+                        <property name="subtitle" translatable="true">Artist avatars will only be applied locally.</property>
 					</object>
 				</child>
 			</object>

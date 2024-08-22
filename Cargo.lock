@@ -582,6 +582,7 @@ dependencies = [
  "gtk4",
  "html-escape",
  "image 0.25.1",
+ "itertools 0.13.0",
  "libadwaita",
  "librsvg",
  "mpd",
@@ -589,6 +590,7 @@ dependencies = [
  "polodb_core",
  "regex",
  "reqwest",
+ "rustc-hash",
  "serde",
  "serde_json",
  "stretto",
@@ -1580,6 +1582,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1693,7 +1704,7 @@ dependencies = [
  "gio 0.19.8",
  "glib 0.19.9",
  "image 0.24.9",
- "itertools",
+ "itertools 0.12.1",
  "language-tags",
  "libc",
  "locale_config",
@@ -2578,7 +2589,7 @@ dependencies = [
  "built",
  "cfg-if 1.0.0",
  "interpolate_name",
- "itertools",
+ "itertools 0.12.1",
  "libc",
  "libfuzzer-sys",
  "log",
@@ -2766,6 +2777,12 @@ name = "rustc-demangle"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "719b953e2095829ee67db738b3bfa9fa368c94900df327b3f07fe6e794d2fe1f"
+
+[[package]]
+name = "rustc-hash"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
 
 [[package]]
 name = "rustc_version"

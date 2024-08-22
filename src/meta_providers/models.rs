@@ -1,6 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+// Common building blocks that can be shared between different providers
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Tag {
+    pub url: String,
+    pub name: String
+}
+
+pub trait Tagged {
+    fn get_tags(&self) -> &[Tag];
+}
+
+/// Image size enumeration. Note to self: automatic derivation of Ord traits assumes
+/// that the variants are declared in increasing order.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub enum ImageSize {
     Small, // Around 32x32
     Medium, // Around 64x64
@@ -9,18 +22,15 @@ pub enum ImageSize {
     Mega // 512x512 or more
 }
 
-// Common building blocks that can be shared between different providers
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Tag {
-    pub url: String,
-    pub name: String
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ImageMeta {
     pub size: ImageSize,
     #[serde(rename = "#text")]
     pub url: String
+}
+
+pub trait HasImage {
+    fn get_images(&self) -> &[ImageMeta];
 }
 
 // Album
@@ -49,4 +59,43 @@ pub struct AlbumMeta {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wiki: Option<Wiki>,
+}
+
+impl Tagged for AlbumMeta {
+    fn get_tags(&self) -> &[Tag] {
+        &self.tags
+    }
+}
+
+impl HasImage for AlbumMeta {
+    fn get_images(&self) -> &[ImageMeta] {
+        &self.image
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
+pub struct ArtistMeta {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mbid: Option<String>,
+    pub tags: Vec<Tag>,
+    pub similar: Vec<ArtistMeta>,
+    pub image: Vec<ImageMeta>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bio: Option<Wiki>
+}
+
+impl Tagged for ArtistMeta {
+    fn get_tags(&self) -> &[Tag] {
+        &self.tags
+    }
+}
+
+impl HasImage for ArtistMeta {
+    fn get_images(&self) -> &[ImageMeta] {
+        &self.image
+    }
 }

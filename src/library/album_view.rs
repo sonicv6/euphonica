@@ -78,10 +78,7 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             Self::bind_template(klass);
-
             klass.set_layout_manager_type::<gtk::BinLayout>();
-            // klass.set_css_name("albumview");
-            klass.set_accessible_role(gtk::AccessibleRole::Group);
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -132,7 +129,6 @@ impl AlbumView {
         content_view.setup(library.clone(), cache, client_state);
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
-            content_view.clear_content();
         });
     }
 
@@ -330,7 +326,6 @@ impl AlbumView {
             )
         );
 
-        // TODO: Maybe let user choose case-sensitivity too (too verbose?)
         // Connect search entry to filter. Filter will later be put in GtkSearchModel.
         // That GtkSearchModel will listen to the filter's changed signal.
         let search_entry = self.imp().search_entry.get();
@@ -386,7 +381,7 @@ impl AlbumView {
         // NOTE: We do not ensure local album art again in the above steps, since we have already done so
         // once when adding this album to the ListStore for the GridView.
         let content_view = self.imp().content_view.get();
-        content_view.set_album(album.clone());
+        content_view.bind(album.clone());
         library.init_album(album);
         self.imp().nav_view.push_by_tag("content");
     }
@@ -447,7 +442,9 @@ impl AlbumView {
                     .expect("The item has to be a common::Album.");
 
                 // This album cell is about to be displayed. Try to ensure that we
-                // have a local copy of its album art. This might incur an API call.
+                // have a local copy of its album art from MPD.
+                // No need to dedupe since we're guaranteed that the same album never
+                // appears twice in the GridView anyway.
                 cache.ensure_local_album_art(item.get_uri());
 
                 // Get `AlbumCell` from `ListItem` (the UI widget)

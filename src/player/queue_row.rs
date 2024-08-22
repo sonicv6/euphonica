@@ -197,7 +197,6 @@ impl QueueRow {
 
     pub fn bind(&self, song: &Song, cache: Rc<Cache>) {
         // Get state
-        let thumbnail_image = self.imp().thumbnail.get();
         let song_name_label = self.imp().song_name.get();
         let album_name_label = self.imp().album_name.get();
         let artist_name_label = self.imp().artist_name.get();

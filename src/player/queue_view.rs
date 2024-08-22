@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
@@ -16,12 +15,7 @@ use gdk::Texture;
 use glib::clone;
 
 use crate::{
-    cache::{
-        Cache,
-        CacheState,
-        placeholders::ALBUMART_PLACEHOLDER
-    },
-    utils::strip_filename_linux,
+    cache::Cache,
     common::Song
 };
 
@@ -134,10 +128,6 @@ impl QueueView {
                     .item()
                     .and_downcast::<Song>()
                     .expect("The item has to be a common::Song.");
-
-                // This song row is about to be displayed. Try to ensure that we
-                // have a local copy of its album art. This might incur an API call.
-                cache.ensure_local_album_art(strip_filename_linux(item.get_uri()));
 
                 // Get `QueueRow` from `ListItem` (the UI widget)
                 let child: QueueRow = list_item

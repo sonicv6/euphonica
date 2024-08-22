@@ -211,7 +211,7 @@
                                 </property>
                             </object>
                         </child>
-                        <child>
+                         <child>
                             <!-- The always-visible action row -->
                             <object class="GtkCenterBox">
                                 <style>

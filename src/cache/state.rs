@@ -81,7 +81,12 @@ mod imp {
                             String::static_type()  // album tag
                         ])
                         .build(),
-                    Signal::builder("artist-info-downloaded")
+                    Signal::builder("artist-meta-downloaded")
+                        .param_types([
+                            String::static_type()  // artist tag
+                        ])
+                        .build(),
+                    Signal::builder("artist-avatar-downloaded")
                         .param_types([
                             String::static_type()  // artist tag
                         ])

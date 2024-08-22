@@ -1,4 +1,15 @@
+use std::{
+    hash::Hash,
+    io::Cursor
+};
+use image::{
+    DynamicImage,
+    imageops::FilterType,
+    io::Reader as ImageReader
+};
+use rustc_hash::FxHashSet;
 use gtk::gio;
+use gio::prelude::*;
 use gtk::Ordering;
 use crate::config::APPLICATION_ID;
 use mpd::status::AudioFormat;
@@ -143,4 +154,36 @@ pub fn strip_filename_linux(path: &str) -> &str {
         return &path[..last_slash + 1];
     }
     path
+}
+
+pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {
+    if let Ok(reader) = ImageReader::new(Cursor::new(bytes)).with_guessed_format() {
+        if let Ok(dyn_img) = reader.decode() {
+            return Some(dyn_img);
+        }
+        return None;
+    }
+    None
+}
+
+/// Automatically resize image based on user settings.
+/// All providers should use this function on their child threads to resize applicable images
+/// before returning the images to the main thread.
+/// Two images will be returned: a high-resolution version and a thumbnail version.
+/// Their major axis's resolution is determined by the keys hires-image-size and
+/// thumbnail-image-size in the gschema respectively.
+pub fn resize_image(dyn_img: DynamicImage) -> (DynamicImage, DynamicImage) {
+    let settings = settings_manager().child("library");
+    let hires_size = settings.uint("hires-image-size");
+    let thumbnail_size = settings.uint("thumbnail-image-size");
+    (
+        dyn_img.resize(hires_size, hires_size, FilterType::CatmullRom),
+        dyn_img.thumbnail(thumbnail_size, thumbnail_size)
+    )
+}
+
+// TODO: Optimise this
+pub fn deduplicate<T: Eq + Hash + Clone>(input: &[T]) -> Vec<T> {
+    let mut seen = FxHashSet::default();
+    input.iter().filter(|item| seen.insert(item.clone())).cloned().collect()
 }

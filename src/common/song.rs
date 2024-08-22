@@ -6,7 +6,6 @@ use std::{
     ffi::OsStr
 };
 use gtk::glib;
-use gtk::gdk::Texture;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use mpd::status::AudioFormat;
@@ -104,8 +103,6 @@ pub struct SongInfo {
     // Also gives us formatting flexibility in the future.
     release_date: Option<Date>,
     // TODO: Add more fields for managing classical music, such as composer, ensemble and movement number
-    is_playing: Cell<bool>,
-    thumbnail: Option<Texture>,
     quality_grade: QualityGrade,
     // MusicBrainz stuff
     mbid: Option<String>,
@@ -119,6 +116,10 @@ impl SongInfo {
     pub fn into_album_info(self) -> Option<AlbumInfo> {
         self.album
     }
+
+    pub fn into_artist_infos(self) -> Vec<ArtistInfo> {
+        self.artists
+    }
 }
 
 impl Default for SongInfo {
@@ -130,11 +131,9 @@ impl Default for SongInfo {
             duration: None,
             queue_id: None,
             album: None,
-            track: Cell::new(-1),
+            track: Cell::new(-1),  // negative values indicate no track index 
             disc: Cell::new(-1),
             release_date: None,
-            is_playing: Cell::new(false),
-            thumbnail: None,
             quality_grade: QualityGrade::Unknown,
             mbid: None,
         }
@@ -196,10 +195,7 @@ mod imp {
                     ParamSpecInt64::builder("track").read_only().build(),
                     ParamSpecInt64::builder("disc").read_only().build(),
                     ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").read_only().build(),  // boxes Option<time::Date>
-                    ParamSpecString::builder("quality-grade").read_only().build(),
-                    ParamSpecObject::builder::<Texture>("thumbnail")
-                        .read_only()
-                        .build(),
+                    ParamSpecString::builder("quality-grade").read_only().build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -223,7 +219,7 @@ mod imp {
                 "disc" => obj.get_disc().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
-                "quality-grade" => obj.get_quality_grade().to_value(),
+                "quality-grade" => obj.get_quality_grade().to_icon_name().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -366,8 +362,6 @@ impl From<mpd::song::Song> for SongInfo {
             track: Cell::new(-1),
             disc: Cell::new(-1),
             release_date: None,
-            is_playing: Cell::new(false),
-            thumbnail: None,
             quality_grade: QualityGrade::Unknown,
             mbid: None
         };
@@ -486,6 +480,7 @@ impl From<mpd::song::Song> for SongInfo {
 
         if let Some(album) = res.album.as_mut() {
             album.mbid = album_mbid;
+            album.release_date = res.release_date.clone();
             // Assume the albumartist IDs are given in the same order as the albumartist tags
             if let Some(s) = album_artist_str.as_mut() {
                 album.set_artists_from_string(s);
@@ -505,7 +500,15 @@ impl From<mpd::song::Song> for Song {
     fn from(song: mpd::song::Song) -> Self {
         let info = SongInfo::from(song);
         let res = glib::Object::new::<Self>();
-        res.imp().info.set(info);
+        let _ = res.imp().info.set(info);
+        res
+    }
+}
+
+impl From<SongInfo> for Song {
+    fn from(info: SongInfo) -> Self {
+        let res = glib::Object::new::<Self>();
+        let _ = res.imp().info.set(info);
         res
     }
 }

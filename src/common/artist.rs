@@ -1,20 +1,14 @@
 use regex::Regex;
 use std::cell::OnceCell;
-use time::Date;
 use gtk::glib;
-use gtk::gdk::Texture;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-
-use crate::utils::strip_filename_linux;
-use super::{Song, QualityGrade};
 
 /// Artist struct, for use with both Artist and AlbumArtist tags.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArtistInfo {
     // TODO: Might want to refactor to Into<Cow<'a, str>>
-    pub name: String, // Artist tag, not AlbumArtist
-    pub avatar: Option<Texture>,
+    pub name: String,
     pub mbid: Option<String>,
     pub is_composer: bool
 }
@@ -23,7 +17,6 @@ impl ArtistInfo {
     pub fn new(name: &str, is_composer: bool) -> Self {
         Self {
             name: name.to_owned(),
-            avatar: None,
             mbid: None,
             is_composer
         }
@@ -34,7 +27,6 @@ impl Default for ArtistInfo {
     fn default() -> Self {
         ArtistInfo {
             name: "Untitled Artist".to_owned(),
-            avatar: None,
             mbid: None,
             is_composer: false
         }
@@ -93,11 +85,7 @@ pub fn artists_to_string(artists: &[ArtistInfo]) -> Option<String> {
 mod imp {
     use glib::{
         ParamSpec,
-        // ParamSpecUInt,
-        // ParamSpecUInt64,
-        // ParamSpecBoolean,
-        ParamSpecString,
-        ParamSpecObject
+        ParamSpecString
     };
     use once_cell::sync::Lazy;
     use super::*;
@@ -135,7 +123,6 @@ mod imp {
             let obj = self.obj();
             match pspec.name() {
                 "name" => obj.get_name().to_value(),
-                // "avatar" => obj.get_avatar().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -148,7 +135,7 @@ glib::wrapper! {
 
 impl Artist {
     pub fn get_info(&self) -> &ArtistInfo {
-        &self.imp().info.get().unwrap()
+        self.imp().info.get().unwrap()
     }
 
     pub fn get_name(&self) -> &str {
@@ -173,7 +160,7 @@ impl Default for Artist {
 impl From<ArtistInfo> for Artist {
     fn from(info: ArtistInfo) -> Self {
         let res = glib::Object::builder::<Self>().build();
-        res.imp().info.set(info);
+        let _ = res.imp().info.set(info);
         res
     }
 }

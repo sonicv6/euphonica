@@ -31,8 +31,8 @@
                               </object>
                             </child>
                             <child>
-                              <object class="GtkLabel" id="sort_mode">
-                                <property name="label">Error</property>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="true">Name</property>
                               </object>
                             </child>
                           </object>
@@ -46,28 +46,9 @@
                   <object class="GtkSearchBar" id="search_bar">
                     <property name="key-capture-widget">nav_view</property>
                     <child>
-                      <object class="GtkBox">
-                        <property name="spacing">6</property>
-                        <child>
-                          <object class="GtkDropDown" id="search_mode">
-                            <property name="model">
-                              <object class="GtkStringList">
-                                <items>
-                                  <!-- Rust code matches by index, not string content, to avoid string comparisons.-->
-                                  <item translatable="yes">Either</item>
-                                  <item translatable="yes">Artist title</item>
-                                  <item translatable="yes">ArtistArtist tag</item>
-                                </items>
-                              </object>
-                            </property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkSearchEntry" id="search_entry">
-                            <property name="search-delay">150</property>
-                            <property name="width-request">400</property>
-                          </object>
-                        </child>
+                      <object class="GtkSearchEntry" id="search_entry">
+                        <property name="search-delay">150</property>
+                        <property name="width-request">400</property>
                       </object>
                     </child>
                   </object>
@@ -110,19 +91,6 @@
   </template>
 
   <menu id="sort_menu">
-    <section>
-      <attribute name="label" translatable="yes">Sort by</attribute>
-      <item>
-        <attribute name="label" translatable="yes">_Artist name</attribute>
-        <attribute name="action">albumview.sort-by</attribute>
-        <attribute name="target">album-title</attribute>
-      </item>
-      <!-- <item> -->
-      <!--   <attribute name="label" translatable="yes">_Release date</attribute> -->
-      <!--   <attribute name="action">albumview.sort-by</attribute> -->
-      <!--   <attribute name="target">release-date</attribute> -->
-      <!-- </item> -->
-    </section>
     <section>
       <attribute name="label" translatable="yes">Sort direction</attribute>
       <item>

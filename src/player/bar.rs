@@ -315,7 +315,6 @@ impl PlayerBar {
             )
             .get_only()
             .mapping(|v: &Variant, _| {
-                println!("use-dbfs: {:?}", v);
                 Some((v.get::<String>().unwrap().as_str() == "decibels").to_value())
             })
             .build();

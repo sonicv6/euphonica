@@ -33,7 +33,7 @@ use crate::{
     client::{ConnectionState},
     application::EuphoniaApplication,
     player::{QueueView, PlayerBar},
-    library::AlbumView,
+    library::{AlbumView, ArtistView},
     sidebar::Sidebar
 };
 
@@ -53,6 +53,8 @@ mod imp {
         // Main views
         #[template_child]
         pub album_view: TemplateChild<AlbumView>,
+        #[template_child]
+        pub artist_view: TemplateChild<ArtistView>,
         #[template_child]
         pub queue_view: TemplateChild<QueueView>,
 
@@ -98,6 +100,7 @@ mod imp {
         fn new() -> Self {
             Self {
                 album_view: TemplateChild::default(),
+                artist_view: TemplateChild::default(),
                 queue_view: TemplateChild::default(),
                 stack: TemplateChild::default(),
                 title: TemplateChild::default(),
@@ -139,6 +142,11 @@ impl EuphoniaWindow {
             app.get_cache()
         );
         win.imp().album_view.setup(
+            app.get_library(),
+            app.get_cache(),
+            app.get_client().get_client_state()
+        );
+        win.imp().artist_view.setup(
             app.get_library(),
             app.get_cache(),
             app.get_client().get_client_state()

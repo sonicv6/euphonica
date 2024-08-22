@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use super::super::models::{Tag, ImageMeta, ImageSize, Wiki, AlbumMeta};
+use super::super::models::{Tag, ImageMeta, ImageSize, Wiki, AlbumMeta, ArtistMeta};
 // Last.fm JSON structs, for deserialising API responses only.
 // Widgets should use the standard structs defined in the supercrate's models.rs.
 
@@ -69,7 +69,7 @@ impl Into<ImageMeta> for LastfmImage {
     }
 }
 
-// Album
+// Album wiki or artist bio (same structure)
 #[derive(Deserialize, Debug, Clone)]
 #[non_exhaustive]
 pub struct LastfmWiki {
@@ -110,6 +110,7 @@ impl Into<Wiki> for LastfmWiki {
     }
 }
 
+// Album
 #[derive(Deserialize, Debug)]
 #[non_exhaustive]
 pub struct LastfmAlbum {
@@ -152,4 +153,86 @@ impl Into<AlbumMeta> for LastfmAlbum {
 #[derive(Deserialize)]
 pub struct LastfmAlbumResponse {
     pub album: LastfmAlbum
+}
+
+
+// Artist
+#[derive(Deserialize, Debug)]
+#[non_exhaustive]
+pub struct LastfmSimilarArtist {
+    pub name: String,
+    pub url: String,
+    pub image: Vec<LastfmImage>
+}
+
+impl Into<ArtistMeta> for LastfmSimilarArtist {
+    fn into(mut self) -> ArtistMeta {
+        let image: Vec<ImageMeta> = self.image.drain(..).map(LastfmImage::into).collect();
+        ArtistMeta {
+            name: self.name,
+            mbid: None,
+            tags: Vec::with_capacity(0),
+            similar: Vec::with_capacity(0),
+            image,
+            url: Some(self.url),
+            bio: None
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[non_exhaustive]
+pub struct LastfmSimilar {
+    pub artist: Vec<LastfmSimilarArtist>
+}
+
+#[derive(Deserialize, Debug)]
+#[non_exhaustive]
+pub struct LastfmArtist {
+    pub name: String,
+    // If queried using mbid, it won't be returned again
+    pub mbid: Option<String>,
+    pub url: String,
+    pub image: Vec<LastfmImage>,
+    pub similar: Option<LastfmSimilar>,
+    pub tags: TagsHelper,
+    pub bio: Option<LastfmWiki>
+}
+
+impl Into<ArtistMeta> for LastfmArtist {
+    fn into(mut self) -> ArtistMeta {
+        let tags: Vec<Tag> = match self.tags {
+            TagsHelper::String(_) => Vec::with_capacity(0),
+            TagsHelper::Nested(obj) => obj.tag
+        };
+        let similar: Vec<ArtistMeta>;
+        if let Some(mut s) = self.similar {
+            similar = s.artist.drain(..).map(LastfmSimilarArtist::into).collect();
+        }
+        else {
+            similar = Vec::new();
+        }
+        let image: Vec<ImageMeta> = self.image.drain(..).map(LastfmImage::into).collect();
+        let bio: Option<Wiki> = match self.bio {
+            Some(w) => Some(w.into()),
+            None => None
+        };
+
+        ArtistMeta {
+            name: self.name,
+            mbid: self.mbid,
+            tags,
+            similar,
+            image,
+            url: Some(self.url),
+            bio
+        }
+    }
+}
+
+// The artist struct itself is also nested in a root object with
+// a single field "artist".
+#[derive(Deserialize)]
+pub struct LastfmArtistResponse {
+    pub artist: LastfmArtist
 }
