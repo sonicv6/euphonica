@@ -27,7 +27,10 @@
                                         <property name="margin-start">6</property>
                                         <property name="spacing">12</property>
                                         <child>
-                                            <object class="AdwAvatar" id="avatar"/>
+                                            <object class="AdwAvatar" id="avatar">
+                                                <property name="show-initials">true</property>
+                                                <property name="size">128</property>>
+                                            </object>
                                         </child>
                                         <child>
                                             <object class="GtkBox">
@@ -155,7 +158,9 @@
                                     <class name="padding-6"/>
                                 </style>
                                 <property name="center-widget">
-                                    <object class="GtkStackSwitcher"/>
+                                    <object class="GtkStackSwitcher">
+                                        <property name="stack">subview_stack</property>
+                                    </object>
                                 </property>
                                 <property name="end-widget">
                                     <object class="GtkToggleButton" id="collapse_infobox">

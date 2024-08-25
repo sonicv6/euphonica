@@ -448,6 +448,8 @@ impl ArtistContentView {
     /// Returns true if an avatar was successfully retrieved.
     /// On false, we will want to call cache.ensure_local_album_art()
     fn update_avatar(&self, name: &str) -> bool {
+        // Set text in case there is no image
+        self.imp().avatar.set_text(Some(name));
         if let Some(cache) = self.imp().cache.get() {
             if let Some(tex) = cache.load_local_artist_avatar(
                 name, false
@@ -499,6 +501,7 @@ impl ArtistContentView {
         }
         // Unset metadata widgets
         self.imp().bio_box.set_visible(false);
+        self.imp().avatar.set_text(None);
         self.clear_content();
     }
 

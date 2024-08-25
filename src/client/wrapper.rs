@@ -819,7 +819,7 @@ impl MpdWrapper {
                 signal_name,
                 &[
                     &tag,
-                    &BoxedAnyObject::new(songs.into_iter().map(Song::from))
+                    &BoxedAnyObject::new(songs.into_iter().map(Song::from).collect::<Vec<Song>>())
                 ]
             );
         }

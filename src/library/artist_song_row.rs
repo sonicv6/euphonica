@@ -89,7 +89,7 @@ mod imp {
                     ParamSpecString::builder("album").build(),
                     ParamSpecString::builder("duration").build(),
                     // ParamSpecInt64::builder("disc").build(),
-                    ParamSpecString::builder("quality-grade").read_only().build()
+                    ParamSpecString::builder("quality-grade").build()
                 ]
             });
             PROPERTIES.as_ref()

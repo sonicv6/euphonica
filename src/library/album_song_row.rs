@@ -81,7 +81,7 @@ mod imp {
                     ParamSpecString::builder("artist").build(),
                     ParamSpecString::builder("duration").build(),
                     // ParamSpecInt64::builder("disc").build(),
-                    ParamSpecString::builder("quality-grade").read_only().build()
+                    ParamSpecString::builder("quality-grade").build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -173,7 +173,7 @@ impl AlbumSongRow {
         let _ = self.imp().library.set(library);
         item
             .property_expression("item")
-            .chain_property::<Song>("track_idx")
+            .chain_property::<Song>("track")
             .chain_closure::<String>(closure!(|_: Option<Object>, idx: i64| {
                 idx.to_string()
             }))

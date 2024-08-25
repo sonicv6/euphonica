@@ -126,6 +126,7 @@ impl ArtistCell {
 
     pub fn set_name(&self, name: &str) {
         self.imp().name.set_label(name);
+        self.imp().avatar.set_text(Some(name));
     }
 
     pub fn bind(&self, artist: &Artist, cache: Rc<Cache>) {
@@ -157,5 +158,6 @@ impl ArtistCell {
         if let Some(id) = self.imp().avatar_signal_id.take() {
             cache.get_cache_state().disconnect(id);
         }
+        self.imp().avatar.set_text(None);
     }
 }
