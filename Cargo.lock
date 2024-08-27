@@ -573,6 +573,7 @@ dependencies = [
 name = "euphonia"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "async-channel",
  "bson",
  "chrono",

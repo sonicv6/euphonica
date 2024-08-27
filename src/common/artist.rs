@@ -1,8 +1,12 @@
-use regex::Regex;
 use std::cell::OnceCell;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
+use aho_corasick::Match;
+use crate::utils::{
+    ARTIST_DELIM_AUTOMATON,
+    ARTIST_DELIM_EXCEPTION_AUTOMATON
+};
 
 /// Artist struct, for use with both Artist and AlbumArtist tags.
 #[derive(Debug, Clone, PartialEq)]
@@ -35,25 +39,70 @@ impl Default for ArtistInfo {
 
 /// Utility function to create a list of ArtistInfo objects from a MusicBrainz Artist tag.
 /// Can be used with AlbumArtist tag too, but NOT with with ArtistSort or AlbumArtistSort tags.
-pub fn parse_mb_artist_tag(tag: &str) -> Vec<ArtistInfo> {
-    let re = Regex::new(r"([^,;]+)([,:]?)").unwrap();
-    let mut res = Vec::new();
+/// Internally, we rely on two passes of the Aho-Corasick algorithm, with the first used to
+/// pick up "exceptions" and the second to locate delimiters.
+/// The "exceptions" pass is necessary due to some artist names having delimiter-like
+/// substrings. Examples: the ampersand (&) is a popular delimiter, but then Simon & Garfunkel
+/// exists; likewise, the forward slash (/) is sometimes also used, but what about AC/DC?
+pub fn parse_mb_artist_tag<'a>(input: &'a str) -> Vec<&'a str> {
+    let mut buffer: String = input.to_owned();
+    // println!("Original buffer len: {}", buffer.len());
+    if let (Some(exc_ac), Some(delim_ac)) = (
+        &*ARTIST_DELIM_EXCEPTION_AUTOMATON,
+        &*ARTIST_DELIM_AUTOMATON
+    ) {
+        // Step 1: extract exceptions out first
+        let mut found_artists: Vec<&str> = Vec::new();
+        for mat in exc_ac.find_iter(input) {
+            // Remove from buffer. Should now cause a reallocation since we are not
+            // using any extra storage.
+            let start = mat.start();
+            let end = mat.end();
+            found_artists.push(&input[start..end]);
+            let len = end - start;
+            buffer.replace_range(start..end, &" ".repeat(len));
+            // println!("Buffer is now: {buffer}");
+        }
+        // println!("{}",  buffer);
+        // println!("New buffer len: {}", buffer.len());
 
-    for cap in re.captures_iter(tag) {
-        let name = cap[1].trim();
-        let maybe_sep = cap.get(2).map(|s| s.as_str());
-        let is_composer: bool;
-        if let Some(sep) = maybe_sep {
-            is_composer = sep == ";"
+        // Step 2: split the remaining buffer. Here we again make use of the
+        // Aho-Corasick algorithm to find all delimiters.
+        let matched_delims = delim_ac.find_iter(&buffer).collect::<Vec<Match>>();
+        // In case no delimiter is found, return early (if there were still something left, then
+        // there are unspecified delimiters).
+        // println!("Matched delims: {:?}", &matched_delims);
+        if matched_delims.is_empty() {
+            return found_artists;
         }
         else {
-            // No idea, might be one though
-            is_composer = false;
+            let first: &str = input[0..matched_delims[0].start()].trim();
+            // println!("First: `{first}`");
+            if first.len() > 0 {
+                found_artists.push(first);
+            }
+            for i in 1..(matched_delims.len()) {
+                let between: &str = input[
+                    matched_delims[i-1].end()..matched_delims[i].start()
+                ].trim();
+                // println!("Between: `{between}`");
+                if between.len() > 0 {
+                    found_artists.push(between);
+                }
+            }
+            let last: &str = input[
+                matched_delims.last().unwrap().end().min(buffer.len())..
+            ].trim();
+            // println!("Last: `{last}`");
+            if last.len() > 0 {
+                found_artists.push(last);
+            }
+            return found_artists;
         }
-        res.push(ArtistInfo::new(name, is_composer));
     }
-
-    res
+    else {
+        vec![input]
+    }
 }
 
 pub fn artists_to_string(artists: &[ArtistInfo]) -> Option<String> {

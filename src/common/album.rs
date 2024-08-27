@@ -43,7 +43,10 @@ impl AlbumInfo {
     }
 
     pub fn set_artists_from_string(&mut self, tag: &str) {
-        self.artists = parse_mb_artist_tag(tag);
+        self.artists = parse_mb_artist_tag(tag)
+            .iter()
+            .map(|s| ArtistInfo::new(s, false))
+            .collect();
     }
 }
 

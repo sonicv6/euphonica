@@ -1,7 +1,9 @@
+use once_cell::sync::Lazy;
 use std::{
     hash::Hash,
     io::Cursor
 };
+use aho_corasick::AhoCorasick;
 use image::{
     DynamicImage,
     imageops::FilterType,
@@ -147,7 +149,6 @@ pub fn g_search_substr(
     false
 }
 
-
 pub fn strip_filename_linux(path: &str) -> &str {
     // MPD insists on having a trailing slash so here we go
     if let Some(last_slash) = path.rfind('/') {
@@ -187,3 +188,45 @@ pub fn deduplicate<T: Eq + Hash + Clone>(input: &[T]) -> Vec<T> {
     let mut seen = FxHashSet::default();
     input.iter().filter(|item| seen.insert(item.clone())).cloned().collect()
 }
+
+// Build Aho-Corasick automatons only once. In case no delimiter or exception is
+// specified, no automaton will be returned. Caller code should take that as a signal
+// to skip parsing and use the tags as-is.
+// Changes in delimiters and exceptions require restarting.
+// TODO: Might want to research memoisation so we can rebuild these automatons upon
+// changing settings.
+pub static ARTIST_DELIM_AUTOMATON: Lazy<Option<AhoCorasick>> = Lazy::new(|| {
+    println!("Initialising Aho-Corasick automaton for artist tag delimiters...");
+    let setting = settings_manager()
+        .child("library")
+        .value("artist-tag-delims");
+    let delims: Vec<&str> = setting
+        .array_iter_str()
+        .unwrap()
+        .collect();
+    if delims.is_empty() {
+        None
+    }
+    else {
+        println!("Configured to use the following as delimiters: {:?}", &delims);
+        Some(AhoCorasick::new(delims).unwrap())
+    }
+});
+
+pub static ARTIST_DELIM_EXCEPTION_AUTOMATON: Lazy<Option<AhoCorasick>> = Lazy::new(|| {
+    println!("Initialising Aho-Corasick automaton for artist tag delimiter exceptions...");
+    let setting = settings_manager()
+        .child("library")
+        .value("artist-tag-delim-exceptions");
+    let excepts: Vec<&str> = setting
+        .array_iter_str()
+        .unwrap()
+        .collect();
+    if excepts.is_empty() {
+        None
+    }
+    else {
+        println!("Excluding the following from being split by delimiters: {:?}", &excepts);
+        Some(AhoCorasick::new(excepts).unwrap())
+    }
+});

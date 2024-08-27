@@ -1,8 +1,7 @@
 use std::{
     borrow::Cow,
     cell::RefCell,
-    rc::Rc,
-    path::PathBuf
+    rc::Rc
 };
 use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
@@ -10,15 +9,6 @@ use futures::executor;
 use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
-
-use crate::{
-    utils,
-    common::{Album, AlbumInfo, Song, SongInfo, ArtistInfo, Artist},
-    meta_providers::MetadataResponse
-};
-
-use super::state::{ClientState, ConnectionState};
-
 use mpd::{
     client::Client,
     search::{Term, Query, Window, Operation as QueryOperation},
@@ -29,6 +19,14 @@ use mpd::{
 };
 use image::DynamicImage;
 use uuid::Uuid;
+
+use crate::{
+    utils,
+    common::{Album, AlbumInfo, Song, SongInfo, ArtistInfo, Artist},
+    meta_providers::MetadataResponse
+};
+
+use super::state::{ClientState, ConnectionState};
 
 pub fn get_dummy_song(uri: &str) -> mpd::Song {
     // Many of mpd's methods require an impl of trait ToSongPath, which
@@ -288,6 +286,7 @@ mod background {
         if let Ok(tag_list) = client.list(&Term::Tag(Cow::Borrowed(tag_type)), &Query::new()) {
             // TODO: Limit tags to only what we need locally
             for tag in &tag_list {
+                println!("fetch_artists: Processing tag {}", &tag);
                 if let Ok(mut songs) = client.find(
                     Query::new()
                         .and(Term::Tag(Cow::Borrowed(tag_type)), tag),
@@ -295,9 +294,11 @@ mod background {
                 ) {
                     if !songs.is_empty() {
                         let first_song = SongInfo::from(std::mem::take(&mut songs[0]));
-                        let mut artists = first_song.into_artist_infos();
-                        for artist in artists.drain(..) {
-                            if !already_parsed.insert(artist.name.clone()) {
+                        let artists = first_song.into_artist_infos();
+                        println!("Got these artists: {artists:?}");
+                        for artist in artists.into_iter() {
+                            if already_parsed.insert(artist.name.clone()) {
+                                println!("Never seen {artist:?} before, inserting...");
                                 let _ = sender_to_fg.send_blocking(
                                     MpdMessage::ArtistBasicInfoDownloaded(
                                         artist

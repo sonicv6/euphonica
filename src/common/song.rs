@@ -336,7 +336,11 @@ impl From<mpd::song::Song> for SongInfo {
     fn from(song: mpd::song::Song) -> Self {
         let artists: Vec<ArtistInfo>;
         if let Some(artist_str) = song.artist {
-            artists = parse_mb_artist_tag(&artist_str);
+            // TODO: Find a way to detect classical works
+            artists = parse_mb_artist_tag(&artist_str)
+                .iter()
+                .map(|s| ArtistInfo::new(s, false))
+                .collect();
         }
         else {
             artists = Vec::with_capacity(0);

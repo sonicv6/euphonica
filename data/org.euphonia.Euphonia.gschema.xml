@@ -69,6 +69,12 @@
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.library" path="/org/euphonia/Euphonia/library/">
+		<key name="artist-tag-delims" type="as">
+			<default>[",", ";", ":", "&amp;", "/", "//", "\\", "\\\\", " X ", "feat.", "ft.", "duet with", "special guest"]</default>
+		</key>
+		<key name="artist-tag-delim-exceptions" type="as">
+			<default>["Simon &amp; Garfunkel", "Above &amp; Beyond"]</default>
+		</key>
 		<key name="sort-nulls-first" type="b">
 			<default>false</default>
 		</key>

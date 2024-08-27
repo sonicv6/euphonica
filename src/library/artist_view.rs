@@ -349,10 +349,10 @@ impl ArtistView {
                 // Unlike album arts, artist avatars must be downloaded as part of
                 // artist metadata.
                 // This might incur an API call.
-                cache.ensure_local_artist_meta(
-                    item.get_mbid(),
-                    Some(item.get_name())
-                );
+                // cache.ensure_local_artist_meta(
+                //     item.get_mbid(),
+                //     Some(item.get_name())
+                // );
 
                 // Get `ArtistCell` from `ListItem` (the UI widget)
                 let child: ArtistCell = list_item
