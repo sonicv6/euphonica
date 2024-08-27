@@ -8,7 +8,7 @@
 		<child>
 			<object class="AdwAvatar" id="avatar">
 				<property name="show-initials">true</property>
-				<property name="size">128</property>>
+				<property name="size">128</property>
 			</object>
 		</child>
 		<child>

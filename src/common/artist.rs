@@ -63,39 +63,41 @@ pub fn parse_mb_artist_tag<'a>(input: &'a str) -> Vec<&'a str> {
             buffer.replace_range(start..end, &" ".repeat(len));
             // println!("Buffer is now: {buffer}");
         }
-        // println!("{}",  buffer);
+        if !found_artists.is_empty() {
+            println!("Found artists by exception rules: {:?}", &found_artists);
+        }
         // println!("New buffer len: {}", buffer.len());
 
         // Step 2: split the remaining buffer. Here we again make use of the
         // Aho-Corasick algorithm to find all delimiters.
         let matched_delims = delim_ac.find_iter(&buffer).collect::<Vec<Match>>();
-        // In case no delimiter is found, return early (if there were still something left, then
-        // there are unspecified delimiters).
-        // println!("Matched delims: {:?}", &matched_delims);
         if matched_delims.is_empty() {
-            return found_artists;
+            // In case no delimiter is found but there are artists detected by exception rules
+            // in the above pass, return those exceptions.
+            if !found_artists.is_empty() {
+                return found_artists;
+            }
+            // Else return the whole string
+            return vec![input];
+            // Incorrect outputs are due to unspecified delimiters.
         }
         else {
-            let first: &str = input[0..matched_delims[0].start()].trim();
-            // println!("First: `{first}`");
-            if first.len() > 0 {
-                found_artists.push(first);
+            // Take note to check for "blankness" using the buffer, but return slices
+            // of input, since buffer will go out of scope after this function concludes.
+            let first_range = 0..matched_delims[0].start();
+            if buffer[first_range.clone()].trim().len() > 0 {
+                found_artists.push(input[first_range].trim());
             }
             for i in 1..(matched_delims.len()) {
-                let between: &str = input[
-                    matched_delims[i-1].end()..matched_delims[i].start()
-                ].trim();
+                let between_range = matched_delims[i-1].end()..matched_delims[i].start();
                 // println!("Between: `{between}`");
-                if between.len() > 0 {
-                    found_artists.push(between);
+                if buffer[between_range.clone()].trim().len() > 0 {
+                    found_artists.push(input[between_range].trim());
                 }
             }
-            let last: &str = input[
-                matched_delims.last().unwrap().end().min(buffer.len())..
-            ].trim();
-            // println!("Last: `{last}`");
-            if last.len() > 0 {
-                found_artists.push(last);
+            let last_range = matched_delims.last().unwrap().end().min(buffer.len())..;
+            if buffer[last_range.clone()].trim().len() > 0 {
+                found_artists.push(input[last_range].trim());
             }
             return found_artists;
         }

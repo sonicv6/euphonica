@@ -295,10 +295,10 @@ mod background {
                     if !songs.is_empty() {
                         let first_song = SongInfo::from(std::mem::take(&mut songs[0]));
                         let artists = first_song.into_artist_infos();
-                        println!("Got these artists: {artists:?}");
+                        // println!("Got these artists: {artists:?}");
                         for artist in artists.into_iter() {
                             if already_parsed.insert(artist.name.clone()) {
-                                println!("Never seen {artist:?} before, inserting...");
+                                // println!("Never seen {artist:?} before, inserting...");
                                 let _ = sender_to_fg.send_blocking(
                                     MpdMessage::ArtistBasicInfoDownloaded(
                                         artist

@@ -81,9 +81,9 @@ mod imp {
             match pspec.name() {
                 "name" => {
                     if let Ok(name) = value.get::<&str>() {
-                        self.name.set_label(name);
+                        obj.set_name(name);
+                        obj.notify("name");
                     }
-                    obj.notify("name");
                 }
                 _ => unimplemented!()
             }
@@ -158,6 +158,6 @@ impl ArtistCell {
         if let Some(id) = self.imp().avatar_signal_id.take() {
             cache.get_cache_state().disconnect(id);
         }
-        self.imp().avatar.set_text(None);
+        // self.imp().avatar.set_text(None);
     }
 }
