@@ -1,32 +1,29 @@
 extern crate bson;
-use async_channel::Sender;
-use image::DynamicImage;
+
 use super::models;
-pub enum MetadataResponse {
-    AlbumMeta(String, models::AlbumMeta),  // folder URI and info
-    AlbumArt(String, DynamicImage, DynamicImage),  // folder URI, hires, thumbnail
-    ArtistMeta(String, models::ArtistMeta),  // artist name and info
-    ArtistAvatar(String, DynamicImage, DynamicImage),  // artist name, hires, thumbnail
+
+pub enum Metadata {
+    // folder-level URI, true for thumbnail
+    AlbumArt(String, bool),
+    // folder-level URI
+    AlbumMeta(String),
+    // Tag, true for thumbnail
+    ArtistAvatar(String, bool),
+    // Tag
+    ArtistMeta(String)
 }
 
 /// Common provider-agnostic utilities.
 pub mod utils {
-    use std::sync::{Arc, Mutex};
-    use reqwest::blocking::Client;
     use image::DynamicImage;
     use crate::utils;
     use super::*;
 
     /// Get a file from the given URL as bytes. Useful for downloading images.
     fn get_file(
-        client: Arc<Mutex<Client>>,
         url: &str
     ) -> Option<Vec<u8>> {
-        let response = client
-            .lock()
-            .ok()?
-            .get(url)
-            .send();
+        let response = reqwest::blocking::get(url);
         if let Ok(res) = response {
             if let Ok(bytes) = res.bytes() {
                 return Some(bytes.to_vec());
@@ -41,7 +38,6 @@ pub mod utils {
     }
 
     pub fn get_best_image(
-        client: Arc<Mutex<Client>>,
         metas: &[models::ImageMeta]
     ) -> Result<DynamicImage, String> {
         // Get all image URLs, sorted by size in reverse.
@@ -52,7 +48,7 @@ pub mod utils {
         }
         images.sort_by_key(|img| img.size);
         for image in images.iter().rev() {
-            if let Some(bytes) = get_file(client.clone(), image.url.as_ref()) {
+            if let Some(bytes) = get_file(image.url.as_ref()) {
                 println!("Downloaded image from: {:?}", &image.url);
                 if let Some(image) = utils::read_image_from_bytes(bytes) {
                     return Ok(image);
@@ -63,10 +59,18 @@ pub mod utils {
     }
 }
 
-pub trait MetadataProvider {
-    fn new(result_sender: Sender<MetadataResponse>) -> Self;
-    /// Get wiki & other metadata if possible.
-    fn get_album_meta(&self, folder_uri: &str, key: bson::Document);
-    /// Get bio & artist avatar if possible.
-    fn get_artist_meta(&self, key: bson::Document);
+pub trait MetadataProvider: Send + Sync {
+    fn new() -> Self where Self: Sized;
+    /// Get textual metadata that wouldn't be available as song tags, such as wiki, producer name,
+    /// etc. A new AlbumMeta object containing data from both the existing AlbumMeta and newly fetched data. New
+    /// data will always overwrite existing fields.
+    fn get_album_meta(
+        self: &Self, key: bson::Document, existing: Option<models::AlbumMeta>
+    ) -> Option<models::AlbumMeta>;
+    /// Get textual metadata about an artist, such as biography, DoB, etc.
+    /// A new ArtistMeta object containing data from both the existing ArtistMeta and newly fetched data. New
+    /// data will always overwrite existing fields.
+    fn get_artist_meta(
+        self: &Self, key: bson::Document, existing: Option<models::ArtistMeta>
+    ) -> Option<models::ArtistMeta>;
 }

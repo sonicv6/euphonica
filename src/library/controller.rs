@@ -158,10 +158,9 @@ impl Library {
 
     /// Add an album to the ListStore.
     pub fn add_album(&self, album: Album) {
-        let folder_uri = album.get_uri();
         if let Some(cache) = self.imp().cache.get() {
             // Might queue a download but won't load anything into memory just yet.
-            cache.ensure_local_album_art(&folder_uri);
+            cache.ensure_local_album_art(album.get_info());
         }
         self.imp().albums.append(
             &album
@@ -174,12 +173,7 @@ impl Library {
     pub fn init_album(&self, album: Album) {
         if settings_manager().child("client").boolean("use-lastfm") {
             if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_album_meta(
-                    album.get_mbid(),
-                    Some(album.get_title()),
-                    album.get_artist_str().as_deref(),
-                    album.get_uri().as_ref()
-                );
+                cache.ensure_local_album_meta(album.get_info());
             }
         }
         if let Some(sender) = self.imp().sender.get() {
@@ -224,10 +218,7 @@ impl Library {
     pub fn init_artist(&self, artist: Artist) {
         if settings_manager().child("client").boolean("use-lastfm") {
             if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_artist_meta(
-                    artist.get_mbid(),
-                    artist.get_name()
-                );
+                cache.ensure_local_artist_meta(artist.get_info());
             }
         }
         if let Some(sender) = self.imp().sender.get() {

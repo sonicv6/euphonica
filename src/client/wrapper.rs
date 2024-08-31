@@ -1,7 +1,8 @@
 use std::{
     borrow::Cow,
     cell::RefCell,
-    rc::Rc
+    rc::Rc,
+    path::PathBuf
 };
 use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
@@ -23,7 +24,7 @@ use uuid::Uuid;
 use crate::{
     utils,
     common::{Album, AlbumInfo, Song, SongInfo, ArtistInfo, Artist},
-    meta_providers::MetadataResponse
+    meta_providers::Metadata
 };
 
 use super::state::{ClientState, ConnectionState};
@@ -71,7 +72,7 @@ pub enum MpdMessage {
     Volume(i8),
 
     // Reserved for cache controller
-    AlbumArt(String), // folder-level URI
+    AlbumArt(String, PathBuf, PathBuf), // folder-level URI & paths to write the hires & thumbnail versions
 
 	// Reserved for child thread
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
@@ -92,7 +93,7 @@ pub enum MpdMessage {
 #[derive(Debug)]
 enum BackgroundTask {
     Update,
-    DownloadAlbumArt(String),  // folder-level URI
+    DownloadAlbumArt(String, PathBuf, PathBuf),  // folder-level URI
     FetchAlbums,  // Gradually get all albums
     FetchAlbumSongs(String),  // Get songs of album with given tag
     FetchArtists(bool),  // Gradually get all artists. If bool flag is true, will parse AlbumArtist tag
@@ -145,16 +146,25 @@ mod background {
 
     pub fn download_album_art(
         client: &mut mpd::Client,
-        sender_to_cache: &Sender<MetadataResponse>,
-        uri: String
+        sender_to_cache: &Sender<Metadata>,
+        uri: String,
+        path: PathBuf,
+        thumbnail_path: PathBuf
     ) {
         if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
             println!("Downloaded album art for {:?}", uri);
             if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
                 let (hires, thumb) = utils::resize_image(dyn_img);
-                sender_to_cache.send_blocking(MetadataResponse::AlbumArt(uri, hires, thumb)).expect(
-                    "Warning: cannot notify main cache of album art download result."
-                );
+                if !path.exists() || !thumbnail_path.exists() {
+                    if let (Ok(_), Ok(_)) = (
+                        hires.save(path),
+                        thumb.save(thumbnail_path)
+                    ) {
+                        sender_to_cache.send_blocking(Metadata::AlbumArt(uri, false)).expect(
+                            "Warning: cannot notify main cache of album art download result."
+                        );
+                    }
+                }
             }
         }
     }
@@ -350,11 +360,11 @@ pub struct MpdWrapper {
     bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
     bg_channel: Channel, // For waking up the child client
     bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
-    meta_sender: Sender<MetadataResponse> // For sending album arts to cache controller
+    meta_sender: Sender<Metadata> // For sending album arts to cache controller
 }
 
 impl MpdWrapper {
-    pub fn new(meta_sender: Sender<MetadataResponse>) -> Rc<Self> {
+    pub fn new(meta_sender: Sender<Metadata>) -> Rc<Self> {
         // Set up channels for communication with client object
         let (
             sender,
@@ -414,9 +424,9 @@ impl MpdWrapper {
                                         &mut client, &sender_to_fg
                                     )
                                 }
-                                BackgroundTask::DownloadAlbumArt(uri) => {
+                                BackgroundTask::DownloadAlbumArt(uri, path, thumbnail_path) => {
                                     background::download_album_art(
-                                        &mut client, &meta_sender, uri
+                                        &mut client, &meta_sender, uri, path, thumbnail_path
                                     )
                                 }
                                 BackgroundTask::FetchAlbums => {
@@ -547,9 +557,9 @@ impl MpdWrapper {
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
             MpdMessage::Albums => self.queue_task(BackgroundTask::FetchAlbums),
-            MpdMessage::AlbumArt(folder_uri) => {
+            MpdMessage::AlbumArt(folder_uri, path, thumbnail_path) => {
                 self.queue_task(
-                    BackgroundTask::DownloadAlbumArt(folder_uri.to_owned())
+                    BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), path, thumbnail_path)
                 );
             },
             MpdMessage::AlbumContent(tag) => {

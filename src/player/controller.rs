@@ -1,33 +1,22 @@
 extern crate mpd;
-use std::{
-    cell::{Cell, RefCell, OnceCell},
-    rc::Rc,
-    vec::Vec,
-    sync::OnceLock
-};
-use async_channel::Sender;
-use mpd::status::{State, Status, AudioFormat};
 use crate::{
-    common::{Song, QualityGrade},
-    client::{
-        ClientState,
-        MpdMessage
-    },
-    cache::{Cache, CacheState},
-    utils::{prettify_audio_format, strip_filename_linux}
+    cache::Cache,
+    client::{ClientState, MpdMessage},
+    common::{AlbumInfo, QualityGrade, Song},
+    utils::prettify_audio_format,
 };
-use gtk::{
-    glib,
-    gio,
-    prelude::*,
-};
-use glib::{
-    closure_local,
-    BoxedAnyObject,
-    subclass::Signal
-};
-use gtk::gdk::Texture;
 use adw::subclass::prelude::*;
+use async_channel::Sender;
+use glib::{closure_local, subclass::Signal, BoxedAnyObject};
+use gtk::gdk::Texture;
+use gtk::{gio, glib, prelude::*};
+use mpd::status::{AudioFormat, State, Status};
+use std::{
+    cell::{Cell, OnceCell, RefCell},
+    rc::Rc,
+    sync::OnceLock,
+    vec::Vec,
+};
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "EuphoniaPlaybackState")]
@@ -39,17 +28,12 @@ pub enum PlaybackState {
 }
 
 mod imp {
+    use super::*;
     use glib::{
-        ParamSpec,
-        ParamSpecObject,
-        ParamSpecString,
-        ParamSpecUInt,
+        ParamSpec, ParamSpecDouble, ParamSpecEnum, ParamSpecObject, ParamSpecString, ParamSpecUInt,
         ParamSpecUInt64,
-        ParamSpecDouble,
-        ParamSpecEnum
     };
     use once_cell::sync::Lazy;
-    use super::*;
 
     pub struct Player {
         pub state: Cell<PlaybackState>,
@@ -66,7 +50,7 @@ mod imp {
         // album arts (else we'd have to wait for signals, then
         // loop through the whole queue & search for songs matching
         // that album URI to update their arts).
-        pub cache: OnceCell<Rc<Cache>>
+        pub cache: OnceCell<Rc<Cache>>,
     }
 
     #[glib::object_subclass]
@@ -84,7 +68,7 @@ mod imp {
                 format: RefCell::new(None),
                 client_sender: OnceCell::new(),
                 cache: OnceCell::new(),
-                volume: Cell::new(0)
+                volume: Cell::new(0),
             }
         }
     }
@@ -93,15 +77,21 @@ mod imp {
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
-                    ParamSpecEnum::builder::<PlaybackState>("playback-state").read_only().build(),
+                    ParamSpecEnum::builder::<PlaybackState>("playback-state")
+                        .read_only()
+                        .build(),
                     ParamSpecDouble::builder("position").read_only().build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
-                    ParamSpecObject::builder::<Texture>("album-art").read_only().build(), // Will use high-resolution version
+                    ParamSpecObject::builder::<Texture>("album-art")
+                        .read_only()
+                        .build(), // Will use high-resolution version
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").read_only().build(),
-                    ParamSpecEnum::builder::<QualityGrade>("quality-grade").read_only().build(),
+                    ParamSpecEnum::builder::<QualityGrade>("quality-grade")
+                        .read_only()
+                        .build(),
                     ParamSpecString::builder("format-desc").read_only().build(),
                     // ParamSpecObject::builder::<gdk::Texture>("cover")
                     //     .read_only()
@@ -140,7 +130,7 @@ mod imp {
                     // emit this).
                     Signal::builder("volume-changed")
                         .param_types([i8::static_type()])
-                        .build()
+                        .build(),
                 ]
             })
         }
@@ -157,13 +147,12 @@ impl Default for Player {
     }
 }
 
-
 impl Player {
     pub fn setup(
         &self,
         client_sender: Sender<MpdMessage>,
         client_state: ClientState,
-        cache: Rc<Cache>
+        cache: Rc<Cache>,
     ) {
         let _ = self.imp().client_sender.set(client_sender);
         let _ = self.imp().cache.set(cache);
@@ -177,7 +166,7 @@ impl Player {
                 move |_: ClientState, boxed: BoxedAnyObject| {
                     this.update_status(&boxed.borrow());
                 }
-            )
+            ),
         );
         client_state.connect_closure(
             "queue-changed",
@@ -188,7 +177,7 @@ impl Player {
                 move |_: ClientState, boxed: BoxedAnyObject| {
                     this.update_queue(boxed.borrow::<Vec<Song>>().as_ref());
                 }
-            )
+            ),
         );
         client_state.connect_closure(
             "outputs-changed",
@@ -200,7 +189,7 @@ impl Player {
                     // Forward to bar
                     this.update_outputs(boxed);
                 }
-            )
+            ),
         );
     }
 
@@ -230,7 +219,7 @@ impl Player {
             if song.is_queued() {
                 return Some(song.get_queue_id());
             }
-            return None
+            return None;
         }
         None
     }
@@ -239,7 +228,7 @@ impl Player {
         let new_state = match status.state {
             State::Play => PlaybackState::Playing,
             State::Pause => PlaybackState::Paused,
-            State::Stop => PlaybackState::Stopped
+            State::Stop => PlaybackState::Stopped,
         };
 
         let old_state = self.imp().state.replace(new_state);
@@ -257,8 +246,7 @@ impl Player {
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if new_state == PlaybackState::Stopped {
                 song.set_is_playing(false);
-            }
-            else {
+            } else {
                 song.set_is_playing(true);
             }
         }
@@ -269,8 +257,7 @@ impl Player {
             if old_position != new_position {
                 self.notify("position");
             }
-        }
-        else {
+        } else {
             let old_position = self.imp().position.replace(0.0);
             if old_position != 0.0 {
                 self.notify("position");
@@ -285,7 +272,9 @@ impl Player {
         if let Some(new_queue_place) = status.song {
             // There is now a playing song
             let maybe_old_queue_id = self.get_current_queue_id();
-            if (maybe_old_queue_id.is_some() && maybe_old_queue_id.unwrap() != new_queue_place.id.0) || maybe_old_queue_id.is_none() {
+            if (maybe_old_queue_id.is_some() && maybe_old_queue_id.unwrap() != new_queue_place.id.0)
+                || maybe_old_queue_id.is_none()
+            {
                 // Remove playing indicator from old song
                 if let Some(old_song) = self.imp().current_song.borrow().as_ref() {
                     old_song.set_is_playing(false);
@@ -308,8 +297,7 @@ impl Player {
                                 self.notify("album");
                                 self.notify("album-art");
                             }
-                        }
-                        else {
+                        } else {
                             self.notify("album");
                             self.notify("album-art");
                         }
@@ -323,8 +311,7 @@ impl Player {
                     }
                 }
             }
-        }
-        else {
+        } else {
             // No song is playing. Update state accordingly.
             #[allow(clippy::redundant_pattern_matching)]
             if let Some(_) = self.imp().current_song.replace(None) {
@@ -350,14 +337,18 @@ impl Player {
         // TODO: use diffs instead of refreshing the whole queue
         let queue = self.imp().queue.borrow();
         queue.remove_all();
+        queue.extend_from_slice(songs);
         if let Some(cache) = self.imp().cache.get() {
+            let infos: Vec<&AlbumInfo> = songs
+            .into_iter()
+            .map(|song| song.get_album())
+            .filter(|ao| ao.is_some())
+            .map(|info| info.unwrap())
+            .collect();
             // Might queue downloads, depending on user settings, but will not
             // actually load anything into memory just yet.
-            cache.ensure_local_album_arts(songs.iter().map(|song| {
-                strip_filename_linux(song.get_uri()).to_owned()
-            }).collect());
+            cache.ensure_local_album_arts(&infos);
         }
-        queue.extend_from_slice(songs);
         // Downstream widgets should now receive an item-changed signal.
     }
 
@@ -402,9 +393,9 @@ impl Player {
         // Use high-resolution version
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if let Some(cache) = self.imp().cache.get() {
-                let uri = song.get_uri();
-                let folder_uri = strip_filename_linux(&uri);
-                return cache.load_local_album_art(folder_uri, false);
+                if let Some(album) = song.get_album() {
+                    return cache.load_local_album_art(album, false);
+                }
             }
             return None;
         }
@@ -427,7 +418,7 @@ impl Player {
 
     pub fn duration(&self) -> u64 {
         if let Some(song) = &*self.imp().current_song.borrow() {
-            return song.get_duration();  // Can still be 0
+            return song.get_duration(); // Can still be 0
         }
         0
     }
@@ -466,16 +457,15 @@ impl Player {
                     if let Err(msg) = self.send(MpdMessage::PlayPos(0)) {
                         println!("{}", msg);
                     }
-                }
-                else {
+                } else {
                     println!("Queue is empty; nothing to play");
                 }
-            },
+            }
             PlaybackState::Playing => {
                 if let Err(msg) = self.send(MpdMessage::Pause) {
                     println!("{}", msg);
                 }
-            },
+            }
             PlaybackState::Paused => {
                 if let Err(msg) = self.send(MpdMessage::Play) {
                     println!("{}", msg);

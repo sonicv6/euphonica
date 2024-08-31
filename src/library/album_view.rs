@@ -445,7 +445,7 @@ impl AlbumView {
                 // have a local copy of its album art from MPD.
                 // No need to dedupe since we're guaranteed that the same album never
                 // appears twice in the GridView anyway.
-                cache.ensure_local_album_art(item.get_uri());
+                cache.ensure_local_album_art(item.get_info());
 
                 // Get `AlbumCell` from `ListItem` (the UI widget)
                 let child: AlbumCell = list_item

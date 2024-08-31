@@ -24,14 +24,9 @@ use super::{
     AlbumSongRow
 };
 use crate::{
-    utils::format_secs_as_duration,
-    common::{Album, Song},
     cache::{
-        Cache,
-        CacheState,
-        placeholders::ALBUMART_PLACEHOLDER
-    },
-    client::ClientState
+        placeholders::ALBUMART_PLACEHOLDER, Cache, CacheState
+    }, client::ClientState, common::{Album, AlbumInfo, Song}, utils::format_secs_as_duration
 };
 
 mod imp {
@@ -163,9 +158,7 @@ impl AlbumContentView {
         let wiki_link = self.imp().wiki_link.get();
         let wiki_attrib = self.imp().wiki_attrib.get();
         if let Some(meta) = cache.load_local_album_meta(
-            album.get_mbid().as_deref(),
-            Some(album.get_title()).as_deref(),
-            album.get_artist_str().as_deref()
+            album.get_info()
         ) {
             if let Some(wiki) = meta.wiki {
                 wiki_box.set_visible(true);
@@ -198,7 +191,7 @@ impl AlbumContentView {
                 move |_: CacheState, folder_uri: String| {
                     if let Some(album) = this.imp().album.borrow().as_ref() {
                         if folder_uri == album.get_uri() {
-                            this.update_cover(&folder_uri);
+                            this.update_cover(album.get_info());
                         }
                     }
                 }
@@ -346,9 +339,9 @@ impl AlbumContentView {
 
     /// Returns true if an album art was successfully retrieved.
     /// On false, we will want to call cache.ensure_local_album_art()
-    fn update_cover(&self, folder_uri: &str) -> bool {
+    fn update_cover(&self, info: &AlbumInfo) -> bool {
         if let Some(cache) = self.imp().cache.get() {
-            if let Some(tex) = cache.load_local_album_art(folder_uri, false) {
+            if let Some(tex) = cache.load_local_album_art(info, false) {
                 self.imp().cover.set_paintable(Some(&tex));
                 return true;
             }
@@ -415,10 +408,10 @@ impl AlbumContentView {
         // Save binding
         bindings.push(release_date_viz_binding);
 
-        let uri = album.get_uri();
-        if !self.update_cover(uri) {
+        let info = album.get_info();
+        if !self.update_cover(info) {
             if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_album_art(uri);
+                cache.ensure_local_album_art(info);
             }
         }
 

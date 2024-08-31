@@ -48,6 +48,10 @@ impl AlbumInfo {
             .map(|s| ArtistInfo::new(s, false))
             .collect();
     }
+
+    pub fn get_artist_str(&self) -> Option<String> {
+        artists_to_string(&self.artists)
+    }
 }
 
 impl Default for AlbumInfo {
@@ -156,7 +160,7 @@ impl Album {
     }
 
     pub fn get_artist_str(&self) -> Option<String> {
-        artists_to_string(&self.get_info().artists)
+        self.get_info().get_artist_str()
     }
 
     pub fn get_mbid(&self) -> Option<&str> {

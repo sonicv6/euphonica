@@ -16,16 +16,13 @@ use glib::{
 };
 
 use crate::{
-    common::Song,
     cache::{
+        placeholders::ALBUMART_PLACEHOLDER,
         Cache,
-        CacheState,
-        placeholders::ALBUMART_PLACEHOLDER
+        CacheState
     },
-    utils::{
-        strip_filename_linux,
-        format_secs_as_duration
-    }
+    common::{AlbumInfo, Song},
+    utils::format_secs_as_duration
 };
 
 use super::Library;
@@ -33,7 +30,6 @@ use super::Library;
 mod imp {
     use glib::{
         ParamSpec,
-        ParamSpecInt64,
         ParamSpecString
     };
     use once_cell::sync::Lazy;
@@ -188,18 +184,19 @@ impl ArtistSongRow {
             .bind(self, "quality-grade", gtk::Widget::NONE);
     }
 
-    fn update_thumbnail(&self, folder_uri: &str, cache: Rc<Cache>) {
-        if let Some(tex) = cache.load_local_album_art(folder_uri, true) {
-            self.imp().thumbnail.set_paintable(Some(&tex));
+    fn update_thumbnail(&self, info: Option<&AlbumInfo>, cache: Rc<Cache>) {
+        if let Some(album) = info {
+            if let Some(tex) = cache.load_local_album_art(album, true) {
+                self.imp().thumbnail.set_paintable(Some(&tex));
+                return;
+            }
         }
-        else {
-            self.imp().thumbnail.set_paintable(Some(&*ALBUMART_PLACEHOLDER))
-        }
+        self.imp().thumbnail.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
     }
 
     pub fn bind(&self, song: &Song, cache: Rc<Cache>) {
         // Bind album art listener. Set once first (like sync_create)
-        self.update_thumbnail(strip_filename_linux(song.get_uri()), cache.clone());
+        self.update_thumbnail(song.get_album(), cache.clone());
         let thumbnail_binding = cache.get_cache_state().connect_closure(
             "album-art-downloaded",
             false,
@@ -211,8 +208,10 @@ impl ArtistSongRow {
                 #[weak]
                 cache,
                 move |_: CacheState, folder_uri: String| {
-                    if strip_filename_linux(song.get_uri()) == folder_uri {
-                        this.update_thumbnail(folder_uri.as_ref(), cache)
+                    if let Some(album) = song.get_album() {
+                        if album.uri == folder_uri {
+                            this.update_thumbnail(Some(album), cache);
+                        }
                     }
                 }
             )

@@ -11,7 +11,6 @@ use gtk::{
     Label,
     Image
 };
-use gdk::Texture;
 use glib::{
     closure_local,
     Object,
@@ -20,14 +19,10 @@ use glib::{
 };
 
 use crate::{
-    common::{
-        Album,
-        QualityGrade
-    },
     cache::{
-        Cache,
-        CacheState,
-        placeholders::ALBUMART_PLACEHOLDER
+        placeholders::ALBUMART_PLACEHOLDER, Cache, CacheState
+    }, common::{
+        Album, AlbumInfo, QualityGrade
     }
 };
 
@@ -94,8 +89,8 @@ impl AlbumCell {
         Object::builder().build()
     }
 
-    fn update_album_art(&self, folder_uri: &str, cache: Rc<Cache>) {
-        if let Some(tex) = cache.load_local_album_art(folder_uri, false) {
+    fn update_album_art(&self, info: &AlbumInfo, cache: Rc<Cache>) {
+        if let Some(tex) = cache.load_local_album_art(info, false) {
             self.imp().cover.set_paintable(Some(&tex));
         }
         else {
@@ -111,7 +106,7 @@ impl AlbumCell {
         let mut bindings = self.imp().bindings.borrow_mut();
 
         // Set once first (like sync_create)
-        self.update_album_art(album.get_uri(), cache.clone());
+        self.update_album_art(album.get_info(), cache.clone());
         let cover_binding = cache.get_cache_state().connect_closure(
             "album-art-downloaded",
             false,
@@ -124,7 +119,7 @@ impl AlbumCell {
                 cache,
                 move |_: CacheState, folder_uri: String| {
                     if album.get_uri() == folder_uri {
-                        this.update_album_art(folder_uri.as_ref(), cache)
+                        this.update_album_art(album.get_info(), cache)
                     }
                 }
             )

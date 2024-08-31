@@ -2,7 +2,6 @@ use std::{
     cell::{OnceCell, RefCell},
     rc::Rc,
 };
-use time::{Date, format_description};
 use adw::subclass::prelude::*;
 use gtk::{
     gdk,
@@ -26,12 +25,10 @@ use super::{
     AlbumCell
 };
 use crate::{
-    common::{Artist, Song, Album},
     cache::{
         Cache,
         CacheState
-    },
-    client::ClientState
+    }, client::ClientState, common::{Album, Artist, ArtistInfo, Song}
 };
 
 mod imp {
@@ -168,10 +165,7 @@ impl ArtistContentView {
         let bio_text = self.imp().bio_text.get();
         let bio_link = self.imp().bio_link.get();
         let bio_attrib = self.imp().bio_attrib.get();
-        if let Some(meta) = cache.load_local_artist_meta(
-            artist.get_mbid().as_deref(),
-            artist.get_name()
-        ) {
+        if let Some(meta) = cache.load_local_artist_meta(artist.get_info()) {
             if let Some(bio) = meta.bio {
                 bio_box.set_visible(true);
                 bio_text.set_label(&bio.content);
@@ -204,7 +198,7 @@ impl ArtistContentView {
                 move |_: CacheState, name: String| {
                     if let Some(artist) = this.imp().artist.borrow().as_ref() {
                         if name == artist.get_name() {
-                            this.update_avatar(&name);
+                            this.update_avatar(artist.get_info());
                         }
                     }
                 }
@@ -447,13 +441,11 @@ impl ArtistContentView {
 
     /// Returns true if an avatar was successfully retrieved.
     /// On false, we will want to call cache.ensure_local_album_art()
-    fn update_avatar(&self, name: &str) -> bool {
+    fn update_avatar(&self, info: &ArtistInfo) -> bool {
         // Set text in case there is no image
-        self.imp().avatar.set_text(Some(name));
+        self.imp().avatar.set_text(Some(&info.name));
         if let Some(cache) = self.imp().cache.get() {
-            if let Some(tex) = cache.load_local_artist_avatar(
-                name, false
-            ) {
+            if let Some(tex) = cache.load_local_artist_avatar(info, false) {
                 self.imp().avatar.set_custom_image(Some(&tex));
                 return true;
             }
@@ -468,10 +460,10 @@ impl ArtistContentView {
     pub fn bind(&self, artist: Artist) {
         println!("Binding to artist: {:?}", &artist);
         self.update_meta(&artist);
-        let name = artist.get_name();
-        if !self.update_avatar(name) {
+        let info = artist.get_info();
+        if !self.update_avatar(info) {
             if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_artist_meta(artist.get_mbid(), name);
+                cache.ensure_local_artist_meta(info);
             }
         }
 

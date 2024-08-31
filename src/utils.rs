@@ -186,7 +186,10 @@ pub fn resize_image(dyn_img: DynamicImage) -> (DynamicImage, DynamicImage) {
 // TODO: Optimise this
 pub fn deduplicate<T: Eq + Hash + Clone>(input: &[T]) -> Vec<T> {
     let mut seen = FxHashSet::default();
-    input.iter().filter(|item| seen.insert(item.clone())).cloned().collect()
+    for elem in input.iter() {
+        seen.insert(elem.clone());
+    }
+    seen.into_iter().collect()
 }
 
 // Build Aho-Corasick automatons only once. In case no delimiter or exception is

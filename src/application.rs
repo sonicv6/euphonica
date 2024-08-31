@@ -31,7 +31,7 @@ use crate::{
     library::Library,
     player::Player,
     client::{MpdWrapper, MpdMessage},
-    meta_providers::MetadataResponse,
+    meta_providers::Metadata,
     cache::Cache,
     config::VERSION,
     preferences::Preferences,

@@ -8,7 +8,6 @@ use gtk::{
     subclass::prelude::*,
     CompositeTemplate
 };
-use adw;
 use glib::{
     closure_local,
     Object,
@@ -16,11 +15,10 @@ use glib::{
 };
 
 use crate::{
-    common::Artist,
     cache::{
         Cache,
         CacheState
-    }
+    }, common::{Artist, ArtistInfo}
 };
 
 mod imp {
@@ -114,9 +112,9 @@ impl ArtistCell {
         Object::builder().build()
     }
 
-    fn update_artist_avatar(&self, tag: &str, cache: Rc<Cache>) {
+    fn update_artist_avatar(&self, info: &ArtistInfo, cache: Rc<Cache>) {
         self.imp().avatar.set_custom_image(
-            cache.load_local_artist_avatar(tag, false).as_ref()
+            cache.load_local_artist_avatar(info, false).as_ref()
         );
     }
 
@@ -132,7 +130,7 @@ impl ArtistCell {
     pub fn bind(&self, artist: &Artist, cache: Rc<Cache>) {
         // Get state
         // Set once first (like sync_create)
-        self.update_artist_avatar(artist.get_name(), cache.clone());
+        self.update_artist_avatar(artist.get_info(), cache.clone());
         let avatar_binding = cache.get_cache_state().connect_closure(
             "artist-avatar-downloaded",
             false,
@@ -145,7 +143,7 @@ impl ArtistCell {
                 cache,
                 move |_: CacheState, tag: String| {
                     if artist.get_name() == tag {
-                        this.update_artist_avatar(&tag, cache)
+                        this.update_artist_avatar(artist.get_info(), cache)
                     }
                 }
             )
