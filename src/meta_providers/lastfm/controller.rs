@@ -124,10 +124,10 @@ mod background {
         // Will panic if key document is not a simple map of String to String
         let params: Vec<(&str, String)> = key.iter().map(
             |kv: (&String, &bson::Bson)| {
-                (kv.0.as_ref(), kv.1.as_str().unwrap().to_owned())
+                (if kv.0 == "name" { "artist" } else { kv.0.as_ref() }, kv.1.as_str().unwrap().to_owned())
             }
         ).collect();
-
+        println!("Child thread: trying to fetch artist meta...");
         if let Some(resp) = get_lastfm(
             client,
             "artist.getinfo",
@@ -149,7 +149,7 @@ mod background {
                             // are slightly different (casing, apostrophes, etc.), else
                             // we won't be able to query it back using our own tags.
                             if let Some(name) = key.get("artist") {
-                                artist.name = name.to_string();
+                                artist.name = name.as_str().unwrap().to_owned();
                             }
                             Ok(artist)
 
@@ -254,8 +254,8 @@ impl LastfmWrapper {
                         },
                         Task::ArtistMeta(key) => {
                             // Must provide the artist name field
-                            if let Some(name_bson) = key.get("artist") {
-                                let name = name_bson.to_string();
+                            if let Some(name_bson) = key.get("name") {
+                                let name = name_bson.as_str().unwrap().to_owned();
                                 let _ = spawn_blocking(clone!(
                                     #[weak]
                                     client,

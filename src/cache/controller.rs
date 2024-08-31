@@ -208,7 +208,6 @@ impl Cache {
 
     fn on_artist_meta_downloaded(&self, name: &str, model: ArtistMeta) {
         // Insert into cache
-        println!("Downloaded album meta for {}. Caching...", name);
         let insert_res = self.doc_cache.collection::<ArtistMeta>("artist").insert_one(model);
         if let Err(msg) = insert_res {
             println!("{:?}", msg);
@@ -387,32 +386,30 @@ impl Cache {
 
     fn get_artist_key(
         &self,
-        // Specify either this (preferred)
+        // Optional
         mbid: Option<&str>,
-        // Or this
-        artist: Option<&str>
+        // Mandatory (used for signaling)
+        artist: &str
     ) -> Result<bson::Document, &str> {
         if let Some(id) = mbid {
             Ok(bson::doc! {
-                "mbid": id.to_string()
-            })
-        }
-        else if let Some(artist) = artist {
-            Ok(bson::doc! {
-                "artist": artist.to_string()
+                "mbid": id.to_string(),
+                "name": artist.to_string()
             })
         }
         else {
-            Err("Either mbid (preferred) or artist name must be specified")
+            Ok(bson::doc! {
+                "name": artist.to_string()
+            })
         }
     }
 
     pub fn load_local_artist_meta(
         &self,
-        // Specify either this (preferred)
+        // Optional but preferred
         mbid: Option<&str>,
-        // Or this
-        artist: Option<&str>
+        // Required (for signalling)
+        artist: &str
     ) -> Option<ArtistMeta> {
         if let Ok(key) = self.get_artist_key(mbid, artist) {
             let result = self.doc_cache.collection::<ArtistMeta>("artist").find_one(key);
@@ -433,12 +430,12 @@ impl Cache {
 
     pub fn ensure_local_artist_meta(
         &self,
-        // Specify either this (preferred)
+        // Optional but preferred
         mbid: Option<&str>,
-        // Or this
-        artist: Option<&str>
+        // Required (for signalling)
+        artist: &str
     ) {
-        // Check whether we have this album cached
+        // Check whether we have this artist cached
         if let Ok(key) = self.get_artist_key(
             mbid,
             artist

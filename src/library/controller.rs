@@ -226,7 +226,7 @@ impl Library {
             if let Some(cache) = self.imp().cache.get() {
                 cache.ensure_local_artist_meta(
                     artist.get_mbid(),
-                    Some(artist.get_name())
+                    artist.get_name()
                 );
             }
         }

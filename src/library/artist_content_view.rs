@@ -170,7 +170,7 @@ impl ArtistContentView {
         let bio_attrib = self.imp().bio_attrib.get();
         if let Some(meta) = cache.load_local_artist_meta(
             artist.get_mbid().as_deref(),
-            Some(artist.get_name()).as_deref()
+            artist.get_name()
         ) {
             if let Some(bio) = meta.bio {
                 bio_box.set_visible(true);
@@ -471,7 +471,7 @@ impl ArtistContentView {
         let name = artist.get_name();
         if !self.update_avatar(name) {
             if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_artist_meta(artist.get_mbid(), Some(name));
+                cache.ensure_local_artist_meta(artist.get_mbid(), name);
             }
         }
 

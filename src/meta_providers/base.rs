@@ -53,12 +53,13 @@ pub mod utils {
         images.sort_by_key(|img| img.size);
         for image in images.iter().rev() {
             if let Some(bytes) = get_file(client.clone(), image.url.as_ref()) {
+                println!("Downloaded image from: {:?}", &image.url);
                 if let Some(image) = utils::read_image_from_bytes(bytes) {
                     return Ok(image);
                 }
             }
         }
-        return Err(String::from("This album's metadata provided image URLs but none of them could be downloaded."));
+        Err(String::from("This album's metadata provided image URLs but none of them could be downloaded."))
     }
 }
 
