@@ -387,7 +387,7 @@ impl ArtistContentView {
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem");
                 // TODO: refactor album cells to use expressions too
-                let album_cell = AlbumCell::new();
+                let album_cell = AlbumCell::new(&item);
                 item.set_child(Some(&album_cell));
             }
         );

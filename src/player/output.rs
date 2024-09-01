@@ -21,7 +21,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/output.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player/output.ui")]
     pub struct MpdOutput {
         #[template_child]
         pub icon: TemplateChild<gtk::Image>,

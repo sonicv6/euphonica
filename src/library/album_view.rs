@@ -416,11 +416,11 @@ impl AlbumView {
 
         // Create an empty `AlbumCell` during setup
         factory.connect_setup(move |_, list_item| {
-            let album_cell = AlbumCell::new();
-            list_item
+            let item = list_item
                 .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .set_child(Some(&album_cell));
+                .expect("Needs to be ListItem");
+            let album_cell = AlbumCell::new(&item);
+            item.set_child(Some(&album_cell));
         });
 
         // Tell factory how to bind `AlbumCell` to one of our Album GObjects.

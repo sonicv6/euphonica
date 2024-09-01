@@ -30,14 +30,14 @@ pub struct AlbumInfo {
 }
 
 impl AlbumInfo {
-    pub fn new(uri: &str, title: &str, artists: Vec<ArtistInfo>) -> Self {
+    pub fn new(uri: &str, title: &str, artists: Vec<ArtistInfo>, quality_grade: QualityGrade) -> Self {
         Self {
             uri: uri.to_owned(),
             artists,
             title: title.to_owned(),
             cover: None,
             release_date: None,
-            quality_grade: QualityGrade::Unknown,
+            quality_grade,
             mbid: None
         }
     }
@@ -130,7 +130,7 @@ mod imp {
                 "title" => obj.get_title().to_value(),
                 "artist" => obj.get_artist_str().to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
-                "quality-grade" => obj.get_quality_grade().to_value(),
+                "quality-grade" => obj.get_quality_grade().to_icon_name().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -185,7 +185,7 @@ impl Default for Album {
 impl From<AlbumInfo> for Album {
     fn from(info: AlbumInfo) -> Self {
         let res = glib::Object::builder::<Self>().build();
-        res.imp().info.set(info);
+        let _ = res.imp().info.set(info);
         res
     }
 }

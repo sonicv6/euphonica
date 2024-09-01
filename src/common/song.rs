@@ -399,7 +399,8 @@ impl From<mpd::song::Song> for SongInfo {
                             AlbumInfo::new(
                                 strip_filename_linux(&res.uri),
                                 &val,
-                                Vec::with_capacity(0)
+                                Vec::with_capacity(0),
+                                res.quality_grade.clone()
                             )
                         );
                     }
