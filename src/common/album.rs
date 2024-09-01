@@ -23,6 +23,7 @@ pub struct AlbumInfo {
     // Folder-based URI, acquired from the first song found with this album's tag.
     pub uri: String,
     pub artists: Vec<ArtistInfo>, // parse from AlbumArtist tag please, not Artist.
+    pub artist_tag: Option<String>,
     pub cover: Option<Texture>,
     pub release_date: Option<Date>,
     pub quality_grade: QualityGrade,
@@ -30,10 +31,17 @@ pub struct AlbumInfo {
 }
 
 impl AlbumInfo {
-    pub fn new(uri: &str, title: &str, artists: Vec<ArtistInfo>, quality_grade: QualityGrade) -> Self {
+    pub fn new(
+        uri: &str,
+        title: &str,
+        artist_tag: Option<&str>,
+        artists: Vec<ArtistInfo>,
+        quality_grade: QualityGrade
+    ) -> Self {
         Self {
             uri: uri.to_owned(),
             artists,
+            artist_tag: artist_tag.map(str::to_owned),
             title: title.to_owned(),
             cover: None,
             release_date: None,
@@ -43,6 +51,7 @@ impl AlbumInfo {
     }
 
     pub fn set_artists_from_string(&mut self, tag: &str) {
+        self.artist_tag = Some(tag.to_owned());
         self.artists = parse_mb_artist_tag(tag)
             .iter()
             .map(|s| ArtistInfo::new(s, false))
@@ -52,6 +61,10 @@ impl AlbumInfo {
     pub fn get_artist_str(&self) -> Option<String> {
         artists_to_string(&self.artists)
     }
+
+    pub fn get_artist_tag(&self) -> Option<&str> {
+        self.artist_tag.as_deref()
+    }
 }
 
 impl Default for AlbumInfo {
@@ -60,6 +73,7 @@ impl Default for AlbumInfo {
             title: "Untitled Album".to_owned(),
             uri: "".to_owned(),
             artists: Vec::with_capacity(0),
+            artist_tag: None,
             cover: None,
             release_date: None,
             quality_grade: QualityGrade::Unknown,
@@ -159,8 +173,16 @@ impl Album {
         &self.get_info().artists
     }
 
+    /// Get albumartist names separated by commas. If the first artist listed is a composer,
+    /// the next separator will be a semicolon insead. The quality of this output depends
+    /// on whether all delimiters are specified by the user.
     pub fn get_artist_str(&self) -> Option<String> {
-        self.get_info().get_artist_str()
+        artists_to_string(&self.get_info().artists)
+    }
+
+    /// Get the original albumartist tag before any parsing.
+    pub fn get_artist_tag(&self) -> Option<&str> {
+        self.get_info().artist_tag.as_deref()
     }
 
     pub fn get_mbid(&self) -> Option<&str> {

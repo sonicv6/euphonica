@@ -1,6 +1,6 @@
 /* application.rs
  *
- * Copyright 2024 Work
+ * Copyright 2024 htkhiem2000
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ use crate::{
     client::{MpdWrapper, MpdMessage},
     meta_providers::Metadata,
     cache::Cache,
-    config::VERSION,
+    config::{VERSION, APPLICATION_USER_AGENT},
     preferences::Preferences,
     EuphoniaWindow
 };
@@ -140,6 +140,8 @@ glib::wrapper! {
 
 impl EuphoniaApplication {
     pub fn new(application_id: &str, flags: &gio::ApplicationFlags) -> Self {
+        // TODO: Find a better place to put these
+        musicbrainz_rs::config::set_user_agent(APPLICATION_USER_AGENT);
         glib::Object::builder()
             .property("application-id", application_id)
             .property("flags", flags)

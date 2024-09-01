@@ -465,11 +465,7 @@ impl ArtistContentView {
         println!("Binding to artist: {:?}", &artist);
         self.update_meta(&artist);
         let info = artist.get_info();
-        if !self.update_avatar(info) {
-            if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_artist_meta(info);
-            }
-        }
+        self.update_avatar(info);
 
         let name_label = self.imp().name.get();
         let mut bindings = self.imp().bindings.borrow_mut();

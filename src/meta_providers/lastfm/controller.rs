@@ -6,7 +6,10 @@ use reqwest::{
 };
 use gtk::prelude::*;
 
-use crate::utils::settings_manager;
+use crate::{
+    config::APPLICATION_USER_AGENT,
+    utils::settings_manager
+};
 
 use super::super::{
     models, prelude::*, MetadataProvider
@@ -14,11 +17,6 @@ use super::super::{
 use super::models::{LastfmAlbumResponse, LastfmArtistResponse};
 
 pub const API_ROOT: &str = "http://ws.audioscrobbler.com/2.0";
-
-enum Task {
-    AlbumMeta(String, bson::Document), // folder_uri and key doc
-    ArtistMeta(bson::Document)
-}
 
 pub struct LastfmWrapper {
     client: Client
@@ -32,9 +30,8 @@ impl LastfmWrapper {
     ) -> Option<Response> {
         let settings = settings_manager().child("client");
         let key = settings.string("lastfm-api-key").to_string();
-        let agent = settings.string("lastfm-user-agent").to_string();
         // Return None if there is no API key specified.
-        if !key.is_empty() && !agent.is_empty() {
+        if !key.is_empty() {
             println!("Last.fm: calling `{}` with query {:?}", method, params);
             let resp = self.client
                 .get(API_ROOT)
@@ -44,7 +41,7 @@ impl LastfmWrapper {
                     ("api_key", key.as_ref())
                 ])
                 .query(params)
-                .header(USER_AGENT, agent)
+                .header(USER_AGENT, APPLICATION_USER_AGENT)
                 .send();
             if let Ok(res) = resp {
                 return Some(res);
@@ -96,7 +93,7 @@ impl MetadataProvider for LastfmWrapper {
                             // are slightly different (casing, apostrophes, etc.), else
                             // we won't be able to query it back using our own tags.
                             if let Some(artist) = key.get("artist") {
-                                new.artist = artist.as_str().unwrap().to_owned();
+                                new.artist = Some(artist.as_str().unwrap().to_owned());
                             }
                             if let Some(name) = key.get("album") {
                                 new.name = name.as_str().unwrap().to_owned();

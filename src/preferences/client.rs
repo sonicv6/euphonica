@@ -37,8 +37,8 @@ mod imp {
         pub lastfm_key: TemplateChild<adw::EntryRow>,
         #[template_child]
         pub lastfm_user_agent: TemplateChild<adw::EntryRow>,
-        // #[template_child]
-        // pub lastfm_download_album_art: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub lastfm_download_album_art: TemplateChild<adw::SwitchRow>,
         #[template_child]
         pub lastfm_download_artist_avatar: TemplateChild<adw::SwitchRow>
     }
@@ -179,14 +179,13 @@ impl ClientPreferences {
             )
             .build();
         let lastfm_key = imp.lastfm_key.get();
-        let lastfm_user_agent = imp.lastfm_user_agent.get();
-        // let lastfm_download_album_art = imp.lastfm_download_album_art.get();
+        let lastfm_download_album_art = imp.lastfm_download_album_art.get();
         let lastfm_download_artist_avatar = imp.lastfm_download_artist_avatar.get();
         // let lastfm_username = imp.lastfm_username.get();
         for widget in [
             &lastfm_key.clone().upcast::<gtk::Widget>(),
-            &lastfm_user_agent.clone().upcast::<gtk::Widget>(),
-            // &lastfm_download_album_art.clone().upcast::<gtk::Widget>(),
+            // &lastfm_user_agent.clone().upcast::<gtk::Widget>(),
+            &lastfm_download_album_art.clone().upcast::<gtk::Widget>(),
             &lastfm_download_artist_avatar.clone().upcast::<gtk::Widget>()
         ] {
             use_lastfm
@@ -209,19 +208,11 @@ impl ClientPreferences {
 
         conn_settings
             .bind(
-                "lastfm-user-agent",
-                &lastfm_user_agent,
-                "text"
+                "lastfm-download-album-art",
+                &lastfm_download_album_art,
+                "active"
             )
             .build();
-
-        // conn_settings
-        //     .bind(
-        //         "lastfm-download-album-art",
-        //         &lastfm_download_album_art,
-        //         "active"
-        //     )
-        //     .build();
 
         conn_settings
             .bind(

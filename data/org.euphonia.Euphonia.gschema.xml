@@ -48,23 +48,27 @@
 			<default>true</default>
 		</key>
 
+		<key name="meta-provider-delay-between-requests-s" type="d">
+			<default>1.5</default>
+			<summary>How long to wait between metadata provider API calls</summary>
+			<description>
+			Services such as Last.fm and MusicBrainz, enforce rate limits. Exceeding these
+			rates may result in failed metadata fetches or even banning. A 1.5s wait between
+			requests is usually tolerated by most services.
+			</description>
+		</key>
+
 		<key name="use-lastfm" type="b">
 			<default>false</default>
 		</key>
 		<key name="lastfm-api-key" type="s">
 			<default>''</default>
 		</key>
-		<key name="lastfm-user-agent" type="s">
-			<default>'Euphonia Dev (MPD client)'</default>
-		</key>
 		<key name="lastfm-download-album-art" type="b">
 			<default>true</default>
 		</key>
 		<key name="lastfm-download-artist-avatar" type="b">
 			<default>true</default>
-		</key>
-		<key name="lastfm-delay-between-requests-s" type="d">
-			<default>1.0</default>
 		</key>
 	</schema>
 

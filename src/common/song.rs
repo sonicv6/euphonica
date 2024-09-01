@@ -92,6 +92,7 @@ pub struct SongInfo {
     title: String, // Might just be filename
     // last_mod: RefCell<Option<u64>>,
     artists: Vec<ArtistInfo>,
+    artist_tag: Option<String>, // Original tag, with all the linkages and formatting
     duration: Option<Duration>, // Default to 0 if somehow the option in mpd's Song is None
     queue_id: Option<u32>,
     // range: Option<Range>,
@@ -128,6 +129,7 @@ impl Default for SongInfo {
             uri: String::from(""),
             title: String::from("Untitled Song"),
             artists: Vec::new(),
+            artist_tag: None,
             duration: None,
             queue_id: None,
             album: None,
@@ -209,7 +211,7 @@ mod imp {
                 // "last_mod" => obj.get_last_mod().to_value(),
                 // Represented in MusicBrainz format, i.e. Composer; Performer, Performer,...
                 // The composer part is optional.
-                "artist" => obj.get_artist_str().to_value(),
+                "artist" => obj.get_artist_tag().to_value(),
                 "duration" => obj.get_duration().to_value(),
                 "queue-id" => obj.get_queue_id().to_value(),
                 "is-queued" => obj.is_queued().to_value(),
@@ -266,8 +268,16 @@ impl Song {
         &self.get_info().artists
     }
 
+    /// Get artist names separated by commas. If the first artist listed is a composer,
+    /// the next separator will be a semicolon insead. The quality of this output depends
+    /// on whether all delimiters are specified by the user.
     pub fn get_artist_str(&self) -> Option<String> {
         artists_to_string(&self.get_info().artists)
+    }
+
+    /// Get the original artist tag before any parsing.
+    pub fn get_artist_tag(&self) -> Option<&str> {
+        self.get_info().artist_tag.as_deref()
     }
 
     pub fn get_queue_id(&self) -> u32 {
@@ -335,9 +345,9 @@ impl Default for Song {
 impl From<mpd::song::Song> for SongInfo {
     fn from(song: mpd::song::Song) -> Self {
         let artists: Vec<ArtistInfo>;
-        if let Some(artist_str) = song.artist {
+        if let Some(artist_str) = &song.artist {
             // TODO: Find a way to detect classical works
-            artists = parse_mb_artist_tag(&artist_str)
+            artists = parse_mb_artist_tag(artist_str)
                 .iter()
                 .map(|s| ArtistInfo::new(s, false))
                 .collect();
@@ -360,6 +370,7 @@ impl From<mpd::song::Song> for SongInfo {
             uri: song.file,
             title: name,
             artists,
+            artist_tag: song.artist,
             duration: song.duration,
             queue_id: None,
             album: None,
@@ -399,6 +410,7 @@ impl From<mpd::song::Song> for SongInfo {
                             AlbumInfo::new(
                                 strip_filename_linux(&res.uri),
                                 &val,
+                                None,
                                 Vec::with_capacity(0),
                                 res.quality_grade.clone()
                             )

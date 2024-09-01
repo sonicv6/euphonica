@@ -9,7 +9,7 @@ gnome.compile_resources('euphonia',
 )
 
 conf = configuration_data()
-conf.set_quoted('VERSION', meson.project_version())
+conf.set('VERSION', meson.project_version())
 conf.set_quoted('GETTEXT_PACKAGE', 'euphonia')
 conf.set_quoted('LOCALEDIR', get_option('prefix') / get_option('localedir'))
 conf.set_quoted('APPLICATION_ID', application_id)

@@ -1,3 +1,4 @@
+use musicbrainz_rs::entity::artist::ArtistType;
 use serde::Deserialize;
 use super::super::models::{Tag, ImageMeta, ImageSize, Wiki, AlbumMeta, ArtistMeta};
 // Last.fm JSON structs, for deserialising API responses only.
@@ -51,10 +52,9 @@ pub struct LastfmImage {
     pub url: String
 }
 
-impl Into<ImageMeta> for LastfmImage {
-    fn into(self) -> ImageMeta {
-        println!("{}", &self.size);
-        let size: ImageSize = match self.size.as_ref() {
+impl From<LastfmImage> for ImageMeta {
+    fn from(img: LastfmImage) -> Self {
+        let size: ImageSize = match img.size.as_ref() {
             "small" => ImageSize::Small,
             "medium" => ImageSize::Medium,
             "large" => ImageSize::Large,
@@ -64,7 +64,7 @@ impl Into<ImageMeta> for LastfmImage {
         };
         ImageMeta {
             size,
-            url: self.url
+            url: img.url
         }
     }
 }
@@ -124,27 +124,27 @@ pub struct LastfmAlbum {
     pub wiki: Option<LastfmWiki>
 }
 
-impl Into<AlbumMeta> for LastfmAlbum {
-    fn into(mut self) -> AlbumMeta {
-        let tags: Vec<Tag> = match self.tags {
+impl From<LastfmAlbum> for AlbumMeta {
+    fn from(mut lfm: LastfmAlbum) -> Self {
+        let tags: Vec<Tag> = match lfm.tags {
             TagsHelper::String(_) => Vec::with_capacity(0),
             TagsHelper::Nested(obj) => obj.tag
         };
-        let image: Vec<ImageMeta> = self.image.drain(0..).map(LastfmImage::into).collect();
-        let wiki: Option<Wiki> = match self.wiki {
+        let image: Vec<ImageMeta> = lfm.image.drain(0..).map(LastfmImage::into).collect();
+        let wiki: Option<Wiki> = match lfm.wiki {
             Some(w) => Some(w.into()),
             None => None
         };
 
-        AlbumMeta {
-             name: self.name,
-             artist: self.artist,
-             mbid: self.mbid,
+        Self {
+             name: lfm.name,
+             artist: Some(lfm.artist),
+             mbid: lfm.mbid,
              tags,
              image,
-             url: Some(self.url),
+             url: Some(lfm.url),
              wiki
-         }
+        }
     }
 }
 
@@ -175,7 +175,12 @@ impl Into<ArtistMeta> for LastfmSimilarArtist {
             similar: Vec::with_capacity(0),
             image,
             url: Some(self.url),
-            bio: None
+            bio: None,
+            artist_type: ArtistType::UnrecognizedArtistType,
+            gender: None,
+            begin_date: None,
+            end_date: None,
+            country: None
         }
     }
 }
@@ -225,7 +230,12 @@ impl Into<ArtistMeta> for LastfmArtist {
             similar,
             image: Vec::with_capacity(0),
             url: Some(self.url),
-            bio
+            bio,
+            artist_type: ArtistType::UnrecognizedArtistType,
+            gender: None,
+            begin_date: None,
+            end_date: None,
+            country: None
         }
     }
 }

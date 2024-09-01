@@ -2,6 +2,7 @@ mod base;
 mod chain;
 pub mod models;
 pub mod lastfm;
+pub mod musicbrainz;
 
 pub use chain::MetadataChain;
 pub use base::{MetadataProvider, Metadata, utils};

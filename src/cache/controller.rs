@@ -46,7 +46,8 @@ use crate::{
         utils::get_best_image,
         Metadata,
         MetadataChain,
-        lastfm::LastfmWrapper
+        lastfm::LastfmWrapper,
+        musicbrainz::MusicBrainzWrapper
     },
     utils::{resize_image, settings_manager}
 };
@@ -124,6 +125,7 @@ impl Cache {
         let mut providers = MetadataChain::new();
         // TODO: Allow user reordering
         providers.providers = vec![
+            Box::new(MusicBrainzWrapper::new()),
             Box::new(LastfmWrapper::new())
         ];
         doc_path.push("metadata.polodb");
@@ -284,7 +286,7 @@ impl Cache {
                         }
                     };
                     let _ = glib::timeout_future(Duration::from_millis(
-                        (settings.double("lastfm-delay-between-requests-s") * 1000.0) as u64
+                        (settings.double("meta-provider-delay-between-requests-s") * 1000.0) as u64
                     )).await;
                 }
             }
@@ -431,7 +433,7 @@ impl Cache {
         let mbid: Option<&str> = album.mbid.as_deref();
         // Or BOTH of these
         let title: Option<&str> = Some(album.title.as_ref());
-        let artist: Option<String> = album.get_artist_str();
+        let artist: Option<&str> = album.get_artist_tag();
         if let Some(id) = mbid {
             Ok(bson::doc! {
                 "mbid": id.to_string()
