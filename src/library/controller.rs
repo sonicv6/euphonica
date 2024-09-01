@@ -33,16 +33,6 @@ use adw::subclass::prelude::*;
 use mpd::{Query, Term};
 
 mod imp {
-    use glib::{
-        ParamSpec,
-        ParamSpecObject,
-        // ParamSpecString,
-        // ParamSpecUInt,
-        // ParamSpecUInt64,
-        // ParamSpecDouble,
-        // ParamSpecEnum
-    };
-    use once_cell::sync::Lazy;
     use super::*;
 
     #[derive(Debug)]
@@ -59,8 +49,8 @@ mod imp {
         // 4.3. Send AlbumInfo class to main thread via MpdMessage.
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
-        pub albums: gio::ListStore,
-        pub artists: gio::ListStore,
+        
+
         pub cache: OnceCell<Rc<Cache>>,
     }
 
@@ -70,35 +60,14 @@ mod imp {
         type Type = super::Library;
 
         fn new() -> Self {
-            let albums = gio::ListStore::new::<Album>();
-            let artists = gio::ListStore::new::<Artist>();
             Self {
                 sender: OnceCell::new(),
-                albums,
-                artists,
                 cache: OnceCell::new()
             }
         }
     }
 
     impl ObjectImpl for Library {
-        fn properties() -> &'static [ParamSpec] {
-            static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
-                vec![
-                    ParamSpecObject::builder::<gio::ListStore>("albums").read_only().build()
-                ]
-            });
-            PROPERTIES.as_ref()
-        }
-
-        fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
-            let obj = self.obj();
-            match pspec.name() {
-                "albums" => obj.albums().to_value(),
-                _ => unimplemented!(),
-            }
-        }
-
         fn signals() -> &'static [Signal] {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
             SIGNALS.get_or_init(|| {
@@ -123,48 +92,9 @@ impl Default for Library {
 }
 
 impl Library {
-    pub fn setup(&self, sender: Sender<MpdMessage>, client_state: ClientState, cache: Rc<Cache>) {
+    pub fn setup(&self, sender: Sender<MpdMessage>, cache: Rc<Cache>) {
         let _ = self.imp().cache.set(cache);
         let _ = self.imp().sender.set(sender);
-        // Connect to ClientState signals that announce completion of requests
-        client_state.connect_closure(
-            "album-basic-info-downloaded",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: ClientState, album: Album| {
-                    this.add_album(album);
-                }
-            )
-        );
-        client_state.connect_closure(
-            "artist-basic-info-downloaded",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: ClientState, artist: Artist| {
-                    this.add_artist(artist);
-                }
-            )
-        );
-    }
-
-    /// Get a reference to the Album ListStore.
-    pub fn albums(&self) -> gio::ListStore {
-        self.imp().albums.clone()
-    }
-
-    /// Add an album to the ListStore.
-    pub fn add_album(&self, album: Album) {
-        if let Some(cache) = self.imp().cache.get() {
-            // Might queue a download but won't load anything into memory just yet.
-            cache.ensure_local_album_art(album.get_info());
-        }
-        self.imp().albums.append(
-            &album
-        );
     }
 
     /// Get all the information available about an album & its contents (won't block;
@@ -194,22 +124,6 @@ impl Library {
                 let _ = sender.send_blocking(MpdMessage::PlayPos(0));
             }
         }
-    }
-
-    /// Get a reference to the Artist ListStore.
-    pub fn artists(&self) -> gio::ListStore {
-        self.imp().artists.clone()
-    }
-
-    /// Add an artist to the ListStore.
-    pub fn add_artist(&self, artist: Artist) {
-        // if let Some(cache) = self.imp().cache.get() {
-        //     // Might queue a download but won't load anything into memory just yet.
-        //     cache.ensure_local_artist_avatar(artist.get_name());
-        // }
-        self.imp().artists.append(
-            &artist
-        );
     }
 
     /// Get all the information available about an artist (won't block;

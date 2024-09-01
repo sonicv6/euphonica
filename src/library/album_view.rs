@@ -6,12 +6,7 @@ use std::{
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{
-    gio,
-    glib,
-    CompositeTemplate,
-    SingleSelection,
-    SignalListItemFactory,
-    ListItem,
+    gio, glib::{self, closure_local}, CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection
 };
 
 use glib::clone;
@@ -31,7 +26,7 @@ use crate::{
 mod imp {
     use super::*;
 
-    #[derive(Debug, Default, CompositeTemplate)]
+    #[derive(Debug, CompositeTemplate)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-view.ui")]
     pub struct AlbumView {
         #[template_child]
@@ -59,6 +54,7 @@ mod imp {
         #[template_child]
         pub content_view: TemplateChild<AlbumContentView>,
 
+        pub album_list: gio::ListStore,
         // Search & filter models
         pub search_filter: gtk::CustomFilter,
         pub sorter: gtk::CustomSorter,
@@ -68,6 +64,35 @@ mod imp {
         // If search term is now shorter, only check non-matching items to see
         // if they now match.
         pub last_search_len: Cell<usize>,
+    }
+
+    impl Default for AlbumView {
+        fn default() -> Self {
+            Self {
+                nav_view: TemplateChild::default(),
+                // Search & filter widgets
+                sort_dir: TemplateChild::default(),
+                sort_mode: TemplateChild::default(),
+                search_btn: TemplateChild::default(),
+                search_mode: TemplateChild::default(),
+                search_bar: TemplateChild::default(),
+                search_entry: TemplateChild::default(),
+                // Content
+                grid_view: TemplateChild::default(),
+                content_page: TemplateChild::default(),
+                content_view: TemplateChild::default(),
+                album_list: gio::ListStore::new::<Album>(),
+                // Search & filter models
+                search_filter: gtk::CustomFilter::default(),
+                sorter: gtk::CustomSorter::default(),
+                // Keep last length to optimise search
+                // If search term is now longer, only further filter still-matching
+                // items.
+                // If search term is now shorter, only check non-matching items to see
+                // if they now match.
+                last_search_len: Cell::new(0)
+           }
+        }
     }
 
     #[glib::object_subclass]
@@ -123,10 +148,10 @@ impl AlbumView {
     pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
         self.setup_sort();
         self.setup_search();
-        self.setup_gridview(library.clone(), cache.clone());
+        self.setup_gridview(library.clone(), client_state.clone(), cache.clone());
 
         let content_view = self.imp().content_view.get();
-        content_view.setup(library.clone(), cache, client_state);
+        content_view.setup(library.clone(), client_state, cache);
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
         });
@@ -386,7 +411,20 @@ impl AlbumView {
         self.imp().nav_view.push_by_tag("content");
     }
 
-    fn setup_gridview(&self, library: Library, cache: Rc<Cache>) {
+    fn setup_gridview(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+        client_state.connect_closure(
+            "album-basic-info-downloaded",
+            false,
+            closure_local!(
+                #[strong(rename_to = this)]
+                self,
+                #[weak]
+                cache,
+                move |_: ClientState, album: Album| {
+                    this.add_album(album, cache);
+                }
+            )
+        );
         // Setup search bar
         let search_bar = self.imp().search_bar.get();
         let search_entry = self.imp().search_entry.get();
@@ -403,7 +441,7 @@ impl AlbumView {
             .build();
 
         // Chain search & sort. Put sort after search to reduce number of sort items.
-        let search_model = gtk::FilterListModel::new(Some(library.albums()), Some(self.imp().search_filter.clone()));
+        let search_model = gtk::FilterListModel::new(Some(self.imp().album_list.clone()), Some(self.imp().search_filter.clone()));
         search_model.set_incremental(true);
         let sort_model = gtk::SortListModel::new(Some(search_model), Some(self.imp().sorter.clone()));
         sort_model.set_incremental(true);
@@ -498,5 +536,15 @@ impl AlbumView {
                 this.on_album_clicked(album, library);
             })
         );
+    }
+
+    fn add_album(&self, album: Album, cache: Rc<Cache>) {
+        cache.ensure_local_album_art(album.get_info());
+        self.imp().album_list.append(&album);
+        // self.imp().album_count.set_label(&self.imp().album_list.n_items().to_string());
+    }
+
+    pub fn clear(&self) {
+        self.imp().album_list.remove_all();
     }
 }

@@ -181,7 +181,7 @@ impl AlbumContentView {
         }
     }
 
-    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
+    pub fn setup(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
         cache.get_cache_state().connect_closure(
             "album-art-downloaded",
             false,

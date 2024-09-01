@@ -340,11 +340,11 @@ impl Player {
         queue.extend_from_slice(songs);
         if let Some(cache) = self.imp().cache.get() {
             let infos: Vec<&AlbumInfo> = songs
-            .into_iter()
-            .map(|song| song.get_album())
-            .filter(|ao| ao.is_some())
-            .map(|info| info.unwrap())
-            .collect();
+                .into_iter()
+                .map(|song| song.get_album())
+                .filter(|ao| ao.is_some())
+                .map(|info| info.unwrap())
+                .collect();
             // Might queue downloads, depending on user settings, but will not
             // actually load anything into memory just yet.
             cache.ensure_local_album_arts(&infos);

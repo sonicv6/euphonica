@@ -82,7 +82,7 @@ mod imp {
             let library = Library::default();
             cache.set_mpd_sender(client_sender.clone());
             player.setup(client_sender.clone(), client_state.clone(), cache.clone());
-            library.setup(client_sender.clone(), client_state, cache.clone());
+            library.setup(client_sender.clone(), cache.clone());
 
             Self {
                 player,

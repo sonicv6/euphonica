@@ -174,10 +174,7 @@ impl AlbumSongRow {
         item
             .property_expression("item")
             .chain_property::<Song>("track")
-            .chain_closure::<String>(closure!(|_: Option<Object>, idx: i64| {
-                idx.to_string()
-            }))
-            .bind(self, "name", gtk::Widget::NONE);
+            .bind(self, "track", gtk::Widget::NONE);
 
         item
             .property_expression("item")

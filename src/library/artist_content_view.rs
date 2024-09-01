@@ -28,7 +28,7 @@ use crate::{
     cache::{
         Cache,
         CacheState
-    }, client::ClientState, common::{Album, Artist, ArtistInfo, Song}
+    }, client::ClientState, common::{Album, AlbumInfo, Artist, ArtistInfo, Song}
 };
 
 mod imp {
@@ -257,10 +257,12 @@ impl ArtistContentView {
             closure_local!(
                 #[weak(rename_to = this)]
                 self,
+                #[weak]
+                cache,
                 move |_: ClientState, name: String, songs: glib::BoxedAnyObject| {
                     if let Some(artist) = this.imp().artist.borrow().as_ref() {
                         if name == artist.get_name() {
-                            this.add_songs(songs.borrow::<Vec<Song>>().as_ref());
+                            this.add_songs(songs.borrow::<Vec<Song>>().as_ref(), cache);
                         }
                     }
                 }
@@ -369,10 +371,12 @@ impl ArtistContentView {
             closure_local!(
                 #[weak(rename_to = this)]
                 self,
+                #[weak]
+                cache,
                 move |_: ClientState, name: String, album: Album| {
                     if let Some(artist) = this.imp().artist.borrow().as_ref() {
                         if name == artist.get_name() {
-                            this.add_album(album);
+                            this.add_album(album, cache);
                         }
                     }
                 }
@@ -497,13 +501,23 @@ impl ArtistContentView {
         self.clear_content();
     }
 
-    fn add_album(&self, album: Album) {
+    fn add_album(&self, album: Album, cache: Rc<Cache>) {
         self.imp().album_list.append(&album);
+        cache.ensure_local_album_art(album.get_info());
         self.imp().album_count.set_label(&self.imp().album_list.n_items().to_string());
     }
 
-    pub fn add_songs(&self, songs: &[Song]) {
+    pub fn add_songs(&self, songs: &[Song], cache: Rc<Cache>) {
         self.imp().song_list.extend_from_slice(songs);
+        let infos: Vec<&AlbumInfo> = songs
+            .into_iter()
+            .map(|song| song.get_album())
+            .filter(|ao| ao.is_some())
+            .map(|info| info.unwrap())
+            .collect();
+        // Might queue downloads, depending on user settings, but will not
+        // actually load anything into memory just yet.
+        cache.ensure_local_album_arts(&infos);
         self.imp().song_count.set_label(&self.imp().song_list.n_items().to_string());
     }
 

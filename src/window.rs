@@ -18,19 +18,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cell::{RefCell};
+use std::cell::RefCell;
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
     gio,
     glib
 };
-use glib::{
-    signal::SignalHandlerId
-};
+use glib::signal::SignalHandlerId;
 use crate::{
     utils,
-    client::{ConnectionState},
+    client::ConnectionState,
     application::EuphoniaApplication,
     player::{QueueView, PlayerBar},
     library::{AlbumView, ArtistView},
