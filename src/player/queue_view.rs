@@ -110,11 +110,11 @@ impl QueueView {
 
         // Create an empty `QueueRow` during setup
         factory.connect_setup(move |_, list_item| {
-            let queue_row = QueueRow::new();
-            list_item
+            let item = list_item
                 .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .set_child(Some(&queue_row));
+                .expect("Needs to be ListItem");
+            let queue_row = QueueRow::new(&item);
+            item.set_child(Some(&queue_row));
         });
         // Tell factory how to bind `QueueRow` to one of our Song GObjects
         factory.connect_bind(clone!(

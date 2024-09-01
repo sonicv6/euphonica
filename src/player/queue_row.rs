@@ -13,7 +13,6 @@ use gtk::{
 use glib::{
     closure_local,
     Object,
-    Binding,
     signal::SignalHandlerId
 };
 
@@ -22,7 +21,7 @@ use crate::{
         placeholders::ALBUMART_PLACEHOLDER,
         Cache, CacheState
     },
-    common::{AlbumInfo, Song}
+    common::{AlbumInfo, Song}, utils::format_secs_as_duration
 };
 
 // fn ease_in_out_sine(progress: f64) -> f64 {
@@ -30,6 +29,12 @@ use crate::{
 // }
 
 mod imp {
+    use glib::{
+        ParamSpec,
+        ParamSpecString,
+        ParamSpecBoolean
+    };
+    use once_cell::sync::Lazy;
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
@@ -47,9 +52,6 @@ mod imp {
         pub artist_name: TemplateChild<Label>,
         #[template_child]
         pub playing_indicator: TemplateChild<Label>,
-        // Vector holding the bindings to properties of the Song GObject
-        pub bindings: RefCell<Vec<Binding>>,
-        // pub playing_signal_id: RefCell<Option<SignalHandlerId>>,
         pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
         // pub marquee_tick_callback_id: RefCell<Option<TickCallbackId>>,
         // pub marquee_forward: Cell<bool>,
@@ -74,7 +76,76 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    impl ObjectImpl for QueueRow {}
+    impl ObjectImpl for QueueRow {
+        fn properties() -> &'static [ParamSpec] {
+            static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
+                vec![
+                    ParamSpecString::builder("name").build(),
+                    ParamSpecString::builder("artist").build(),
+                    ParamSpecString::builder("album").build(),
+                    ParamSpecBoolean::builder("is-playing").build(),
+                    // ParamSpecString::builder("duration").build(),
+                    // ParamSpecString::builder("quality-grade").build()
+                ]
+            });
+            PROPERTIES.as_ref()
+        }
+
+        fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
+            match pspec.name() {
+                "name" => self.song_name.label().to_value(),
+                "artist" => self.artist_name.label().to_value(),
+                "album" => self.album_name.label().to_value(),
+                "is-playing" => self.playing_indicator.is_visible().to_value(),
+                // "duration" => self.duration.label().to_value(),
+                // "quality-grade" => self.quality_grade.icon_name().to_value(),
+                _ => unimplemented!(),
+            }
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            match pspec.name() {
+                "name" => {
+                    // TODO: Handle no-name case here instead of in Song GObject for flexibility
+                    if let Ok(name) = value.get::<&str>() {
+                        self.song_name.set_label(name);
+                    }
+                }
+                "album" => {
+                    if let Ok(name) = value.get::<&str>() {
+                        self.album_name.set_label(name);
+                    }
+                }
+                "artist" => {
+                    if let Ok(name) = value.get::<&str>() {
+                        self.artist_name.set_label(name);
+                    }
+                }
+                "is-playing" => {
+                    if let Ok(p) = value.get::<bool>() {
+                        self.playing_indicator.set_visible(p);
+                    }
+                }
+                // "duration" => {
+                //     // Pre-formatted please
+                //     if let Ok(dur) = value.get::<&str>() {
+                //         self.duration.set_label(dur);
+                //     }
+                // }
+                // "quality-grade" => {
+                //     if let Ok(icon) = value.get::<&str>() {
+                //         self.quality_grade.set_icon_name(Some(icon));
+                //         self.quality_grade.set_visible(true);
+                //     }
+                //     else {
+                //         self.quality_grade.set_icon_name(None);
+                //         self.quality_grade.set_visible(false);
+                //     }
+                // }
+                _ => unimplemented!(),
+            }
+        }
+    }
 
     // Trait shared by all widgets
     impl WidgetImpl for QueueRow {}
@@ -89,15 +160,42 @@ glib::wrapper! {
     @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
 }
 
-impl Default for QueueRow {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl QueueRow {
-    pub fn new() -> Self {
+    pub fn new(item: &gtk::ListItem) -> Self {
         let res: Self = Object::builder().build();
+        res.setup(item);
+        res
+    }
+
+    #[inline(always)]
+    pub fn setup(&self, item: &gtk::ListItem) {
+        item
+            .property_expression("item")
+            .chain_property::<Song>("name")
+            .bind(self, "name", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("album")
+            .bind(self, "album", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("artist")
+            .bind(self, "artist", gtk::Widget::NONE);
+
+        // item
+        //     .property_expression("item")
+        //     .chain_property::<Song>("duration")
+        //     .chain_closure::<String>(closure_local!(|_: Option<Object>, dur: u64| {
+        //         format_secs_as_duration(dur as f64)
+        //     }))
+        //     .bind(self, "duration", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("is-playing")
+            .bind(self, "is-playing", gtk::Widget::NONE);
 
         // // Bind marquee controller only once here
         // let marquee = res.imp().marquee.get();
@@ -117,8 +215,6 @@ impl QueueRow {
         //     );
         // }));
         // res.add_controller(hover_ctl);
-
-        res
     }
 
     // fn start_marquee(&self) {
@@ -194,13 +290,8 @@ impl QueueRow {
     }
 
     pub fn bind(&self, song: &Song, cache: Rc<Cache>) {
-        // Get state
-        let song_name_label = self.imp().song_name.get();
-        let album_name_label = self.imp().album_name.get();
-        let artist_name_label = self.imp().artist_name.get();
-        let playing_label = self.imp().playing_indicator.get();
-        let mut bindings = self.imp().bindings.borrow_mut();
-
+        // The string properties are bound using property expressions in setup().
+        // Here we only need to manually bind to the cache controller to fetch album art.
         // Set once first (like sync_create)
         self.update_thumbnail(song.get_album(), cache.clone());
         let thumbnail_binding = cache.get_cache_state().connect_closure(
@@ -224,34 +315,6 @@ impl QueueRow {
         );
         self.imp().thumbnail_signal_id.replace(Some(thumbnail_binding));
 
-        let song_name_binding = song
-            .bind_property("name", &song_name_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(song_name_binding);
-
-        let album_name_binding = song
-            .bind_property("album", &album_name_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(album_name_binding);
-
-        let artist_name_binding = song
-            .bind_property("artist", &artist_name_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(artist_name_binding);
-
-        let song_is_playing_binding = song
-            .bind_property("is-playing", &playing_label, "visible")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(song_is_playing_binding);
-
         // Set once first (like sync_create)
         // if song.is_playing() {
         //     self.start_marquee();
@@ -272,10 +335,6 @@ impl QueueRow {
     }
 
     pub fn unbind(&self, cache: Rc<Cache>) {
-        // Unbind all stored bindings
-        for binding in self.imp().bindings.borrow_mut().drain(..) {
-            binding.unbind();
-        }
         if let Some(id) = self.imp().thumbnail_signal_id.take() {
             cache.get_cache_state().disconnect(id);
         }
