@@ -128,6 +128,9 @@ impl MetadataProvider for LastfmWrapper {
 
     /// Schedule getting artist metadata from Last.fm.
     /// A signal will be emitted to notify the caller when the result arrives.
+    /// Note that Last.fm no longer supports fetching artist images (URLs will always return
+    /// a white star on grey background placeholder). For this reason, we will not parse
+    /// artist image URLs.
     fn get_artist_meta(
         &self,
         key: bson::Document,

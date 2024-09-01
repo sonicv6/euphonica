@@ -6,12 +6,12 @@ use super::super::models::{Tag, ImageMeta, ImageSize, Wiki, AlbumMeta, ArtistMet
 // For some reason the taglist resides in a nested "tag" object.
 // Or, for cases with no tags, Last.fm would return an empty string.
 #[derive(Deserialize, Debug)]
-struct NestedTagList {
+pub struct NestedTagList {
     tag: Vec<Tag>,
 }
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-enum TagsHelper {
+pub enum TagsHelper {
     String(String),
     Nested(NestedTagList)
 }
@@ -193,14 +193,15 @@ pub struct LastfmArtist {
     // If queried using mbid, it won't be returned again
     pub mbid: Option<String>,
     pub url: String,
-    pub image: Vec<LastfmImage>,
+    // Do not parse artist URLs - Last.fm no longer allows artist images to be fetched
+    // via their API.
     pub similar: Option<LastfmSimilar>,
     pub tags: TagsHelper,
     pub bio: Option<LastfmWiki>
 }
 
 impl Into<ArtistMeta> for LastfmArtist {
-    fn into(mut self) -> ArtistMeta {
+    fn into(self) -> ArtistMeta {
         let tags: Vec<Tag> = match self.tags {
             TagsHelper::String(_) => Vec::with_capacity(0),
             TagsHelper::Nested(obj) => obj.tag
@@ -212,7 +213,6 @@ impl Into<ArtistMeta> for LastfmArtist {
         else {
             similar = Vec::new();
         }
-        let image: Vec<ImageMeta> = self.image.drain(..).map(LastfmImage::into).collect();
         let bio: Option<Wiki> = match self.bio {
             Some(w) => Some(w.into()),
             None => None
@@ -223,7 +223,7 @@ impl Into<ArtistMeta> for LastfmArtist {
             mbid: self.mbid,
             tags,
             similar,
-            image,
+            image: Vec::with_capacity(0),
             url: Some(self.url),
             bio
         }
