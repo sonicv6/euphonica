@@ -56,10 +56,13 @@ use crate::meta_providers::models::ArtistMeta;
 use super::CacheState;
 
 enum CacheTask {
+    // Separate task since we might just need the textual metadata
+    // (album art can be provided locally)
     AlbumArt(String, bson::Document, PathBuf, PathBuf),
     AlbumMeta(String, bson::Document),
-    ArtistAvatar(bson::Document, PathBuf, PathBuf),
-    ArtistMeta(bson::Document)
+    // Both meta and album art together, since for now we cannot provide artist avatars
+    // locally.
+    ArtistMeta(bson::Document, PathBuf, PathBuf)
 }
 
 pub struct Cache {
@@ -196,7 +199,7 @@ impl Cache {
                                 }
                             )).await;
                         },
-                        CacheTask::ArtistMeta(key) => {
+                        CacheTask::ArtistMeta(key, path, thumbnail_path) => {
                             let _ = gio::spawn_blocking(clone!(
                                 #[strong]
                                 fg_sender,
@@ -209,9 +212,26 @@ impl Cache {
                                     let name = key.get("name").unwrap().as_str().unwrap().to_owned();
                                     let res = providers.read().unwrap().get_artist_meta(key, None);
                                     if let Some(artist) = res {
+                                        // Try to download artist avatar too
+                                        let res = get_best_image(&artist.image);
+                                        if res.is_ok() {
+                                            let (hires, thumbnail) = resize_image(res.unwrap());
+                                            if !path.exists() || !thumbnail_path.exists() {
+                                                if let (Ok(_), Ok(_)) = (
+                                                    hires.save(path),
+                                                    thumbnail.save(thumbnail_path)
+                                                ) {
+                                                    let _ = fg_sender.send_blocking(Metadata::ArtistAvatar(name.clone(), false));
+                                                }
+                                            }
+                                        }
+                                        else {
+                                            println!("[Cache] Failed to download artist avatar: {:?}", res.err());
+                                        }
                                         let _ = doc_cache.write().unwrap().collection::<models::ArtistMeta>("artist").insert_one(artist);
                                         let _ = fg_sender.send_blocking(Metadata::ArtistMeta(name));
                                     }
+
                                     else {
                                         println!("No artist meta could be found for {:?}", &name);
                                     }
@@ -252,38 +272,27 @@ impl Cache {
                             // let path = this.get_path_for(folder_uri, Metadata::AlbumArt(false));
 
                         },
-                        CacheTask::ArtistAvatar(key, path, thumbnail_path) => {
-                            let _ = gio::spawn_blocking(clone!(
-                                #[strong]
-                                fg_sender,
-                                #[strong]
-                                doc_cache,
-                                move || {
-                                    let name = key.get("name").unwrap().as_str().unwrap().to_owned();
-                                    if let Ok(Some(meta)) = doc_cache
-                                        .read()
-                                        .unwrap()
-                                        .collection::<models::ArtistMeta>("artist")
-                                        .find_one(key) {
-                                            let res = get_best_image(&meta.image);
-                                            if res.is_ok() {
-                                                let (hires, thumbnail) = resize_image(res.unwrap());
-                                                if !path.exists() || !thumbnail_path.exists() {
-                                                    if let (Ok(_), Ok(_)) = (
-                                                        hires.save(path),
-                                                        thumbnail.save(thumbnail_path)
-                                                    ) {
-                                                        let _ = fg_sender.send_blocking(Metadata::ArtistAvatar(name, false));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    else {
-                                        println!("Cannot download artist avatar: no local artist meta could be found for {name}");
-                                    }
-                                }
-                            )).await;
-                        }
+                        // CacheTask::ArtistAvatar(key, path, thumbnail_path) => {
+                        //     let _ = gio::spawn_blocking(clone!(
+                        //         #[strong]
+                        //         fg_sender,
+                        //         #[strong]
+                        //         doc_cache,
+                        //         move || {
+                        //             let name = key.get("name").unwrap().as_str().unwrap().to_owned();
+                        //             if let Ok(Some(meta)) = doc_cache
+                        //                 .read()
+                        //                 .unwrap()
+                        //                 .collection::<models::ArtistMeta>("artist")
+                        //                 .find_one(key) {
+
+                        //                 }
+                        //             else {
+                        //                 println!("Cannot download artist avatar: no local artist meta could be found for {name}");
+                        //             }
+                        //         }
+                        //     )).await;
+                        // }
                     };
                     let _ = glib::timeout_future(Duration::from_millis(
                         (settings.double("meta-provider-delay-between-requests-s") * 1000.0) as u64
@@ -546,7 +555,9 @@ impl Cache {
             let result = self.doc_cache.read().unwrap().collection::<ArtistMeta>("artist").find_one(key.clone());
             if let Ok(response) = result {
                 if response.is_none() {
-                    self.bg_sender.send_blocking(CacheTask::ArtistMeta(key));
+                    let path = self.get_path_for(Metadata::ArtistAvatar(artist.name.to_owned(), false));
+                    let thumbnail_path = self.get_path_for(Metadata::ArtistAvatar(artist.name.to_owned(), true));
+                    let _ = self.bg_sender.send_blocking(CacheTask::ArtistMeta(key, path, thumbnail_path));
                 }
                 else {
                     println!("Artist info already cached, won't download again");
