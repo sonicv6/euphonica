@@ -101,13 +101,6 @@ impl LibraryPreferences {
         // Setup artist section
         let artist_delims_buf = imp.artist_delims.buffer();
         let artist_delims_apply = imp.artist_delims_apply.get();
-        artist_delims_buf.connect_changed(clone!(
-            #[weak]
-            artist_delims_apply,
-            move |_| {
-                artist_delims_apply.set_sensitive(true);
-            }
-        ));
         artist_delims_buf.set_text(
             &library_settings
                 .value("artist-tag-delims")
@@ -116,6 +109,13 @@ impl LibraryPreferences {
                 .collect::<Vec<&str>>()
                 .join("\n")
         );
+        artist_delims_buf.connect_changed(clone!(
+            #[weak]
+            artist_delims_apply,
+            move |_| {
+                artist_delims_apply.set_sensitive(true);
+            }
+        ));
         artist_delims_apply.connect_clicked(clone!(
             #[weak]
             library_settings,
@@ -143,13 +143,6 @@ impl LibraryPreferences {
 
         let artist_excepts_buf = imp.artist_excepts.buffer();
         let artist_excepts_apply = imp.artist_delims_apply.get();
-        artist_excepts_buf.connect_changed(clone!(
-            #[weak]
-            artist_excepts_apply,
-            move |_| {
-                artist_excepts_apply.set_sensitive(true);
-            }
-        ));
         artist_excepts_buf.set_text(
             &library_settings
                 .value("artist-tag-delim-exceptions")
@@ -158,6 +151,13 @@ impl LibraryPreferences {
                 .collect::<Vec<&str>>()
                 .join("\n")
         );
+        artist_excepts_buf.connect_changed(clone!(
+            #[weak]
+            artist_excepts_apply,
+            move |_| {
+                artist_excepts_apply.set_sensitive(true);
+            }
+        ));
         artist_excepts_apply.connect_clicked(clone!(
             #[weak]
             library_settings,
