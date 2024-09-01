@@ -1,15 +1,30 @@
 use chrono::NaiveDate;
 use musicbrainz_rs::{
     entity::{
-        artist::{Artist, ArtistType, Gender},
-        release::Release,
-        tag::Tag
+        artist::{Artist, ArtistType, Gender}, relations::RelationContent, release::Release, tag::Tag
     }, prelude::*
 };
+use crate::meta_providers::models::{ImageMeta, ImageSize};
+
 use super::super::{
     models,
     prelude::*
 };
+
+fn transform_wikimedia_url(url: &str) -> Option<String> {
+    // MusicBrainz relations cannot contain direct links, so we'll have to extract one ourselves.
+    // For now hardcoding downloaded size to 256px wide. Images are usually in portrait orientation
+    // so this should work fine.
+    if let Some(file_name) = url.strip_prefix("https://commons.wikimedia.org/wiki/File:") {
+        let transformed_url = format!(
+            "https://commons.wikimedia.org/w/thumb.php?f={}&w=256",
+            file_name
+        );
+        return Some(transformed_url);
+    }
+    None
+}
+
 
 impl From<Tag> for models::Tag {
     fn from(mbtag: Tag) -> Self {
@@ -96,13 +111,32 @@ impl From<Artist> for models::ArtistMeta {
             begin_date = None;
             end_date = None;
         }
+        // Currently we only support downloading images via the "image" relation type.
+        let mut image: Vec<ImageMeta> = Vec::new();
+        if let Some(relations) = artist.relations {
+            for relation in relations.into_iter() {
+                if relation.relation_type == "image" || relation.relation_type == "picture" {
+                    match relation.content {
+                        RelationContent::Url(url) => {
+                            if let Some(direct) = transform_wikimedia_url(&url.resource) {
+                                image.push(ImageMeta {
+                                    size: ImageSize::Large,
+                                    url: direct
+                                });
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+            }
+        }
 
         Self {
             name: artist.name,
             tags,
             mbid: Some(artist.id.clone()),
             similar: Vec::new(),
-            image: Vec::new(),
+            image,
             url: Some(format!("https://musicbrainz.org/artist/{}", artist.id)),
             bio: None,
             artist_type: artist.artist_type.unwrap_or(ArtistType::Other),

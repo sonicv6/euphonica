@@ -33,6 +33,7 @@ impl MetadataProvider for MusicBrainzWrapper {
             println!("[MusicBrainz] Fetching release by MBID: {}", &mbid);
             let res = Release::fetch()
                 .id(mbid.as_str().unwrap())
+                .with_artist_credits()
                 .execute();
             if let Ok(release) = res {
                 let new: models::AlbumMeta = release.into();
@@ -58,7 +59,9 @@ impl MetadataProvider for MusicBrainzWrapper {
                     .release(title.as_str().unwrap())
                     .artist(artist.as_str().unwrap())
                     .build()
-            ).execute();
+            )
+                .with_artist_credits()
+                .execute();
 
             if let Ok(found) = res {
                 if let Some(first) = found.entities.into_iter().nth(0) {
@@ -98,6 +101,7 @@ impl MetadataProvider for MusicBrainzWrapper {
             println!("[MusicBrainz] Fetching artist by MBID: {}", &mbid);
             let res = Artist::fetch()
                 .id(mbid.as_str().unwrap())
+                .with_url_relations()
                 .execute();
             if let Ok(artist) = res {
                 let new: models::ArtistMeta = artist.into();
@@ -121,7 +125,9 @@ impl MetadataProvider for MusicBrainzWrapper {
                 ArtistSearchQuery::query_builder()
                     .artist(name.as_str().unwrap())
                     .build()
-            ).execute();
+            )
+                .with_url_relations()
+                .execute();
 
             if let Ok(found) = res {
                 if let Some(first) = found.entities.into_iter().nth(0) {
