@@ -48,8 +48,8 @@ pub fn parse_mb_artist_tag<'a>(input: &'a str) -> Vec<&'a str> {
     let mut buffer: String = input.to_owned();
     // println!("Original buffer len: {}", buffer.len());
     if let (Some(exc_ac), Some(delim_ac)) = (
-        &*ARTIST_DELIM_EXCEPTION_AUTOMATON,
-        &*ARTIST_DELIM_AUTOMATON
+        &*ARTIST_DELIM_EXCEPTION_AUTOMATON.read().unwrap(),
+        &*ARTIST_DELIM_AUTOMATON.read().unwrap()
     ) {
         // Step 1: extract exceptions out first
         let mut found_artists: Vec<&str> = Vec::new();

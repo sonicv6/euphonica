@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
 use std::{
+    sync::RwLock,
     hash::Hash,
     io::Cursor
 };
@@ -198,8 +199,16 @@ pub fn deduplicate<T: Eq + Hash + Clone>(input: &[T]) -> Vec<T> {
 // Changes in delimiters and exceptions require restarting.
 // TODO: Might want to research memoisation so we can rebuild these automatons upon
 // changing settings.
-pub static ARTIST_DELIM_AUTOMATON: Lazy<Option<AhoCorasick>> = Lazy::new(|| {
-    println!("Initialising Aho-Corasick automaton for artist tag delimiters...");
+pub fn build_aho_corasick_automaton(phrases: &[&str]) -> Option<AhoCorasick> {
+    if phrases.is_empty() {
+        None
+    }
+    else {
+        println!("[AhoCorasick] Configured to detect the following: {:?}", phrases);
+        Some(AhoCorasick::new(phrases).unwrap())
+    }
+}
+fn build_artist_delim_automaton() -> Option<AhoCorasick> {
     let setting = settings_manager()
         .child("library")
         .value("artist-tag-delims");
@@ -207,17 +216,9 @@ pub static ARTIST_DELIM_AUTOMATON: Lazy<Option<AhoCorasick>> = Lazy::new(|| {
         .array_iter_str()
         .unwrap()
         .collect();
-    if delims.is_empty() {
-        None
-    }
-    else {
-        println!("Configured to use the following as delimiters: {:?}", &delims);
-        Some(AhoCorasick::new(delims).unwrap())
-    }
-});
-
-pub static ARTIST_DELIM_EXCEPTION_AUTOMATON: Lazy<Option<AhoCorasick>> = Lazy::new(|| {
-    println!("Initialising Aho-Corasick automaton for artist tag delimiter exceptions...");
+    build_aho_corasick_automaton(&delims)
+}
+fn build_artist_delim_exceptions_automaton() -> Option<AhoCorasick> {
     let setting = settings_manager()
         .child("library")
         .value("artist-tag-delim-exceptions");
@@ -225,11 +226,33 @@ pub static ARTIST_DELIM_EXCEPTION_AUTOMATON: Lazy<Option<AhoCorasick>> = Lazy::n
         .array_iter_str()
         .unwrap()
         .collect();
-    if excepts.is_empty() {
-        None
-    }
-    else {
-        println!("Excluding the following from being split by delimiters: {:?}", &excepts);
-        Some(AhoCorasick::new(excepts).unwrap())
-    }
+    build_aho_corasick_automaton(&excepts)
+}
+
+pub static ARTIST_DELIM_AUTOMATON: Lazy<RwLock<Option<AhoCorasick>>> = Lazy::new(|| {
+    println!("Initialising Aho-Corasick automaton for artist tag delimiters...");
+    let opt_automaton = build_artist_delim_automaton();
+    RwLock::new(opt_automaton)
 });
+
+pub fn rebuild_artist_delim_automaton() {
+    if let Ok(mut automaton) = ARTIST_DELIM_AUTOMATON.write() {
+        println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
+        let new = build_artist_delim_automaton();
+        *automaton = new;
+    }
+}
+
+pub static ARTIST_DELIM_EXCEPTION_AUTOMATON: Lazy<RwLock<Option<AhoCorasick>>> = Lazy::new(|| {
+    println!("Initialising Aho-Corasick automaton for artist tag delimiter exceptions...");
+    let opt_automaton = build_artist_delim_exceptions_automaton();
+    RwLock::new(opt_automaton)
+});
+
+pub fn rebuild_artist_delim_exception_automaton() {
+    if let Ok(mut automaton) = ARTIST_DELIM_EXCEPTION_AUTOMATON.write() {
+        println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
+        let new = build_artist_delim_exceptions_automaton();
+        *automaton = new;
+    }
+}
