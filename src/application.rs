@@ -217,7 +217,8 @@ impl EuphoniaApplication {
         let window = self.active_window().unwrap();
         let prefs = Preferences::new(
             self.imp().sender.clone(),
-            self.imp().client.clone().get_client_state()
+            self.imp().client.clone().get_client_state(),
+            self.imp().cache.clone()
         );
         prefs.present(Some(&window));
     }

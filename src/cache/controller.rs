@@ -102,6 +102,19 @@ impl fmt::Debug for Cache {
     }
 }
 
+fn init_meta_provider_chain() -> MetadataChain {
+    let mut providers = MetadataChain::new(0);
+    providers.providers = settings_manager()
+        .child("metaprovider")
+        .value("order")
+        .array_iter_str()
+        .unwrap()
+        .enumerate()
+        .map(|(prio, key)| get_provider_with_priority(key, prio as u32))
+        .collect();
+    providers
+}
+
 impl Cache {
     pub fn new(
         app_cache_path: &PathBuf
@@ -128,15 +141,8 @@ impl Cache {
         // TODO: figure out cost of textures based on user-selectable resolution
         let mut doc_path = app_cache_path.clone();
 
-        let mut providers = MetadataChain::new(0);
-        providers.providers = settings_manager()
-            .child("metaprovider")
-            .value("order")
-            .array_iter_str()
-            .unwrap()
-            .enumerate()
-            .map(|(prio, key)| get_provider_with_priority(key, prio as u32))
-            .collect();
+        let providers = init_meta_provider_chain();
+
         doc_path.push("metadata.polodb");
         let cache = Self {
             albumart_path,
@@ -156,6 +162,12 @@ impl Cache {
 
         res.clone().setup_channel(bg_receiver, fg_sender, fg_receiver);
         res
+    }
+    /// Re-initialise list of providers when priority order is changed
+    pub fn reinit_meta_providers(&self) {
+        println!("Reinitialising metadata providers...");
+        let mut curr_providers = self.meta_providers.write().unwrap();
+        *curr_providers = init_meta_provider_chain();
     }
 
     pub fn set_mpd_sender(&self, sender: Sender<MpdMessage>) {

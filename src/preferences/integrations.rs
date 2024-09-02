@@ -1,14 +1,17 @@
+use std::rc::Rc;
+use std::cell::OnceCell;
 use adw::subclass::prelude::*;
 use adw::prelude::*;
 use gtk::{
     glib, CompositeTemplate
 };
 
-use crate::utils;
+use crate::{cache::Cache, utils};
 
 use super::ProviderRow;
 
 mod imp {
+
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
@@ -25,7 +28,8 @@ mod imp {
         pub musicbrainz_download_artist_avatar: TemplateChild<adw::SwitchRow>,
 
         #[template_child]
-        pub order_box: TemplateChild<gtk::ListBox>
+        pub order_box: TemplateChild<gtk::ListBox>,
+        pub cache: OnceCell<Rc<Cache>>
     }
 
     #[glib::object_subclass]
@@ -62,7 +66,8 @@ impl Default for IntegrationsPreferences {
 }
 
 impl IntegrationsPreferences {
-    pub fn setup(&self) {
+    pub fn setup(&self, cache: Rc<Cache>) {
+        let _ = self.imp().cache.set(cache);
         let imp = self.imp();
         // Populate with current gsettings values
         let settings = utils::settings_manager();
@@ -163,9 +168,9 @@ impl IntegrationsPreferences {
             .into_iter()
             .map(|elem| elem.1)
             .collect();
-        let res = utils::settings_manager().child("metaprovider").set_value("order", &key_array.to_variant());
-        if res.is_err() {
-            panic!();
+        let _ = utils::settings_manager().child("metaprovider").set_value("order", &key_array.to_variant());
+        if let Some(cache) = self.imp().cache.get() {
+            cache.reinit_meta_providers();
         }
     }
 
