@@ -51,7 +51,10 @@ use crate::{
     },
     utils::{resize_image, settings_manager}
 };
-use crate::meta_providers::models::ArtistMeta;
+use crate::meta_providers::{
+    models::ArtistMeta,
+    get_provider_with_priority
+};
 
 use super::CacheState;
 
@@ -125,12 +128,15 @@ impl Cache {
         // TODO: figure out cost of textures based on user-selectable resolution
         let mut doc_path = app_cache_path.clone();
 
-        let mut providers = MetadataChain::new();
-        // TODO: Allow user reordering
-        providers.providers = vec![
-            Box::new(MusicBrainzWrapper::new()),
-            Box::new(LastfmWrapper::new())
-        ];
+        let mut providers = MetadataChain::new(0);
+        providers.providers = settings_manager()
+            .child("metaprovider")
+            .value("order")
+            .array_iter_str()
+            .unwrap()
+            .enumerate()
+            .map(|(prio, key)| get_provider_with_priority(key, prio as u32))
+            .collect();
         doc_path.push("metadata.polodb");
         let cache = Self {
             albumart_path,
@@ -176,7 +182,7 @@ impl Cache {
                 // See Receiver::next doc for why this is needed.
                 let mut receiver = std::pin::pin!(bg_receiver);
 
-                let settings = settings_manager().child("client");
+                let settings = settings_manager().child("metaprovider");
                 while let Some(request) = receiver.next().await {
                     match request {
                         CacheTask::AlbumMeta(folder_uri, key) => {
@@ -295,7 +301,7 @@ impl Cache {
                         // }
                     };
                     let _ = glib::timeout_future(Duration::from_millis(
-                        (settings.double("meta-provider-delay-between-requests-s") * 1000.0) as u64
+                        (settings.double("delay-between-requests-s") * 1000.0) as u64
                     )).await;
                 }
             }

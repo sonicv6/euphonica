@@ -1,5 +1,7 @@
 extern crate bson;
 
+use std::sync::RwLock;
+
 use reqwest::{
     blocking::{Client, Response},
     header::USER_AGENT
@@ -8,18 +10,19 @@ use gtk::prelude::*;
 
 use crate::{
     config::APPLICATION_USER_AGENT,
-    utils::settings_manager
+    utils::meta_provider_settings
 };
 
-use super::super::{
+use super::{super::{
     models, prelude::*, MetadataProvider
-};
+}, PROVIDER_KEY};
 use super::models::{LastfmAlbumResponse, LastfmArtistResponse};
 
 pub const API_ROOT: &str = "http://ws.audioscrobbler.com/2.0";
 
 pub struct LastfmWrapper {
-    client: Client
+    client: Client,
+    priority: RwLock<u32>
 }
 
 impl LastfmWrapper {
@@ -28,8 +31,8 @@ impl LastfmWrapper {
         method: &str,
         params: &[(&str, String)]
     ) -> Option<Response> {
-        let settings = settings_manager().child("client");
-        let key = settings.string("lastfm-api-key").to_string();
+        let settings = meta_provider_settings(PROVIDER_KEY);
+        let key = settings.string("api-key").to_string();
         // Return None if there is no API key specified.
         if !key.is_empty() {
             println!("Last.fm: calling `{}` with query {:?}", method, params);
@@ -53,10 +56,24 @@ impl LastfmWrapper {
 }
 
 impl MetadataProvider for LastfmWrapper {
-    fn new() -> Self {
+    fn new(prio: u32) -> Self {
         Self {
-            client: Client::new()
+            client: Client::new(),
+            priority: RwLock::new(prio)
         }
+    }
+
+    fn key(&self) -> &'static str {
+        PROVIDER_KEY
+    }
+
+    fn priority(&self) -> u32 {
+        *self.priority.read().expect("Poisoned RwLock")
+    }
+
+    fn set_priority(&self, prio: u32) {
+        let mut this_prio = self.priority.write().expect("Poisoned RwLock");
+        *this_prio = prio;
     }
 
     /// Schedule getting album metadata from Last.fm.

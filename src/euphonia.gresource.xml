@@ -24,6 +24,8 @@
 
 		<file preprocess="xml-stripblanks">gtk/preferences/dialog.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences/client.ui</file>
+		<file preprocess="xml-stripblanks">gtk/preferences/integrations.ui</file>
+		<file preprocess="xml-stripblanks">gtk/preferences/provider-row.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences/library.ui</file>
 		<file preprocess="xml-stripblanks">gtk/preferences/player.ui</file>
 
@@ -42,6 +44,7 @@
 		<file preprocess="xml-stripblanks" alias="left-symbolic.svg">gtk/icons/left-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="right-symbolic.svg">gtk/icons/right-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="month-symbolic.svg">gtk/icons/month-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="globe-symbolic.svg">gtk/icons/globe-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="skip-backward-large-symbolic.svg">gtk/icons/skip-backward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-large-symbolic.svg">gtk/icons/play-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="play-symbolic.svg">gtk/icons/play-symbolic.svg</file>

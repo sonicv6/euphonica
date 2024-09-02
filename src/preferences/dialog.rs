@@ -11,6 +11,7 @@ use crate::client::{MpdMessage, ClientState};
 
 use super::{
     ClientPreferences,
+    IntegrationsPreferences,
     LibraryPreferences,
     PlayerPreferences
 };
@@ -23,6 +24,9 @@ mod imp {
     pub struct Preferences {
         #[template_child]
         pub client_tab: TemplateChild<ClientPreferences>,
+
+        #[template_child]
+        pub integrations_tab: TemplateChild<IntegrationsPreferences>,
 
         #[template_child]
         pub library_tab: TemplateChild<LibraryPreferences>,
@@ -74,6 +78,7 @@ impl Preferences {
         res.imp().client_tab.get().setup(sender, client_state);
         res.imp().library_tab.get().setup();
         res.imp().player_tab.get().setup();
+        res.imp().integrations_tab.get().setup();
 
         res
     }

@@ -148,6 +148,7 @@ impl LibraryPreferences {
                 .value("artist-tag-delim-exceptions")
                 .array_iter_str()
                 .unwrap()
+
                 .collect::<Vec<&str>>()
                 .join("\n")
         );
@@ -164,7 +165,7 @@ impl LibraryPreferences {
             #[weak]
             artist_excepts_buf,
             move |btn| {
-                library_settings.set_value(
+                let _ = library_settings.set_value(
                     "artist-tag-delim-exceptions",
                     &artist_excepts_buf
                         .text(

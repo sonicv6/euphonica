@@ -29,18 +29,7 @@ mod imp {
         #[template_child]
         pub reconnect: TemplateChild<gtk::Button>,
         #[template_child]
-        pub mpd_download_album_art: TemplateChild<adw::SwitchRow>,
-
-        #[template_child]
-        pub use_lastfm: TemplateChild<adw::SwitchRow>,
-        #[template_child]
-        pub lastfm_key: TemplateChild<adw::EntryRow>,
-        #[template_child]
-        pub lastfm_user_agent: TemplateChild<adw::EntryRow>,
-        #[template_child]
-        pub lastfm_download_album_art: TemplateChild<adw::SwitchRow>,
-        #[template_child]
-        pub lastfm_download_artist_avatar: TemplateChild<adw::SwitchRow>
+        pub mpd_download_album_art: TemplateChild<adw::SwitchRow>
     }
 
     #[glib::object_subclass]
@@ -165,59 +154,6 @@ impl ClientPreferences {
             .bind(
                 "mpd-download-album-art",
                 &mpd_download_album_art,
-                "active"
-            )
-            .build();
-
-        // Set up Last.fm settings
-        let use_lastfm = imp.use_lastfm.get();
-        conn_settings
-            .bind(
-                "use-lastfm",
-                &use_lastfm,
-                "active"
-            )
-            .build();
-        let lastfm_key = imp.lastfm_key.get();
-        let lastfm_download_album_art = imp.lastfm_download_album_art.get();
-        let lastfm_download_artist_avatar = imp.lastfm_download_artist_avatar.get();
-        // let lastfm_username = imp.lastfm_username.get();
-        for widget in [
-            &lastfm_key.clone().upcast::<gtk::Widget>(),
-            // &lastfm_user_agent.clone().upcast::<gtk::Widget>(),
-            &lastfm_download_album_art.clone().upcast::<gtk::Widget>(),
-            &lastfm_download_artist_avatar.clone().upcast::<gtk::Widget>()
-        ] {
-            use_lastfm
-                .bind_property(
-                    "active",
-                    widget,
-                    "sensitive"
-                )
-                .sync_create()
-                .build();
-        }
-
-        conn_settings
-            .bind(
-                "lastfm-api-key",
-                &lastfm_key,
-                "text"
-            )
-            .build();
-
-        conn_settings
-            .bind(
-                "lastfm-download-album-art",
-                &lastfm_download_album_art,
-                "active"
-            )
-            .build();
-
-        conn_settings
-            .bind(
-                "lastfm-download-artist-avatar",
-                &lastfm_download_artist_avatar,
                 "active"
             )
             .build();

@@ -1,6 +1,9 @@
+use gtk::prelude::SettingsExt;
 use musicbrainz_rs::entity::artist::ArtistType;
 use serde::Deserialize;
-use super::super::models::{Tag, ImageMeta, ImageSize, Wiki, AlbumMeta, ArtistMeta};
+use crate::utils::meta_provider_settings;
+
+use super::{super::models::{AlbumMeta, ArtistMeta, ImageMeta, ImageSize, Tag, Wiki}, PROVIDER_KEY};
 // Last.fm JSON structs, for deserialising API responses only.
 // Widgets should use the standard structs defined in the supercrate's models.rs.
 
@@ -130,7 +133,13 @@ impl From<LastfmAlbum> for AlbumMeta {
             TagsHelper::String(_) => Vec::with_capacity(0),
             TagsHelper::Nested(obj) => obj.tag
         };
-        let image: Vec<ImageMeta> = lfm.image.drain(0..).map(LastfmImage::into).collect();
+        let image: Vec<ImageMeta>;
+        if meta_provider_settings(PROVIDER_KEY).boolean("download-album-art") {
+            image = lfm.image.drain(0..).map(LastfmImage::into).collect();
+        }
+        else {
+            image = Vec::with_capacity(0);
+        }
         let wiki: Option<Wiki> = match lfm.wiki {
             Some(w) => Some(w.into()),
             None => None

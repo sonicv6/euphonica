@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<requires lib="gtk" version="4.0" />
+	<requires lib="Adw" version="1.0" />
+	<template class="EuphoniaIntegrationsPreferences" parent="AdwPreferencesPage">
+    <property name="title" translatable="true">Integrations</property>
+		<property name="icon-name">globe-symbolic</property>
+
+		<child>
+			<object class="AdwPreferencesGroup">
+				<property name="title" translatable="true">Last.fm</property>
+				<property name="description" translatable="true">You can optionally connect to Last.fm to fetch additional information, such as album wikis and artist bios.</property>
+				<child>
+					<object class="AdwEntryRow" id="lastfm_key">
+						<property name="title" translatable="true">API key</property>
+						<property name="sensitive">false</property>
+					</object>
+				</child>
+        <child>
+					<object class="AdwSwitchRow" id="lastfm_download_album_art">
+						<property name="title" translatable="true">Download album arts</property>
+            <property name="subtitle" translatable="true">Album arts downloaded from external sources will only be applied locally.</property>
+					</object>
+				</child>
+			</object>
+		</child>
+
+		<child>
+			<object class="AdwPreferencesGroup">
+				<property name="title" translatable="true">MusicBrainz</property>
+				<property name="description" translatable="true">MusicBrainz provides detailed information on releases (albums) and artists. Euphonia also supports fetching artist avatars as long as they are Wikimedia links listed as a "picture" relation.</property>
+        <child>
+					<object class="AdwSwitchRow" id="musicbrainz_download_album_art">
+						<property name="title" translatable="true">Download album arts</property>
+            <property name="subtitle" translatable="true">Album arts downloaded from external sources will only be applied locally.</property>
+					</object>
+				</child>
+				<child>
+					<object class="AdwSwitchRow" id="musicbrainz_download_artist_avatar">
+						<property name="title" translatable="true">Download artist avatars</property>
+            <property name="subtitle" translatable="true">Artist avatars will only be applied locally.</property>
+					</object>
+				</child>
+			</object>
+		</child>
+
+		<child>
+			<object class="AdwPreferencesGroup">
+				<property name="title" translatable="true">Metadata provider priority</property>
+				<property name="description" translatable="true">Metadata providers can be daisy-chained. Providers earlier in the chain take precedence, filling in fields first. Later providers can fill in the blanks or add to list-type fields (e.g., tags). Results from earlier providers can also help improve the accuracy &amp;amp; hit rate of later ones.</property>
+				<child>
+					<object class="GtkListBox" id="order_box">
+						<property name="hexpand">true</property>
+            <property name="valign">1</property>
+            <property name="selection-mode">0</property>
+						<style>
+              <class name="boxed-list"/>
+            </style>
+					</object>
+				</child>
+			</object>
+		</child>
+  </template>
+</interface>

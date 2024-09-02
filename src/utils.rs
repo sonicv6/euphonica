@@ -17,10 +17,17 @@ use gtk::Ordering;
 use crate::config::APPLICATION_ID;
 use mpd::status::AudioFormat;
 
+/// Get GSettings for the entire application.
 pub fn settings_manager() -> gio::Settings {
     // Trim the .Devel suffix if exists
     let app_id = APPLICATION_ID.trim_end_matches(".Devel");
     gio::Settings::new(app_id)
+}
+
+/// Shortcut to a metadata provider's settings.
+pub fn meta_provider_settings(key: &str) -> gio::Settings {
+    // Trim the .Devel suffix if exists
+    settings_manager().child("metaprovider").child(key)
 }
 
 pub fn format_secs_as_duration(seconds: f64) -> String {

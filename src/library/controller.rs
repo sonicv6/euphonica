@@ -101,10 +101,8 @@ impl Library {
     /// UI will get notified of result later if one does arrive late).
     /// TODO: implement provider daisy-chaining on the cache side
     pub fn init_album(&self, album: Album) {
-        if settings_manager().child("client").boolean("use-lastfm") {
-            if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_album_meta(album.get_info());
-            }
+        if let Some(cache) = self.imp().cache.get() {
+            cache.ensure_local_album_meta(album.get_info());
         }
         if let Some(sender) = self.imp().sender.get() {
             let _ = sender.send_blocking(MpdMessage::AlbumContent(album.get_title().to_owned()));

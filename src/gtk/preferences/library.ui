@@ -36,6 +36,9 @@
 						<property name="subtitle" translatable="true">Terms used to separate artists in your tags. Specify one on each line. Tip: use leading and trailing spaces to avoid matching between words.</property>
 						<child>
 							<object class="GtkListBoxRow">
+								<style>
+									<class name="padding-0"/>
+								</style>
 								<child>
 									<object class="GtkScrolledWindow">
 										<property name="hexpand">true</property>
@@ -71,6 +74,9 @@
 						<property name="subtitle" translatable="true">In case some artist names would be split by the above delimiters, place them here. For example, "Simon &amp;amp; Garfunkel" will need to be specified here if the ampersand is one of our delimiters.</property>
 						<child>
 							<object class="GtkListBoxRow">
+								<style>
+									<class name="padding-0"/>
+								</style>
 								<child>
 									<object class="GtkScrolledWindow">
 										<property name="hexpand">true</property>

@@ -10,6 +10,9 @@
 			<object class="EuphoniaClientPreferences" id="client_tab"/>
 		</child>
 		<child>
+			<object class="EuphoniaIntegrationsPreferences" id="integrations_tab"/>
+		</child>
+		<child>
 			<object class="EuphoniaLibraryPreferences" id="library_tab"/>
 		</child>
 		<child>

@@ -4,7 +4,10 @@ pub mod models;
 pub mod lastfm;
 pub mod musicbrainz;
 
-pub use chain::MetadataChain;
+pub use chain::{
+    MetadataChain,
+    get_provider_with_priority
+};
 pub use base::{MetadataProvider, Metadata, utils};
 
 pub mod prelude {

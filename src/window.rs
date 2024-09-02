@@ -63,7 +63,7 @@ mod imp {
         // Sidebar
         // TODO: Replace with Libadwaita spinner when v1.6 hits stable
         #[template_child]
-        pub logo_stack: TemplateChild<gtk::Stack>,
+        pub busy_spinner: TemplateChild<gtk::Spinner>,
         #[template_child]
         pub title: TemplateChild<adw::WindowTitle>,
         #[template_child]
@@ -102,7 +102,7 @@ mod imp {
                 queue_view: TemplateChild::default(),
                 stack: TemplateChild::default(),
                 title: TemplateChild::default(),
-                logo_stack: TemplateChild::default(),
+                busy_spinner: TemplateChild::default(),
                 sidebar: TemplateChild::default(),
                 player_bar: TemplateChild::default(),
                 notify_position_id: RefCell::new(None),
@@ -122,8 +122,8 @@ mod imp {
 glib::wrapper! {
     pub struct EuphoniaWindow(ObjectSubclass<imp::EuphoniaWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
-        adw::ApplicationWindow,
-        @implements gio::ActionGroup, gio::ActionMap;
+    adw::ApplicationWindow,
+    @implements gio::ActionGroup, gio::ActionMap;
 }
 
 impl EuphoniaWindow {
@@ -181,7 +181,7 @@ impl EuphoniaWindow {
         let client = self.downcast_application().get_client();
         let state = client.get_client_state();
         let title = self.imp().title.get();
-        let logo_stack = self.imp().logo_stack.get();
+        let spinner = self.imp().busy_spinner.get();
         state
             .bind_property(
                 "connection-state",
@@ -202,12 +202,9 @@ impl EuphoniaWindow {
         state
             .bind_property(
                 "busy",
-                &logo_stack,
-                "visible-child-name"
+                &spinner,
+                "visible"
             )
-            .transform_to(|_, busy: bool| {
-                if busy { return Some("spinner") } Some("logo")
-            })
             .sync_create()
             .build();
 	}

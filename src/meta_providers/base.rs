@@ -60,17 +60,31 @@ pub mod utils {
 }
 
 pub trait MetadataProvider: Send + Sync {
-    fn new() -> Self where Self: Sized;
+    /// Create a new instance of this metadata provider with the given priority. A priority of 0 is the highest
+    /// & indicates the first provider to be called.
+    fn new(prio: u32) -> Self where Self: Sized;
+
+    /// Get an identifier of this metadata provider. This name must be unique & also used to name the corresponding
+    /// child GSettings schema. For this reason, it must be all lowercase alphabetical letters.
+    fn key(&self) -> &'static str;
+
+    /// Get priority of this provider.
+    fn priority(&self) -> u32;
+
+    /// Set priority of this provider.
+    fn set_priority(&self, prio: u32);
+
     /// Get textual metadata that wouldn't be available as song tags, such as wiki, producer name,
     /// etc. A new AlbumMeta object containing data from both the existing AlbumMeta and newly fetched data. New
     /// data will always overwrite existing fields.
     fn get_album_meta(
-        self: &Self, key: bson::Document, existing: Option<models::AlbumMeta>
+        &self, key: bson::Document, existing: Option<models::AlbumMeta>
     ) -> Option<models::AlbumMeta>;
+
     /// Get textual metadata about an artist, such as biography, DoB, etc.
     /// A new ArtistMeta object containing data from both the existing ArtistMeta and newly fetched data. New
     /// data will always overwrite existing fields.
     fn get_artist_meta(
-        self: &Self, key: bson::Document, existing: Option<models::ArtistMeta>
+        &self, key: bson::Document, existing: Option<models::ArtistMeta>
     ) -> Option<models::ArtistMeta>;
 }

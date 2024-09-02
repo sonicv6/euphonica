@@ -1,15 +1,16 @@
 use chrono::NaiveDate;
+use gtk::prelude::SettingsExt;
 use musicbrainz_rs::{
     entity::{
         artist::{Artist, ArtistType, Gender}, relations::RelationContent, release::Release, tag::Tag
     }, prelude::*
 };
-use crate::meta_providers::models::{ImageMeta, ImageSize};
+use crate::{meta_providers::models::{ImageMeta, ImageSize}, utils::meta_provider_settings};
 
-use super::super::{
+use super::{super::{
     models,
     prelude::*
-};
+}, PROVIDER_KEY};
 
 fn transform_wikimedia_url(url: &str) -> Option<String> {
     // MusicBrainz relations cannot contain direct links, so we'll have to extract one ourselves.
@@ -112,23 +113,29 @@ impl From<Artist> for models::ArtistMeta {
             end_date = None;
         }
         // Currently we only support downloading images via the "image" relation type.
-        let mut image: Vec<ImageMeta> = Vec::new();
-        if let Some(relations) = artist.relations {
-            for relation in relations.into_iter() {
-                if relation.relation_type == "image" || relation.relation_type == "picture" {
-                    match relation.content {
-                        RelationContent::Url(url) => {
-                            if let Some(direct) = transform_wikimedia_url(&url.resource) {
-                                image.push(ImageMeta {
-                                    size: ImageSize::Large,
-                                    url: direct
-                                });
-                            }
-                        },
-                        _ => {}
+        let mut image: Vec<ImageMeta>;
+        if meta_provider_settings(PROVIDER_KEY).boolean("download-artist-avatar") {
+            image = Vec::new();
+            if let Some(relations) = artist.relations {
+                for relation in relations.into_iter() {
+                    if relation.relation_type == "image" || relation.relation_type == "picture" {
+                        match relation.content {
+                            RelationContent::Url(url) => {
+                                if let Some(direct) = transform_wikimedia_url(&url.resource) {
+                                    image.push(ImageMeta {
+                                        size: ImageSize::Large,
+                                        url: direct
+                                    });
+                                }
+                            },
+                            _ => {}
+                        }
                     }
                 }
             }
+        }
+        else {
+            image = Vec::with_capacity(0);
         }
 
         Self {

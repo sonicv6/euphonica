@@ -1,5 +1,7 @@
 extern crate bson;
 
+use std::sync::RwLock;
+
 use musicbrainz_rs::{
     prelude::*,
     entity::{
@@ -8,18 +10,32 @@ use musicbrainz_rs::{
     }
 };
 
-use crate::utils::settings_manager;
-
-use super::super::{
+use super::{super::{
     models, prelude::*, MetadataProvider
-};
-use super::models::*;
+}, PROVIDER_KEY};
 
-pub struct MusicBrainzWrapper {}
+pub struct MusicBrainzWrapper {
+    priority: RwLock<u32>
+}
 
 impl MetadataProvider for MusicBrainzWrapper {
-    fn new() -> Self {
-        Self {}
+    fn new(prio: u32) -> Self {
+        Self {
+            priority: RwLock::new(prio)
+        }
+    }
+
+    fn key(&self) -> &'static str {
+        PROVIDER_KEY
+    }
+
+    fn priority(&self) -> u32 {
+        *self.priority.read().expect("Poisoned RwLock")
+    }
+
+    fn set_priority(&self, prio: u32) {
+        let mut this_prio = self.priority.write().expect("Poisoned RwLock");
+        *this_prio = prio;
     }
 
     /// Schedule getting album metadata from MusicBrainz.
