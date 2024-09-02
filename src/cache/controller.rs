@@ -17,13 +17,7 @@ extern crate polodb_core;
 use async_channel::{Sender, Receiver};
 use rustc_hash::FxHashSet;
 use std::{
-    fmt,
-    time::Duration,
-    sync::{Arc, RwLock},
-    rc::Rc,
-    path::PathBuf,
-    cell::OnceCell,
-    fs::create_dir_all
+    cell::OnceCell, fmt, fs::create_dir_all, path::PathBuf, rc::Rc, sync::{Arc, RwLock}, thread, time::Duration
 };
 use gtk::{
     glib,
@@ -204,14 +198,19 @@ impl Cache {
                                 #[strong]
                                 providers,
                                 move || {
-                                    let res = providers.read().unwrap().get_album_meta(key, None);
+                                    let res = providers.read().unwrap().get_album_meta(key.clone(), None);
                                     if let Some(album) = res {
                                         let _ = doc_cache.write().unwrap().collection::<models::AlbumMeta>("album").insert_one(album);
                                         let _ = fg_sender.send_blocking(Metadata::AlbumMeta(folder_uri));
                                     }
                                     else {
-                                        println!("No album meta could be found for {}", &folder_uri);
+                                        // Push an empty AlbumMeta to block further calls for this album.
+                                        println!("No album meta could be found for {}. Pushing empty document...", &folder_uri);
+                                        let _ = doc_cache.write().unwrap().collection::<models::AlbumMeta>("album").insert_one(
+                                            models::AlbumMeta::from_key(&key)
+                                        );
                                     }
+                                    sleep_after_request();
                                 }
                             )).await;
                         },
@@ -226,7 +225,7 @@ impl Cache {
                                 move || {
                                     // Guaranteed to have this field so just unwrap it
                                     let name = key.get("name").unwrap().as_str().unwrap().to_owned();
-                                    let res = providers.read().unwrap().get_artist_meta(key, None);
+                                    let res = providers.read().unwrap().get_artist_meta(key.clone(), None);
                                     if let Some(artist) = res {
                                         // Try to download artist avatar too
                                         let res = get_best_image(&artist.image);
@@ -249,8 +248,13 @@ impl Cache {
                                     }
 
                                     else {
-                                        println!("No artist meta could be found for {:?}", &name);
+                                        // Push an empty ArtistMeta to block further calls for this album.
+                                        println!("No artist meta could be found for {:?}. Pushing empty document...", &key);
+                                        let _ = doc_cache.write().unwrap().collection::<models::ArtistMeta>("artist").insert_one(
+                                            models::ArtistMeta::from_key(&key)
+                                        );
                                     }
+                                    sleep_after_request();
                                 }
                             )).await;
                         },
@@ -266,7 +270,6 @@ impl Cache {
                                         .unwrap()
                                         .collection::<models::AlbumMeta>("album")
                                         .find_one(key) {
-                                            println!("CacheTask::AlbumArt: found doc: {:?}", &meta);
                                             let res = get_best_image(&meta.image);
                                             if res.is_ok() {
                                                 let (hires, thumbnail) = resize_image(res.unwrap());
@@ -279,6 +282,7 @@ impl Cache {
                                                     }
                                                 }
                                             }
+                                            sleep_after_request();
                                         }
                                     else {
                                         println!("Cannot download album art: no local album meta could be found for {folder_uri}");
@@ -287,33 +291,8 @@ impl Cache {
                             )).await;
                             // let thumbnail_path = this.get_path_for(folder_uri, Metadata::AlbumArt(true));
                             // let path = this.get_path_for(folder_uri, Metadata::AlbumArt(false));
-
                         },
-                        // CacheTask::ArtistAvatar(key, path, thumbnail_path) => {
-                        //     let _ = gio::spawn_blocking(clone!(
-                        //         #[strong]
-                        //         fg_sender,
-                        //         #[strong]
-                        //         doc_cache,
-                        //         move || {
-                        //             let name = key.get("name").unwrap().as_str().unwrap().to_owned();
-                        //             if let Ok(Some(meta)) = doc_cache
-                        //                 .read()
-                        //                 .unwrap()
-                        //                 .collection::<models::ArtistMeta>("artist")
-                        //                 .find_one(key) {
-
-                        //                 }
-                        //             else {
-                        //                 println!("Cannot download artist avatar: no local artist meta could be found for {name}");
-                        //             }
-                        //         }
-                        //     )).await;
-                        // }
                     };
-                    let _ = glib::timeout_future(Duration::from_millis(
-                        (settings.double("delay-between-requests-s") * 1000.0) as u64
-                    )).await;
                 }
             }
         );
@@ -337,6 +316,7 @@ impl Cache {
                         this.state.emit_with_param("album-art-downloaded", &folder_uri);
                     }
                     Metadata::AlbumArtNotAvailable(folder_uri, key) => {
+                        println!("MPD does not have album art for {}, fetching remotely...", &folder_uri);
                         let path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), false));
                         let thumbnail_path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), true));
                         let _ = this.bg_sender.send_blocking(
@@ -455,7 +435,6 @@ impl Cache {
         for album in albums.iter() {
             let folder_uri = &album.uri;
             if seen.insert(folder_uri.to_owned()) {
-                println!("Deduped: {}", folder_uri);
                 self.ensure_local_album_art(album);
             }
         }

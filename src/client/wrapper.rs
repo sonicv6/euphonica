@@ -306,7 +306,6 @@ mod background {
         if let Ok(tag_list) = client.list(&Term::Tag(Cow::Borrowed(tag_type)), &Query::new()) {
             // TODO: Limit tags to only what we need locally
             for tag in &tag_list {
-                println!("fetch_artists: Processing tag {}", &tag);
                 if let Ok(mut songs) = client.find(
                     Query::new()
                         .and(Term::Tag(Cow::Borrowed(tag_type)), tag),

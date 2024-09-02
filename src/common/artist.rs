@@ -63,10 +63,6 @@ pub fn parse_mb_artist_tag<'a>(input: &'a str) -> Vec<&'a str> {
             buffer.replace_range(start..end, &" ".repeat(len));
             // println!("Buffer is now: {buffer}");
         }
-        if !found_artists.is_empty() {
-            println!("Found artists by exception rules: {:?}", &found_artists);
-        }
-        // println!("New buffer len: {}", buffer.len());
 
         // Step 2: split the remaining buffer. Here we again make use of the
         // Aho-Corasick algorithm to find all delimiters.

@@ -142,7 +142,7 @@ impl LibraryPreferences {
         ));
 
         let artist_excepts_buf = imp.artist_excepts.buffer();
-        let artist_excepts_apply = imp.artist_delims_apply.get();
+        let artist_excepts_apply = imp.artist_excepts_apply.get();
         artist_excepts_buf.set_text(
             &library_settings
                 .value("artist-tag-delim-exceptions")

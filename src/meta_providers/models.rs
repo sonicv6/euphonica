@@ -82,6 +82,29 @@ pub struct AlbumMeta {
     pub wiki: Option<Wiki>
 }
 
+impl AlbumMeta {
+    /// Create a minimal AlbumMeta. Useful for blocking further calls to an album
+    /// whose information are unavailable on any remote source.
+    pub fn from_key(key: &bson::Document) -> Self {
+        let mbid: Option<String>;
+        if let Ok(mbid_str) = key.get_str("mbid") {
+            mbid = Some(mbid_str.to_owned());
+        }
+        else {
+            mbid = None;
+        }
+        Self {
+            name: key.get_str("name").unwrap_or_default().to_string(),
+            mbid,
+            artist: None,
+            tags: Vec::with_capacity(0),
+            image: Vec::with_capacity(0),
+            url: None,
+            wiki: None
+        }
+    }
+}
+
 impl Merge for AlbumMeta {
     fn merge(mut self, AlbumMeta { mbid, artist, mut tags, mut image, url, wiki, .. }: Self) -> Self {
         self.tags.append(&mut tags);
@@ -129,8 +152,37 @@ pub struct ArtistMeta {
     // Dissolved, died, etc. Leave None for "ongoing" or "alive"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_date: Option<NaiveDate>,
+    // Two-letter country code, such as US, AU, UK, JP, etc.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country: Option<String>
+}
+
+impl ArtistMeta {
+    /// Create a minimal ArtistMeta. Useful for blocking further calls to an artist
+    /// whose information are unavailable on any remote source.
+    pub fn from_key(key: &bson::Document) -> Self {
+        let mbid: Option<String>;
+        if let Ok(mbid_str) = key.get_str("mbid") {
+            mbid = Some(mbid_str.to_owned());
+        }
+        else {
+            mbid = None;
+        }
+        Self {
+            name: key.get_str("name").unwrap_or_default().to_string(),
+            mbid,
+            similar: Vec::with_capacity(0),
+            tags: Vec::with_capacity(0),
+            image: Vec::with_capacity(0),
+            url: None,
+            bio: None,
+            artist_type: ArtistType::Other,
+            gender: None,
+            begin_date: None,
+            end_date: None,
+            country: None
+        }
+    }
 }
 
 impl Merge for ArtistMeta {

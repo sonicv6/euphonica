@@ -1,6 +1,17 @@
 extern crate bson;
+use gtk::prelude::*;
+use std::{thread, time::Duration};
+
+use crate::utils::settings_manager;
 
 use super::models;
+
+pub fn sleep_after_request() {
+    let settings = settings_manager().child("metaprovider");
+    thread::sleep(Duration::from_millis(
+        (settings.double("delay-between-requests-s") * 1000.0) as u64
+    ));
+}
 
 pub enum Metadata {
     // folder-level URI, true for thumbnail
@@ -27,17 +38,25 @@ pub mod utils {
         url: &str
     ) -> Option<Vec<u8>> {
         let response = reqwest::blocking::get(url);
-        if let Ok(res) = response {
-            if let Ok(bytes) = res.bytes() {
-                return Some(bytes.to_vec());
+        // This empty check comes in handy for certain metadata providers who, instead of
+        // skipping the URL fields, opt to return an empty string instead.
+        if !url.is_empty() {
+            if let Ok(res) = response {
+                if let Ok(bytes) = res.bytes() {
+                    return Some(bytes.to_vec());
+                }
+                else {
+                    println!("get_file: Failed to read response as bytes!");
+                    return None;
+                }
             }
-            else {
-                println!("get_file: Failed to read response as bytes!");
-                return None;
-            }
+            println!("get_file: {:?}", response.err());
+            None
         }
-        println!("get_file: {:?}", response.err());
-        None
+        else {
+            println!("Empty URL, won't download");
+            None
+        }
     }
 
     pub fn get_best_image(

@@ -11,6 +11,6 @@ pub use chain::{
 pub use base::{MetadataProvider, Metadata, utils};
 
 pub mod prelude {
-    pub use super::base::MetadataProvider;
+    pub use super::base::{MetadataProvider, sleep_after_request};
     pub use super::models::{Tagged, HasImage, Merge};
 }

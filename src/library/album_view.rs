@@ -539,7 +539,6 @@ impl AlbumView {
     }
 
     fn add_album(&self, album: Album, cache: Rc<Cache>) {
-        cache.ensure_local_album_art(album.get_info());
         self.imp().album_list.append(&album);
         // self.imp().album_count.set_label(&self.imp().album_list.n_items().to_string());
     }

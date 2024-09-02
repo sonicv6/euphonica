@@ -128,10 +128,8 @@ impl Library {
     /// UI will get notified of result later via signals).
     /// TODO: implement provider daisy-chaining on the cache side
     pub fn init_artist(&self, artist: Artist) {
-        if settings_manager().child("client").boolean("use-lastfm") {
-            if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_artist_meta(artist.get_info());
-            }
+        if let Some(cache) = self.imp().cache.get() {
+            cache.ensure_local_artist_meta(artist.get_info());
         }
         if let Some(sender) = self.imp().sender.get() {
             // Will get both albums (Discography sub-view) and songs (All Songs sub-view)
