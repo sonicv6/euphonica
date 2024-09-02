@@ -45,9 +45,7 @@ use crate::{
         models,
         utils::get_best_image,
         Metadata,
-        MetadataChain,
-        lastfm::LastfmWrapper,
-        musicbrainz::MusicBrainzWrapper
+        MetadataChain
     },
     utils::{resize_image, settings_manager}
 };
@@ -268,6 +266,7 @@ impl Cache {
                                         .unwrap()
                                         .collection::<models::AlbumMeta>("album")
                                         .find_one(key) {
+                                            println!("CacheTask::AlbumArt: found doc: {:?}", &meta);
                                             let res = get_best_image(&meta.image);
                                             if res.is_ok() {
                                                 let (hires, thumbnail) = resize_image(res.unwrap());
@@ -336,6 +335,13 @@ impl Cache {
                     }
                     Metadata::AlbumArt(folder_uri, _) => {
                         this.state.emit_with_param("album-art-downloaded", &folder_uri);
+                    }
+                    Metadata::AlbumArtNotAvailable(folder_uri, key) => {
+                        let path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), false));
+                        let thumbnail_path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), true));
+                        let _ = this.bg_sender.send_blocking(
+                            CacheTask::AlbumArt(folder_uri, key, path, thumbnail_path)
+                        );
                     }
                     Metadata::ArtistAvatar(name, _) => {
                         this.state.emit_with_param("artist-avatar-downloaded", &name);
@@ -418,11 +424,14 @@ impl Cache {
                 if let Some(sender) = self.mpd_sender.get() {
                     // Queue download from MPD if enabled
                     // Place request with MpdWrapper
-                    let _ = sender.send_blocking(MpdMessage::AlbumArt(
-                        folder_uri.to_string(),
-                        path,
-                        thumbnail_path
-                    ));
+                    if let Ok(key) = self.get_album_key(album) {
+                        let _ = sender.send_blocking(MpdMessage::AlbumArt(
+                            folder_uri.to_string(),
+                            key,
+                            path,
+                            thumbnail_path
+                        ));
+                    }
                 }
             }
             else {
@@ -430,7 +439,7 @@ impl Cache {
                 // so schedule that first.
                 self.ensure_local_album_meta(album);
                 if let Ok(key) = self.get_album_key(album) {
-                    self.bg_sender.send_blocking(CacheTask::AlbumArt(folder_uri, key, path, thumbnail_path));
+                    let _ = self.bg_sender.send_blocking(CacheTask::AlbumArt(folder_uri, key, path, thumbnail_path));
                 }
             }
         }

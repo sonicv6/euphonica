@@ -5,6 +5,9 @@ use super::models;
 pub enum Metadata {
     // folder-level URI, true for thumbnail
     AlbumArt(String, bool),
+    // Reserved for MpdWrapper to notify that we don't have one locally.
+    // Used by cache controller to trigger downloading from daisy-chained metadata.
+    AlbumArtNotAvailable(String, bson::Document),
     // folder-level URI
     AlbumMeta(String),
     // Tag, true for thumbnail

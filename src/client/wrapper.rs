@@ -72,7 +72,10 @@ pub enum MpdMessage {
     Volume(i8),
 
     // Reserved for cache controller
-    AlbumArt(String, PathBuf, PathBuf), // folder-level URI & paths to write the hires & thumbnail versions
+    // folder-level URI, key doc & paths to write the hires & thumbnail versions
+    // Key doc is here so we can query fetching from remote sources with the cache controller in case MPD can't
+    // give us an album art.
+    AlbumArt(String, bson::Document, PathBuf, PathBuf),
 
 	// Reserved for child thread
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
@@ -93,7 +96,7 @@ pub enum MpdMessage {
 #[derive(Debug)]
 enum BackgroundTask {
     Update,
-    DownloadAlbumArt(String, PathBuf, PathBuf),  // folder-level URI
+    DownloadAlbumArt(String, bson::Document, PathBuf, PathBuf),  // folder-level URI
     FetchAlbums,  // Gradually get all albums
     FetchAlbumSongs(String),  // Get songs of album with given tag
     FetchArtists(bool),  // Gradually get all artists. If bool flag is true, will parse AlbumArtist tag
@@ -148,6 +151,7 @@ mod background {
         client: &mut mpd::Client,
         sender_to_cache: &Sender<Metadata>,
         uri: String,
+        key: bson::Document,
         path: PathBuf,
         thumbnail_path: PathBuf
     ) {
@@ -161,11 +165,17 @@ mod background {
                         thumb.save(thumbnail_path)
                     ) {
                         sender_to_cache.send_blocking(Metadata::AlbumArt(uri, false)).expect(
-                            "Warning: cannot notify main cache of album art download result."
+                            "Cannot notify main cache of album art download result."
                         );
                     }
                 }
             }
+        }
+        else {
+            // Fetch from local sources instead.
+            sender_to_cache.send_blocking(Metadata::AlbumArtNotAvailable(uri, key)).expect(
+                "Album art not available from MPD, but cannot notify cache of this."
+            );
         }
     }
 
@@ -424,9 +434,9 @@ impl MpdWrapper {
                                         &mut client, &sender_to_fg
                                     )
                                 }
-                                BackgroundTask::DownloadAlbumArt(uri, path, thumbnail_path) => {
+                                BackgroundTask::DownloadAlbumArt(uri, key, path, thumbnail_path) => {
                                     background::download_album_art(
-                                        &mut client, &meta_sender, uri, path, thumbnail_path
+                                        &mut client, &meta_sender, uri, key, path, thumbnail_path
                                     )
                                 }
                                 BackgroundTask::FetchAlbums => {
@@ -557,9 +567,9 @@ impl MpdWrapper {
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
             MpdMessage::Albums => self.queue_task(BackgroundTask::FetchAlbums),
-            MpdMessage::AlbumArt(folder_uri, path, thumbnail_path) => {
+            MpdMessage::AlbumArt(folder_uri, key, path, thumbnail_path) => {
                 self.queue_task(
-                    BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), path, thumbnail_path)
+                    BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), key, path, thumbnail_path)
                 );
             },
             MpdMessage::AlbumContent(tag) => {

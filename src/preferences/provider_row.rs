@@ -89,11 +89,13 @@ impl ProviderRow {
         // - "name": a GUI-friendly name string (s)
         // - "enabled" (b)
         res.upcast_ref::<adw::ActionRow>().set_title(settings.string("name").as_str());
-        settings.bind(
-            "enabled",
-            &res.imp().enabled.get(),
-            "active"
-        );
+        settings
+            .bind(
+                "enabled",
+                &res.imp().enabled.get(),
+                "active"
+            )
+            .build();
         res
     }
 
