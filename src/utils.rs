@@ -1,12 +1,33 @@
+use once_cell::sync::Lazy;
+use std::{
+    sync::RwLock,
+    hash::Hash,
+    io::Cursor
+};
+use aho_corasick::AhoCorasick;
+use image::{
+    DynamicImage,
+    imageops::FilterType,
+    io::Reader as ImageReader
+};
+use rustc_hash::FxHashSet;
 use gtk::gio;
+use gio::prelude::*;
 use gtk::Ordering;
 use crate::config::APPLICATION_ID;
 use mpd::status::AudioFormat;
 
+/// Get GSettings for the entire application.
 pub fn settings_manager() -> gio::Settings {
     // Trim the .Devel suffix if exists
     let app_id = APPLICATION_ID.trim_end_matches(".Devel");
     gio::Settings::new(app_id)
+}
+
+/// Shortcut to a metadata provider's settings.
+pub fn meta_provider_settings(key: &str) -> gio::Settings {
+    // Trim the .Devel suffix if exists
+    settings_manager().child("metaprovider").child(key)
 }
 
 pub fn format_secs_as_duration(seconds: f64) -> String {
@@ -136,11 +157,109 @@ pub fn g_search_substr(
     false
 }
 
-
 pub fn strip_filename_linux(path: &str) -> &str {
     // MPD insists on having a trailing slash so here we go
     if let Some(last_slash) = path.rfind('/') {
         return &path[..last_slash + 1];
     }
     path
+}
+
+pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {
+    if let Ok(reader) = ImageReader::new(Cursor::new(bytes)).with_guessed_format() {
+        if let Ok(dyn_img) = reader.decode() {
+            return Some(dyn_img);
+        }
+        return None;
+    }
+    None
+}
+
+/// Automatically resize image based on user settings.
+/// All providers should use this function on their child threads to resize applicable images
+/// before returning the images to the main thread.
+/// Two images will be returned: a high-resolution version and a thumbnail version.
+/// Their major axis's resolution is determined by the keys hires-image-size and
+/// thumbnail-image-size in the gschema respectively.
+pub fn resize_image(dyn_img: DynamicImage) -> (DynamicImage, DynamicImage) {
+    let settings = settings_manager().child("library");
+    let hires_size = settings.uint("hires-image-size");
+    let thumbnail_size = settings.uint("thumbnail-image-size");
+    (
+        dyn_img.resize(hires_size, hires_size, FilterType::CatmullRom),
+        dyn_img.thumbnail(thumbnail_size, thumbnail_size)
+    )
+}
+
+// TODO: Optimise this
+pub fn deduplicate<T: Eq + Hash + Clone>(input: &[T]) -> Vec<T> {
+    let mut seen = FxHashSet::default();
+    for elem in input.iter() {
+        seen.insert(elem.clone());
+    }
+    seen.into_iter().collect()
+}
+
+// Build Aho-Corasick automatons only once. In case no delimiter or exception is
+// specified, no automaton will be returned. Caller code should take that as a signal
+// to skip parsing and use the tags as-is.
+// Changes in delimiters and exceptions require restarting.
+// TODO: Might want to research memoisation so we can rebuild these automatons upon
+// changing settings.
+pub fn build_aho_corasick_automaton(phrases: &[&str]) -> Option<AhoCorasick> {
+    if phrases.is_empty() {
+        None
+    }
+    else {
+        println!("[AhoCorasick] Configured to detect the following: {:?}", phrases);
+        Some(AhoCorasick::new(phrases).unwrap())
+    }
+}
+fn build_artist_delim_automaton() -> Option<AhoCorasick> {
+    let setting = settings_manager()
+        .child("library")
+        .value("artist-tag-delims");
+    let delims: Vec<&str> = setting
+        .array_iter_str()
+        .unwrap()
+        .collect();
+    build_aho_corasick_automaton(&delims)
+}
+fn build_artist_delim_exceptions_automaton() -> Option<AhoCorasick> {
+    let setting = settings_manager()
+        .child("library")
+        .value("artist-tag-delim-exceptions");
+    let excepts: Vec<&str> = setting
+        .array_iter_str()
+        .unwrap()
+        .collect();
+    build_aho_corasick_automaton(&excepts)
+}
+
+pub static ARTIST_DELIM_AUTOMATON: Lazy<RwLock<Option<AhoCorasick>>> = Lazy::new(|| {
+    println!("Initialising Aho-Corasick automaton for artist tag delimiters...");
+    let opt_automaton = build_artist_delim_automaton();
+    RwLock::new(opt_automaton)
+});
+
+pub fn rebuild_artist_delim_automaton() {
+    if let Ok(mut automaton) = ARTIST_DELIM_AUTOMATON.write() {
+        println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
+        let new = build_artist_delim_automaton();
+        *automaton = new;
+    }
+}
+
+pub static ARTIST_DELIM_EXCEPTION_AUTOMATON: Lazy<RwLock<Option<AhoCorasick>>> = Lazy::new(|| {
+    println!("Initialising Aho-Corasick automaton for artist tag delimiter exceptions...");
+    let opt_automaton = build_artist_delim_exceptions_automaton();
+    RwLock::new(opt_automaton)
+});
+
+pub fn rebuild_artist_delim_exception_automaton() {
+    if let Ok(mut automaton) = ARTIST_DELIM_EXCEPTION_AUTOMATON.write() {
+        println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
+        let new = build_artist_delim_exceptions_automaton();
+        *automaton = new;
+    }
 }

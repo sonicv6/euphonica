@@ -1,6 +1,4 @@
-use std::{
-    cell::{RefCell, OnceCell}
-};
+use std::cell::{RefCell, OnceCell};
 use gtk::{
     glib,
     prelude::*,
@@ -10,23 +8,29 @@ use gtk::{
 };
 use glib::{
     clone,
+    closure,
     Object,
-    Binding,
     SignalHandlerId
 };
 
 use crate::{
-    common::{Song, QualityGrade},
+    common::Song,
     utils::format_secs_as_duration
 };
 
 use super::Library;
 
 mod imp {
+    use glib::{
+        ParamSpec,
+        ParamSpecInt64,
+        ParamSpecString
+    };
+    use once_cell::sync::Lazy;
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/album-song-row.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-song-row.ui")]
     pub struct AlbumSongRow {
         #[template_child]
         pub quality_grade: TemplateChild<gtk::Image>,
@@ -43,8 +47,6 @@ mod imp {
         pub artist_name: TemplateChild<Label>,
         #[template_child]
         pub duration: TemplateChild<Label>,
-        // Vector holding the bindings to properties of the Song GObject
-        pub bindings: RefCell<Vec<Binding>>,
         // For unbinding the queue buttons when not bound to a song (i.e. being recycled)
         pub replace_queue_id: RefCell<Option<SignalHandlerId>>,
         pub append_queue_id: RefCell<Option<SignalHandlerId>>,
@@ -69,7 +71,82 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    impl ObjectImpl for AlbumSongRow {}
+    impl ObjectImpl for AlbumSongRow {
+        fn properties() -> &'static [ParamSpec] {
+            static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
+                vec![
+                    ParamSpecInt64::builder("track").build(),
+                    ParamSpecString::builder("name").build(),
+                    // ParamSpecString::builder("last_mod").build(),
+                    ParamSpecString::builder("artist").build(),
+                    ParamSpecString::builder("duration").build(),
+                    // ParamSpecInt64::builder("disc").build(),
+                    ParamSpecString::builder("quality-grade").build()
+                ]
+            });
+            PROPERTIES.as_ref()
+        }
+
+        fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
+            match pspec.name() {
+                "track" => self.track_index.label().parse::<i64>().unwrap_or(-1).to_value(),
+                "name" => self.song_name.label().to_value(),
+                // "last_mod" => obj.get_last_mod().to_value(),
+                // Represented in MusicBrainz format, i.e. Composer; Performer, Performer,...
+                // The composer part is optional.
+                "artist" => self.artist_name.label().to_value(),
+                "duration" => self.duration.label().to_value(),
+                // "disc" => self.disc.get_label().to_value(),
+                "quality-grade" => self.quality_grade.icon_name().to_value(),
+                _ => unimplemented!(),
+            }
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            match pspec.name() {
+                "track" => {
+                    if let Ok(v) = value.get::<i64>() {
+                        if v >= 0 {
+                            self.track_index.set_label(&v.to_string());
+                            self.track_index.set_visible(true);
+                        }
+                        else {
+                            self.track_index.set_label("");
+                            self.track_index.set_visible(false);
+                        }
+                    }
+                }
+                "name" => {
+                    // TODO: Handle no-name case here instead of in Song GObject for flexibility
+                    if let Ok(name) = value.get::<&str>() {
+                        self.song_name.set_label(name);
+                    }
+                }
+                "artist" => {
+                    if let Ok(tag) = value.get::<&str>() {
+                        self.artist_name.set_label(tag);
+                    }
+                }
+                "duration" => {
+                    // Pre-formatted please
+                    if let Ok(dur) = value.get::<&str>() {
+                        self.duration.set_label(dur);
+                    }
+                }
+                "quality-grade" => {
+                    if let Ok(icon) = value.get::<&str>() {
+                        self.quality_grade.set_icon_name(Some(icon));
+                        self.quality_grade.set_visible(true);
+                    }
+                    else {
+                        self.quality_grade.set_icon_name(None);
+                        self.quality_grade.set_visible(false);
+                    }
+                }
+                _ => unimplemented!(),
+            }
+        }
+    }
 
     // Trait shared by all widgets
     impl WidgetImpl for AlbumSongRow {}
@@ -84,106 +161,48 @@ glib::wrapper! {
     @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
 }
 
-impl Default for AlbumSongRow {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl AlbumSongRow {
-    pub fn new() -> Self {
-        Object::builder().build()
+    pub fn new(library: Library, item: &gtk::ListItem) -> Self {
+        let res: Self = Object::builder().build();
+        res.setup(library, item);
+        res
     }
 
-    pub fn setup(&self, library: Library) {
+    #[inline(always)]
+    pub fn setup(&self, library: Library, item: &gtk::ListItem) {
         let _ = self.imp().library.set(library);
-        // Reserve space since we know exactly how many IDs there are
-        self.imp().bindings.borrow_mut().reserve_exact(7);
-        // Must be called at setup time (use SignalListItemFactory::connect_setup)
+        item
+            .property_expression("item")
+            .chain_property::<Song>("track")
+            .bind(self, "track", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("name")
+            .bind(self, "name", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("artist")
+            .bind(self, "artist", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("duration")
+            .chain_closure::<String>(closure!(|_: Option<Object>, dur: u64| {
+                format_secs_as_duration(dur as f64)
+            }))
+            .bind(self, "duration", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("quality-grade")
+            .bind(self, "quality-grade", gtk::Widget::NONE);
     }
 
     pub fn bind(&self, song: &Song) {
-        // Due to the amount of transformations performed we'll probably
-        // stick with manual bind-unbind semantics here.
-        let track_idx = self.imp().track_index.get();
-        let duration = self.imp().duration.get();
-        let song_name_label = self.imp().song_name.get();
-        let artist_name_label = self.imp().artist_name.get();
-        let quality_grade = self.imp().quality_grade.get();
-        let mut bindings = self.imp().bindings.borrow_mut();
-
-        let track_idx_binding = song
-            .bind_property("track", &track_idx, "label")
-            .transform_to(|_, val: i64| {
-                Some(val.to_string())
-            })
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(track_idx_binding);
-
-        let track_idx_viz_binding = song
-            .bind_property("track", &track_idx, "visible")
-            .transform_to(|_, val: i64| {
-                Some(val > 0)
-            })
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(track_idx_viz_binding);
-
-        let duration_binding = song
-            .bind_property("duration", &duration, "label")
-            .transform_to(|_, val: u64| {
-                Some(format_secs_as_duration(val as f64))
-            })
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(duration_binding);
-
-        let song_name_binding = song
-            .bind_property("name", &song_name_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(song_name_binding);
-
-        let artist_name_binding = song
-            .bind_property("artist", &artist_name_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(artist_name_binding);
-
-        let quality_binding = song
-            .bind_property(
-                "quality-grade",
-                &quality_grade,
-                "icon-name"
-            )
-            .transform_to(|_, grade: QualityGrade| {
-                Some(grade.to_icon_name())}
-            )
-            .sync_create()
-            .build();
-        bindings.push(quality_binding);
-
-        let quality_viz_binding = song
-            .bind_property(
-                "quality-grade",
-                &quality_grade,
-                "visible"
-            )
-            .transform_to(|_, grade: QualityGrade| {
-                Some(grade != QualityGrade::Lossy)
-            })
-            .sync_create()
-            .build();
-        bindings.push(quality_viz_binding);
-
         // Bind the queue buttons
-        let uri = song.get_uri();
+        let uri = song.get_uri().to_owned();
         if let Some(old_id) = self.imp().replace_queue_id.replace(
             Some(
                 self.imp().replace_queue.connect_clicked(
@@ -227,10 +246,6 @@ impl AlbumSongRow {
     }
 
     pub fn unbind(&self) {
-        // Unbind all stored bindings
-        for binding in self.imp().bindings.borrow_mut().drain(..) {
-            binding.unbind();
-        }
         if let Some(id) = self.imp().replace_queue_id.borrow_mut().take() {
             self.imp().replace_queue.disconnect(id);
         }

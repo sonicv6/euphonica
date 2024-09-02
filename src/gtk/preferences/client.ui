@@ -3,7 +3,7 @@
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
 	<template class="EuphoniaClientPreferences" parent="AdwPreferencesPage">
-        <property name="title" translatable="true">Connection</property>
+    <property name="title" translatable="true">Database</property>
 		<property name="icon-name">server-pick-symbolic</property>
 		<child>
 			<object class="AdwPreferencesGroup">
@@ -24,54 +24,25 @@
 						<property name="title" translatable="true">Download album art</property>
 					</object>
 				</child>
-                <child>
+        <child>
 					<object class="AdwActionRow" id="mpd_status">
-                        <style>
-                            <class name="property"/>
-                        </style>
+            <style>
+              <class name="property"/>
+            </style>
 						<property name="title" translatable="true">Status</property>
-                        <property name="subtitle">Not connected</property>
-                        <child type="suffix">
-                            <object class="GtkButton" id="reconnect">
-						        <property name="label" translatable="true">Reconnect</property>
-                                <property name="valign">center</property>
-						        <style>
-							        <class name="suggested-action"/>
-						        </style>
-					        </object>
-                        </child>
+            <property name="subtitle">Not connected</property>
+            <child type="suffix">
+              <object class="GtkButton" id="reconnect">
+						    <property name="label" translatable="true">Reconnect</property>
+                <property name="valign">center</property>
+						    <style>
+							    <class name="suggested-action"/>
+						    </style>
+					    </object>
+            </child>
 					</object>
 				</child>
 			</object>
 		</child>
-		<child>
-			<object class="AdwPreferencesGroup">
-				<property name="title" translatable="true">Last.fm</property>
-				<property name="description" translatable="true">You can optionally connect to Last.fm to fetch additional information, such as album descriptions, artist bios, etc.</property>
-				<child>
-					<object class="AdwSwitchRow" id="use_lastfm">
-						<property name="title" translatable="true">Use Last.fm</property>
-					</object>
-				</child>
-				<child>
-					<object class="AdwEntryRow" id="lastfm_key">
-						<property name="title" translatable="true">API key</property>
-						<property name="sensitive">false</property>
-					</object>
-				</child>
-				<child>
-					<object class="AdwEntryRow" id="lastfm_user_agent">
-						<property name="title" translatable="true">User agent string</property>
-						<property name="sensitive">false</property>
-					</object>
-				</child>
-                <child>
-					<object class="AdwSwitchRow" id="lastfm_download_album_art">
-						<property name="title" translatable="true">Download album art</property>
-                        <property name="subtitle" translatable="true">Album arts downloaded from external sources will only be applied locally.</property>
-					</object>
-				</child>
-			</object>
-		</child>
-    </template>
+  </template>
 </interface>

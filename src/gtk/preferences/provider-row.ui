@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<requires lib="gtk" version="4.0" />
+	<requires lib="Adw" version="1.0" />
+	<template class="EuphoniaProviderRow" parent="AdwActionRow">
+    <child type="prefix">
+      <object class="GtkSwitch" id="enabled">
+        <property name="valign">center</property>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkBox">
+        <property name="valign">center</property>
+        <style>
+          <class name="linked"/>
+        </style>
+        <child>
+          <object class="GtkButton" id="raise">
+            <property name="icon-name">up-symbolic</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkButton" id="lower">
+            <property name="icon-name">down-symbolic</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

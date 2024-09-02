@@ -18,22 +18,20 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cell::{RefCell};
+use std::cell::RefCell;
 use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
     gio,
     glib
 };
-use glib::{
-    signal::SignalHandlerId
-};
+use glib::signal::SignalHandlerId;
 use crate::{
     utils,
-    client::{ConnectionState},
+    client::ConnectionState,
     application::EuphoniaApplication,
     player::{QueueView, PlayerBar},
-    library::AlbumView,
+    library::{AlbumView, ArtistView},
     sidebar::Sidebar
 };
 
@@ -54,6 +52,8 @@ mod imp {
         #[template_child]
         pub album_view: TemplateChild<AlbumView>,
         #[template_child]
+        pub artist_view: TemplateChild<ArtistView>,
+        #[template_child]
         pub queue_view: TemplateChild<QueueView>,
 
         // Content view stack
@@ -63,7 +63,7 @@ mod imp {
         // Sidebar
         // TODO: Replace with Libadwaita spinner when v1.6 hits stable
         #[template_child]
-        pub logo_stack: TemplateChild<gtk::Stack>,
+        pub busy_spinner: TemplateChild<gtk::Spinner>,
         #[template_child]
         pub title: TemplateChild<adw::WindowTitle>,
         #[template_child]
@@ -98,10 +98,11 @@ mod imp {
         fn new() -> Self {
             Self {
                 album_view: TemplateChild::default(),
+                artist_view: TemplateChild::default(),
                 queue_view: TemplateChild::default(),
                 stack: TemplateChild::default(),
                 title: TemplateChild::default(),
-                logo_stack: TemplateChild::default(),
+                busy_spinner: TemplateChild::default(),
                 sidebar: TemplateChild::default(),
                 player_bar: TemplateChild::default(),
                 notify_position_id: RefCell::new(None),
@@ -121,8 +122,8 @@ mod imp {
 glib::wrapper! {
     pub struct EuphoniaWindow(ObjectSubclass<imp::EuphoniaWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
-        adw::ApplicationWindow,
-        @implements gio::ActionGroup, gio::ActionMap;
+    adw::ApplicationWindow,
+    @implements gio::ActionGroup, gio::ActionMap;
 }
 
 impl EuphoniaWindow {
@@ -140,7 +141,13 @@ impl EuphoniaWindow {
         );
         win.imp().album_view.setup(
             app.get_library(),
-            app.get_cache()
+            app.get_cache(),
+            app.get_client().get_client_state()
+        );
+        win.imp().artist_view.setup(
+            app.get_library(),
+            app.get_cache(),
+            app.get_client().get_client_state()
         );
         win.imp().sidebar.setup(
             win.imp().stack.clone()
@@ -174,7 +181,7 @@ impl EuphoniaWindow {
         let client = self.downcast_application().get_client();
         let state = client.get_client_state();
         let title = self.imp().title.get();
-        let logo_stack = self.imp().logo_stack.get();
+        let spinner = self.imp().busy_spinner.get();
         state
             .bind_property(
                 "connection-state",
@@ -195,12 +202,9 @@ impl EuphoniaWindow {
         state
             .bind_property(
                 "busy",
-                &logo_stack,
-                "visible-child-name"
+                &spinner,
+                "visible"
             )
-            .transform_to(|_, busy: bool| {
-                if busy { return Some("spinner") } Some("logo")
-            })
             .sync_create()
             .build();
 	}

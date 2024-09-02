@@ -1,6 +1,6 @@
 /* application.rs
  *
- * Copyright 2024 Work
+ * Copyright 2024 htkhiem2000
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,14 +25,15 @@ use std::{
     fs::create_dir_all,
     path::PathBuf
 };
-use async_channel::Sender;
+use async_channel::{Sender, Receiver};
 
 use crate::{
     library::Library,
     player::Player,
     client::{MpdWrapper, MpdMessage},
+    meta_providers::Metadata,
     cache::Cache,
-    config::VERSION,
+    config::{VERSION, APPLICATION_USER_AGENT},
     preferences::Preferences,
     EuphoniaWindow
 };
@@ -66,20 +67,22 @@ mod imp {
             println!("Cache path: {}", cache_path.to_str().unwrap());
             create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
+            // Create cache controller
+            let cache = Cache::new(&cache_path);
+            let meta_sender = cache.get_sender();
+
             // Create client instance (not connected yet)
-            let client = MpdWrapper::new();
+            let client = MpdWrapper::new(meta_sender.clone());
             let client_sender = client.clone().get_sender();
             let client_state = client.clone().get_client_state();
-
-            // Create cache controller
-            let cache = Cache::new(&cache_path, client_sender.clone(), client_state.clone());
 
             // Create controllers
             // These two are GObjects (already refcounted by GLib)
             let player = Player::default();
             let library = Library::default();
+            cache.set_mpd_sender(client_sender.clone());
             player.setup(client_sender.clone(), client_state.clone(), cache.clone());
-            library.setup(client_sender.clone(), client_state, cache.clone());
+            library.setup(client_sender.clone(), cache.clone());
 
             Self {
                 player,
@@ -137,6 +140,8 @@ glib::wrapper! {
 
 impl EuphoniaApplication {
     pub fn new(application_id: &str, flags: &gio::ApplicationFlags) -> Self {
+        // TODO: Find a better place to put these
+        musicbrainz_rs::config::set_user_agent(APPLICATION_USER_AGENT);
         glib::Object::builder()
             .property("application-id", application_id)
             .property("flags", flags)
@@ -212,7 +217,8 @@ impl EuphoniaApplication {
         let window = self.active_window().unwrap();
         let prefs = Preferences::new(
             self.imp().sender.clone(),
-            self.imp().client.clone().get_client_state()
+            self.imp().client.clone().get_client_state(),
+            self.imp().cache.clone()
         );
         prefs.present(Some(&window));
     }

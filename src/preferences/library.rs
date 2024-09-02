@@ -1,16 +1,13 @@
 use adw::subclass::prelude::*;
 use adw::prelude::*;
 use gtk::{
-    glib::{self, Value, Variant},
+    glib,
     CompositeTemplate
 };
 
 use glib::clone;
 
-use crate::{
-    client::{MpdMessage, ClientState, ConnectionState},
-    utils
-};
+use crate::utils;
 
 mod imp {
     use super::*;
@@ -24,6 +21,15 @@ mod imp {
         pub sort_case_sensitive: TemplateChild<adw::SwitchRow>,
         #[template_child]
         pub search_case_sensitive: TemplateChild<adw::SwitchRow>,
+
+        #[template_child]
+        pub artist_delims: TemplateChild<gtk::TextView>,
+        #[template_child]
+        pub artist_delims_apply: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub artist_excepts: TemplateChild<gtk::TextView>,
+        #[template_child]
+        pub artist_excepts_apply: TemplateChild<gtk::Button>,
     }
 
     #[glib::object_subclass]
@@ -62,6 +68,7 @@ impl Default for LibraryPreferences {
 impl LibraryPreferences {
     pub fn setup(&self) {
         let imp = self.imp();
+
         // Populate with current gsettings values
         let settings = utils::settings_manager();
         // Set up library settings
@@ -90,5 +97,91 @@ impl LibraryPreferences {
                 "active"
             )
             .build();
+
+        // Setup artist section
+        let artist_delims_buf = imp.artist_delims.buffer();
+        let artist_delims_apply = imp.artist_delims_apply.get();
+        artist_delims_buf.set_text(
+            &library_settings
+                .value("artist-tag-delims")
+                .array_iter_str()
+                .unwrap()
+                .collect::<Vec<&str>>()
+                .join("\n")
+        );
+        artist_delims_buf.connect_changed(clone!(
+            #[weak]
+            artist_delims_apply,
+            move |_| {
+                artist_delims_apply.set_sensitive(true);
+            }
+        ));
+        artist_delims_apply.connect_clicked(clone!(
+            #[weak]
+            library_settings,
+            #[weak]
+            artist_delims_buf,
+            move |btn| {
+                library_settings.set_value(
+                    "artist-tag-delims",
+                    &artist_delims_buf
+                        .text(
+                            &artist_delims_buf.start_iter(),
+                            &artist_delims_buf.end_iter(),
+                            false
+                        )
+                        .to_string()
+                        .lines()
+                        .collect::<Vec<&str>>()
+                        .to_variant()
+                );
+                btn.set_sensitive(false);
+                // Reinitialise the automaton
+                utils::rebuild_artist_delim_automaton();
+            }
+        ));
+
+        let artist_excepts_buf = imp.artist_excepts.buffer();
+        let artist_excepts_apply = imp.artist_excepts_apply.get();
+        artist_excepts_buf.set_text(
+            &library_settings
+                .value("artist-tag-delim-exceptions")
+                .array_iter_str()
+                .unwrap()
+
+                .collect::<Vec<&str>>()
+                .join("\n")
+        );
+        artist_excepts_buf.connect_changed(clone!(
+            #[weak]
+            artist_excepts_apply,
+            move |_| {
+                artist_excepts_apply.set_sensitive(true);
+            }
+        ));
+        artist_excepts_apply.connect_clicked(clone!(
+            #[weak]
+            library_settings,
+            #[weak]
+            artist_excepts_buf,
+            move |btn| {
+                let _ = library_settings.set_value(
+                    "artist-tag-delim-exceptions",
+                    &artist_excepts_buf
+                        .text(
+                            &artist_excepts_buf.start_iter(),
+                            &artist_excepts_buf.end_iter(),
+                            false
+                        )
+                        .to_string()
+                        .lines()
+                        .collect::<Vec<&str>>()
+                        .to_variant()
+                );
+                btn.set_sensitive(false);
+                // Reinitialise the automaton
+                utils::rebuild_artist_delim_exception_automaton();
+            }
+        ));
     }
 }

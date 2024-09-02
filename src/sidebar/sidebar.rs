@@ -13,6 +13,8 @@ mod imp {
         #[template_child]
         pub albums_btn: TemplateChild<SidebarButton>,
         #[template_child]
+        pub artists_btn: TemplateChild<SidebarButton>,
+        #[template_child]
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
     }
 
@@ -77,6 +79,15 @@ impl Sidebar {
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("albums");
+            }
+        }));
+
+        self.imp().artists_btn.connect_toggled(clone!(
+            #[weak]
+            stack,
+            move |btn| {
+            if btn.is_active() {
+                stack.set_visible_child_name("artists");
             }
         }));
 

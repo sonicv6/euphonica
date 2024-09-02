@@ -7,7 +7,7 @@
 		<property name="icon-name">library-music-symbolic</property>
 		<child>
 			<object class="AdwPreferencesGroup">
-				<property name="title" translatable="true">Searching and Sorting</property>
+				<property name="title" translatable="true">Searching &amp;amp; Sorting</property>
 				<child>
 					<object class="AdwSwitchRow" id="sort_nulls_first">
 						<property name="title" translatable="true">Sort nulls first</property>
@@ -23,6 +23,87 @@
 				<child>
 					<object class="AdwSwitchRow" id="search_case_sensitive">
 						<property name="title" translatable="true">Case-sensitive searching</property>
+					</object>
+				</child>
+			</object>
+		</child>
+		<child>
+			<object class="AdwPreferencesGroup">
+				<property name="title" translatable="true">Artists</property>
+				<child>
+					<object class="AdwExpanderRow">
+						<property name="title" translatable="true">Multi-artist tag delimiters</property>
+						<property name="subtitle" translatable="true">Terms used to separate artists in your tags. Specify one on each line. Tip: use leading and trailing spaces to avoid matching between words.</property>
+						<child>
+							<object class="GtkListBoxRow">
+								<style>
+									<class name="padding-0"/>
+								</style>
+								<child>
+									<object class="GtkScrolledWindow">
+										<property name="hexpand">true</property>
+										<property name="height-request">180</property>
+										<child>
+											<object class="GtkTextView" id="artist_delims">
+												<property name="monospace">true</property>
+											</object>
+										</child>
+									</object>
+								</child>
+							</object>
+						</child>
+						<child>
+							<object class="AdwActionRow">
+								<child type="suffix">
+									<object class="GtkButton" id="artist_delims_apply">
+										<property name="sensitive">false</property>
+										<property name="valign">center</property>
+										<property name="label" translatable="true">Save</property>
+										<style>
+											<class name="suggested-action"/>
+										</style>
+									</object>
+								</child>
+							</object>
+						</child>
+					</object>
+				</child>
+				<child>
+					<object class="AdwExpanderRow">
+						<property name="title" translatable="true">Delimiter exceptions</property>
+						<property name="subtitle" translatable="true">In case some artist names would be split by the above delimiters, place them here. For example, "Simon &amp;amp; Garfunkel" will need to be specified here if the ampersand is one of our delimiters.</property>
+						<child>
+							<object class="GtkListBoxRow">
+								<style>
+									<class name="padding-0"/>
+								</style>
+								<child>
+									<object class="GtkScrolledWindow">
+										<property name="hexpand">true</property>
+										<property name="height-request">180</property>
+										<child>
+											<object class="GtkTextView" id="artist_excepts">
+												<property name="monospace">true</property>
+											</object>
+										</child>
+									</object>
+								</child>
+							</object>
+						</child>
+						<child>
+							<object class="AdwActionRow">
+								<child type="suffix">
+									<object class="GtkButton" id="artist_excepts_apply">
+										<property name="sensitive">false</property>
+										<property name="valign">center</property>
+										<property name="label" translatable="true">Save</property>
+										<style>
+											<class name="suggested-action"/>
+										</style>
+									</object>
+								</child>
+							</object>
+						</child>
 					</object>
 				</child>
 			</object>

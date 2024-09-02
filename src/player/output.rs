@@ -1,18 +1,9 @@
-use std::{
-    cell::{RefCell},
-    f64::consts::PI
-};
 use gtk::{
     glib,
-    prelude::*,
     subclass::prelude::*,
     CompositeTemplate
 };
-use glib::{
-    Object,
-    Binding,
-    signal::SignalHandlerId
-};
+use glib::Object;
 use mpd::output::Output;
 
 use super::Player;
@@ -30,7 +21,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/output.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player/output.ui")]
     pub struct MpdOutput {
         #[template_child]
         pub icon: TemplateChild<gtk::Image>,

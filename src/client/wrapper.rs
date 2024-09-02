@@ -1,36 +1,33 @@
 use std::{
     borrow::Cow,
-    io::Cursor,
     cell::RefCell,
     rc::Rc,
     path::PathBuf
 };
+use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
 use futures::executor;
-use async_channel::{Sender, Receiver};
+use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
-
-use crate::{
-    utils,
-    common::{Album, AlbumInfo, Song}
-};
-
-use super::state::{ClientState, ConnectionState};
-
 use mpd::{
     client::Client,
-    search::{Term, Query, Window},
+    search::{Term, Query, Window, Operation as QueryOperation},
     song::Id,
     Subsystem,
     Idle,
     Channel
 };
-use image::{
-    io::Reader as ImageReader,
-    imageops::FilterType
-};
+use image::DynamicImage;
 use uuid::Uuid;
+
+use crate::{
+    utils,
+    common::{Album, AlbumInfo, Song, SongInfo, ArtistInfo, Artist},
+    meta_providers::Metadata
+};
+
+use super::state::{ClientState, ConnectionState};
 
 pub fn get_dummy_song(uri: &str) -> mpd::Song {
     // Many of mpd's methods require an impl of trait ToSongPath, which
@@ -48,16 +45,6 @@ pub fn get_dummy_song(uri: &str) -> mpd::Song {
         range: None,
         tags: Vec::new()
     }
-}
-
-pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<image::DynamicImage> {
-    if let Ok(reader) = ImageReader::new(Cursor::new(bytes)).with_guessed_format() {
-        if let Ok(dyn_img) = reader.decode() {
-            return Some(dyn_img);
-        }
-        return None;
-    }
-    None
 }
 
 // One for each command in mpd's protocol plus a few special ones such
@@ -79,18 +66,28 @@ pub enum MpdMessage {
     FindAdd(Query<'static>),
 	Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
-    AlbumContent(AlbumInfo), // Get list of songs in album with given tag name
+    Artists(bool), // Get artists. Will return one by one. If bool flag is true, will parse AlbumArtist tag.
+    AlbumContent(String), // Get list of songs with given album tag
+    ArtistContent(String), // Get songs and albums of artist with given name
     Volume(i8),
 
     // Reserved for cache controller
-    AlbumArt(String, PathBuf, PathBuf), // Download album art to the specified paths (hi-res and thumbnail)
+    // folder-level URI, key doc & paths to write the hires & thumbnail versions
+    // Key doc is here so we can query fetching from remote sources with the cache controller in case MPD can't
+    // give us an album art.
+    AlbumArt(String, bson::Document, PathBuf, PathBuf),
 
 	// Reserved for child thread
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
-	AlbumArtDownloaded(String), // Notify which album art was downloaded and where it is
+    // Return downloaded & resized album arts (hires and thumbnail respectively)
+	AlbumArtDownloaded(String, DynamicImage, DynamicImage),
     AlbumArtNotAvailable(String), // For triggering downloading from other sources
     AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model.
+    AlbumSongInfoDownloaded(String, Vec<SongInfo>), // Return songs in the album with the given tag (batched)
+    ArtistBasicInfoDownloaded(ArtistInfo), // Return new artist to be added to the list model.
+    ArtistSongInfoDownloaded(String, Vec<SongInfo>),  // Return songs of an artist (or had their participation)
+    ArtistAlbumBasicInfoDownloaded(String, AlbumInfo),  // Return albums that had this artist in their AlbumArtist tag.
     DBUpdated
 }
 
@@ -99,8 +96,12 @@ pub enum MpdMessage {
 #[derive(Debug)]
 enum BackgroundTask {
     Update,
-    DownloadAlbumArt(String, PathBuf, PathBuf),  // With folder-level URL for querying and cache paths to write to (full-res & thumb)
-    FetchAlbums  // Gradually get all albums
+    DownloadAlbumArt(String, bson::Document, PathBuf, PathBuf),  // folder-level URI
+    FetchAlbums,  // Gradually get all albums
+    FetchAlbumSongs(String),  // Get songs of album with given tag
+    FetchArtists(bool),  // Gradually get all artists. If bool flag is true, will parse AlbumArtist tag
+    FetchArtistSongs(String),  // Get all songs of an artist with given name
+    FetchArtistAlbums(String),  // Get all albums of an artist with given name
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -138,23 +139,241 @@ enum BackgroundTask {
 // incidentally, disconnecting the main thread's client will send an idle message,
 // unblocking the child thread and allowing it to check the flag.
 
+mod background {
+    use super::*;
+    pub fn update_mpd_database(client: &mut mpd::Client, sender_to_fg: &Sender<MpdMessage>) {
+        if let Ok(_) = client.update() {
+            let _ = sender_to_fg.send_blocking(MpdMessage::DBUpdated);
+        }
+    }
+
+    pub fn download_album_art(
+        client: &mut mpd::Client,
+        sender_to_cache: &Sender<Metadata>,
+        uri: String,
+        key: bson::Document,
+        path: PathBuf,
+        thumbnail_path: PathBuf
+    ) {
+        if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
+            println!("Downloaded album art for {:?}", uri);
+            if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
+                let (hires, thumb) = utils::resize_image(dyn_img);
+                if !path.exists() || !thumbnail_path.exists() {
+                    if let (Ok(_), Ok(_)) = (
+                        hires.save(path),
+                        thumb.save(thumbnail_path)
+                    ) {
+                        sender_to_cache.send_blocking(Metadata::AlbumArt(uri, false)).expect(
+                            "Cannot notify main cache of album art download result."
+                        );
+                    }
+                }
+            }
+        }
+        else {
+            // Fetch from local sources instead.
+            sender_to_cache.send_blocking(Metadata::AlbumArtNotAvailable(uri, key)).expect(
+                "Album art not available from MPD, but cannot notify cache of this."
+            );
+        }
+    }
+
+    fn fetch_albums_by_query<F>(
+        client: &mut mpd::Client,
+        query: &Query,
+        respond: F
+    ) where
+        F: Fn(AlbumInfo) -> Result<(), SendError<MpdMessage>>
+    {
+        // TODO: batched windowed retrieval
+        // Get list of unique album tags
+        // Will block child thread until info for all albums have been retrieved.
+        if let Ok(tag_list) = client
+            .list(&Term::Tag(Cow::Borrowed("album")), query) {
+            for tag in &tag_list {
+                if let Ok(mut songs) = client.find(
+                    Query::new()
+                        .and(Term::Tag(Cow::Borrowed("album")), tag),
+                    Window::from((0, 1))
+                ) {
+                    if !songs.is_empty() {
+                        let info = SongInfo::from(std::mem::take(&mut songs[0]))
+                            .into_album_info()
+                            .unwrap_or_default();
+                        let _ = respond(info);
+                    }
+                }
+            }
+        }
+    }
+
+    fn fetch_songs_by_query<F>(
+        client: &mut mpd::Client,
+        query: &Query,
+        respond: F
+    ) where
+        F: Fn(Vec<SongInfo>) -> Result<(), SendError<MpdMessage>>
+    {
+        // TODO: batched windowed retrieval
+        let songs: Vec<SongInfo> = client
+            .find(query, Window::from((0, 4096)))
+            .unwrap()
+            .iter_mut()
+            .map(|mpd_song| {
+                SongInfo::from(std::mem::take(mpd_song))
+            })
+            .collect();
+        if !songs.is_empty() {
+            let _ = respond(songs);
+        }
+    }
+
+    pub fn fetch_all_albums(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<MpdMessage>
+    ) {
+        fetch_albums_by_query(
+            client,
+            &Query::new(),
+            |info| {
+                sender_to_fg.send_blocking(
+                    MpdMessage::AlbumBasicInfoDownloaded(
+                        info
+                    )
+                )
+            }
+        );
+    }
+
+    pub fn fetch_albums_of_artist(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<MpdMessage>,
+        artist_name: String,
+    ) {
+        fetch_albums_by_query(
+            client,
+            Query::new().and_with_op(
+                Term::Tag(Cow::Borrowed("artist")),
+                QueryOperation::Contains,
+                artist_name.clone()
+            ),
+            |info| {
+                sender_to_fg.send_blocking(
+                    MpdMessage::ArtistAlbumBasicInfoDownloaded(
+                        artist_name.clone(),
+                        info
+                    )
+                )
+            }
+        );
+    }
+
+    pub fn fetch_album_songs(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<MpdMessage>,
+        tag: String
+    ) {
+        fetch_songs_by_query(
+            client,
+            Query::new().and(Term::Tag(Cow::Borrowed("album")), tag.clone()),
+            |songs| {
+                sender_to_fg.send_blocking(
+                    MpdMessage::AlbumSongInfoDownloaded(
+                        tag.clone(),
+                        songs
+                    )
+                )
+            }
+        );
+    }
+
+    pub fn fetch_artists(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<MpdMessage>,
+        use_album_artist: bool
+    ) {
+        // Fetching artists is a bit more involved: artist tags usually contain multiple artists.
+        // For the same reason, one artist can appear in multiple tags.
+        // Here we'll reuse the artist parsing code in our SongInfo struct and put parsed
+        // ArtistInfos in a Set to deduplicate them.
+        let tag_type: &'static str = if use_album_artist {
+            "albumartist"
+        } else {
+            "artist"
+        };
+        let mut already_parsed: FxHashSet<String> = FxHashSet::default();
+        if let Ok(tag_list) = client.list(&Term::Tag(Cow::Borrowed(tag_type)), &Query::new()) {
+            // TODO: Limit tags to only what we need locally
+            for tag in &tag_list {
+                if let Ok(mut songs) = client.find(
+                    Query::new()
+                        .and(Term::Tag(Cow::Borrowed(tag_type)), tag),
+                    Window::from((0, 1))
+                ) {
+                    if !songs.is_empty() {
+                        let first_song = SongInfo::from(std::mem::take(&mut songs[0]));
+                        let artists = first_song.into_artist_infos();
+                        // println!("Got these artists: {artists:?}");
+                        for artist in artists.into_iter() {
+                            if already_parsed.insert(artist.name.clone()) {
+                                // println!("Never seen {artist:?} before, inserting...");
+                                let _ = sender_to_fg.send_blocking(
+                                    MpdMessage::ArtistBasicInfoDownloaded(
+                                        artist
+                                    )
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn fetch_songs_of_artist(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<MpdMessage>,
+        name: String
+    ) {
+        fetch_songs_by_query(
+            client,
+            Query::new()
+                .and_with_op(
+                    Term::Tag(Cow::Borrowed("artist")),
+                    QueryOperation::Contains,
+                    name.clone()
+                ),
+            |songs| {
+                sender_to_fg.send_blocking(
+                    MpdMessage::ArtistSongInfoDownloaded(
+                        name.clone(),
+                        songs
+                    )
+                )
+            }
+        );
+    }
+}
+
 #[derive(Debug)]
 pub struct MpdWrapper {
     // Corresponding sender, for cloning into child thread.
     sender: Sender<MpdMessage>,
     // The main client living on the main thread. Every single method of
     // mpd::Client is mutating so we'll just rely on a RefCell for now.
-	main_client: RefCell<Option<Client>>,
+    main_client: RefCell<Option<Client>>,
     // The state GObject, used for communicating client status & changes to UI elements
     state: ClientState,
     // Handle to the child thread.
-	bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
-	bg_channel: Channel, // For waking up the child client
-	bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
+    bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
+    bg_channel: Channel, // For waking up the child client
+    bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
+    meta_sender: Sender<Metadata> // For sending album arts to cache controller
 }
 
 impl MpdWrapper {
-    pub fn new() -> Rc<Self> {
+    pub fn new(meta_sender: Sender<Metadata>) -> Rc<Self> {
         // Set up channels for communication with client object
         let (
             sender,
@@ -168,7 +387,8 @@ impl MpdWrapper {
             main_client: RefCell::new(None),  // Must be initialised later
             bg_handle: RefCell::new(None),  // Will be spawned later
             bg_channel: Channel::new(&ch_name).unwrap(),
-            bg_sender: RefCell::new(None)
+            bg_sender: RefCell::new(None),
+            meta_sender
         });
 
         // For future noob self: these are shallow
@@ -187,9 +407,12 @@ impl MpdWrapper {
     fn start_bg_thread(self: Rc<Self>, addr: &str) {
         let sender_to_fg = self.sender.clone();
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
+        let meta_sender = self.meta_sender.clone();
         self.bg_sender.replace(Some(bg_sender));
         if let Ok(mut client) =  Client::connect(addr) {
-            client.subscribe(self.bg_channel.clone()).expect("Child thread could not subscribe to inter-client channel!");
+            client.subscribe(self.bg_channel.clone()).expect(
+                "Child thread could not subscribe to inter-client channel!"
+            );
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting idle loop...");
                 let mut prev_size: usize = bg_receiver.len();
@@ -206,55 +429,40 @@ impl MpdWrapper {
                             // println!("Got task: {:?}", task);
                             match task {
                                 BackgroundTask::Update => {
-                                    if let Ok(_) = client.update() {
-                                        let _ = sender_to_fg.send_blocking(MpdMessage::DBUpdated);
-                                    }
+                                    background::update_mpd_database(
+                                        &mut client, &sender_to_fg
+                                    )
                                 }
-                                BackgroundTask::DownloadAlbumArt(uri, cache_path, thumb_cache_path) => {
-                                    // Check if already cached. This usually happens when
-                                    // multiple songs using the same un-cached album art
-                                    // were placed into the work queue.
-                                    if cache_path.exists() {
-                                        println!("{:?} already cached, won't download again", uri);
-                                    }
-                                    else if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
-                                        println!("Downloaded album art for {:?}", uri);
-                                        if let Some(dyn_img) = read_image_from_bytes(bytes) {
-                                            // Might want to make all of these configurable.
-                                            let _ = dyn_img.resize(256, 256, FilterType::CatmullRom).save(&cache_path);
-                                            let  _= dyn_img.thumbnail(64, 64).save(&thumb_cache_path);
-                                        }
-                                        sender_to_fg.send_blocking(MpdMessage::AlbumArtDownloaded(uri)).expect(
-                                            "Warning: cannot notify main client of album art download result."
-                                        );
-                                    }
-                                    else {
-                                        sender_to_fg.send_blocking(MpdMessage::AlbumArtNotAvailable(uri)).expect(
-                                            "Warning: cannot notify main client of album art download result."
-                                        );
-                                    }
+                                BackgroundTask::DownloadAlbumArt(uri, key, path, thumbnail_path) => {
+                                    background::download_album_art(
+                                        &mut client, &meta_sender, uri, key, path, thumbnail_path
+                                    )
                                 }
                                 BackgroundTask::FetchAlbums => {
-                                    // Get list of unique album tags
-                                    // Will block child thread until info for all albums have been retrieved.
-                                    if let Ok(tag_list) = client.list(&Term::Tag(Cow::Borrowed("album")), &Query::new()) {
-                                        for tag in &tag_list {
-                                            if let Ok(mut songs) = client.find(
-                                                Query::new()
-                                                    .and(Term::Tag(Cow::Borrowed("album")), tag),
-                                                Window::from((0, 1))
-                                            ) {
-                                                if !songs.is_empty() {
-                                                    let first_song = Song::from(std::mem::take(&mut songs[0]));
-                                                    let _ = sender_to_fg.send_blocking(
-                                                        MpdMessage::AlbumBasicInfoDownloaded(
-                                                            AlbumInfo::from(first_song)
-                                                        )
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
+                                    background::fetch_all_albums(
+                                        &mut client,
+                                        &sender_to_fg
+                                    )
+                                }
+                                BackgroundTask::FetchAlbumSongs(tag) => {
+                                    background::fetch_album_songs(
+                                        &mut client, &sender_to_fg, tag
+                                    )
+                                }
+                                BackgroundTask::FetchArtists(use_albumartist) => {
+                                    background::fetch_artists(
+                                        &mut client, &sender_to_fg, use_albumartist
+                                    )
+                                }
+                                BackgroundTask::FetchArtistSongs(name) => {
+                                    background::fetch_songs_of_artist(
+                                        &mut client, &sender_to_fg, name
+                                    )
+                                }
+                                BackgroundTask::FetchArtistAlbums(name) => {
+                                    background::fetch_albums_of_artist(
+                                        &mut client, &sender_to_fg, name
+                                    )
                                 }
                             }
                         }
@@ -289,7 +497,9 @@ impl MpdWrapper {
             self.bg_handle.replace(Some(bg_handle));
         }
         else {
-            println!("Warning: failed to spawn a background client. The background thread will not be spawned. UI might become desynchronised from the daemon.");
+            // Since many features now run in the child thread, it is no longer acceptable
+            // to run without one.
+            panic!("Could not spawn a child thread for the background client!")
         }
     }
 
@@ -342,6 +552,7 @@ impl MpdWrapper {
             MpdMessage::Connect => self.connect().await,
             MpdMessage::Update => self.queue_task(BackgroundTask::Update),
             MpdMessage::Output(id, state) => self.set_output(id, state),
+            MpdMessage::Volume(vol) => self.volume(vol),
             MpdMessage::Status => self.get_status(),
             MpdMessage::Add(uri) => self.add(uri.as_ref()),
             MpdMessage::Play => self.pause(false),
@@ -354,32 +565,63 @@ impl MpdWrapper {
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
-            MpdMessage::AlbumContent(album_info) => self.get_album_content(album_info),
-            MpdMessage::Volume(vol) => self.volume(vol),
-            MpdMessage::AlbumArt(folder_uri, cache_path, thumb_cache_path) => {
+            MpdMessage::Albums => self.queue_task(BackgroundTask::FetchAlbums),
+            MpdMessage::AlbumArt(folder_uri, key, path, thumbnail_path) => {
                 self.queue_task(
-                    BackgroundTask::DownloadAlbumArt(
-                        folder_uri.to_owned(),
-                        cache_path.clone(),
-                        thumb_cache_path.clone()
-                    )
+                    BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), key, path, thumbnail_path)
                 );
             },
+            MpdMessage::AlbumContent(tag) => {
+                // For now we only have songs.
+                // In the future we might want to have additional types of per-album content,
+                // such as participant artists.
+                self.queue_task(BackgroundTask::FetchAlbumSongs(tag))
+            }
+            MpdMessage::Artists(use_albumartist) => {
+                self.queue_task(BackgroundTask::FetchArtists(use_albumartist));
+            }
+            MpdMessage::ArtistContent(name) => self.get_artist_content(name),
             MpdMessage::FindAdd(terms) => self.find_add(terms),
-            MpdMessage::AlbumArtDownloaded(folder_uri) => self.state.emit_result(
+
+            // Result messages from child thread
+            MpdMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
-                folder_uri
+                &[
+                    &folder_uri,
+                    &BoxedAnyObject::new(hires),
+                    &BoxedAnyObject::new(thumb),
+                ]
             ),
             MpdMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
                 "album-art-not-available",
                 folder_uri
             ),
-            MpdMessage::AlbumBasicInfoDownloaded(info) => self.state.emit_result(
+            MpdMessage::AlbumBasicInfoDownloaded(info) => self.on_album_downloaded(
                 "album-basic-info-downloaded",
-                Album::from(info)
+                None,
+                info
             ),
+            MpdMessage::AlbumSongInfoDownloaded(tag, songs) => self.on_songs_downloaded(
+                "album-songs-downloaded",
+                tag,
+                songs
+            ),
+            MpdMessage::ArtistBasicInfoDownloaded(info) => self.state.emit_result(
+                "artist-basic-info-downloaded",
+                Artist::from(info)
+            ),
+            MpdMessage::ArtistSongInfoDownloaded(name, songs) => self.on_songs_downloaded(
+                "artist-songs-downloaded",
+                name,
+                songs
+            ),
+            MpdMessage::ArtistAlbumBasicInfoDownloaded(artist_name, album_info) => self.on_album_downloaded(
+                "artist-album-basic-info-downloaded",
+                Some(artist_name),
+                album_info
+            ),
+            MpdMessage::DBUpdated => {},
             MpdMessage::Busy(busy) => self.state.set_busy(busy),
-            _ => {}
         }
         glib::ControlFlow::Continue
     }
@@ -400,7 +642,7 @@ impl MpdWrapper {
                 Subsystem::Output => {
                     self.get_outputs();
                 }
-                // Else just skip. More features to come.
+                // More to come
                 _ => {}
             }
         }
@@ -424,6 +666,7 @@ impl MpdWrapper {
 
     fn init_state(&self) {
         self.queue_task(BackgroundTask::FetchAlbums);
+        self.queue_task(BackgroundTask::FetchArtists(false));
         self.get_outputs();
         // Get queue first so we can look for current song in it later
         self.get_current_queue();
@@ -493,7 +736,7 @@ impl MpdWrapper {
 
     fn set_output(&self, id: u32, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            client.output(id, state);
+            let _ = client.output(id, state);
         }
     }
 
@@ -584,24 +827,81 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_album_content(&self, info: AlbumInfo) {
-        if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let songs: Vec<Song> = client.find(
-                Query::new().and(Term::Tag(Cow::Borrowed("album")), info.title.clone()),
-                Window::from((0, 4096))
-            ).unwrap().iter_mut().map(|mpd_song| {Song::from(std::mem::take(mpd_song))}).collect();
-
-            if !songs.is_empty() {
-                // Notify library to push new nav page
-                self.state.emit_by_name::<()>(
-                    "album-content-downloaded",
-                    &[
-                        &Album::from(info),
-                        &BoxedAnyObject::new(songs)
-                    ]
-                );
-            }
+    fn on_songs_downloaded(
+        &self,
+        signal_name: &str,
+        tag: String,
+        songs: Vec<SongInfo>
+    ) {
+        if !songs.is_empty() {
+            // Append to listener lists
+            self.state.emit_by_name::<()>(
+                signal_name,
+                &[
+                    &tag,
+                    &BoxedAnyObject::new(songs.into_iter().map(Song::from).collect::<Vec<Song>>())
+                ]
+            );
         }
+    }
+
+    fn on_album_downloaded(
+        &self,
+        signal_name: &str,
+        tag: Option<String>,
+        info: AlbumInfo
+    ) {
+        // Append to listener lists
+        if let Some(tag) = tag {
+            self.state.emit_by_name::<()>(
+                signal_name,
+                &[
+                    &tag,
+                    &Album::from(info)
+                ]
+            );
+        }
+        else {
+            self.state.emit_by_name::<()>(
+                signal_name,
+                &[
+                    &Album::from(info)
+                ]
+            );
+        }
+    }
+
+    fn on_artist_downloaded(
+        &self,
+        signal_name: &str,
+        tag: Option<String>,  // For future features, such as fetching artists in album content view
+        info: ArtistInfo
+    ) {
+        // Append to listener lists
+        if let Some(tag) = tag {
+            self.state.emit_by_name::<()>(
+                signal_name,
+                &[
+                    &tag,
+                    &BoxedAnyObject::new(Artist::from(info))
+                ]
+            );
+        }
+        else {
+            self.state.emit_by_name::<()>(
+                signal_name,
+                &[
+                    &BoxedAnyObject::new(Artist::from(info))
+                ]
+            );
+        }
+    }
+
+    pub fn get_artist_content(&self, name: String) {
+        // For artists, we will need to find by substring to include songs and albums that they
+        // took part in
+        self.queue_task(BackgroundTask::FetchArtistSongs(name.clone()));
+        self.queue_task(BackgroundTask::FetchArtistAlbums(name.clone()));
     }
 
     pub fn find_add(&self, query: Query) {

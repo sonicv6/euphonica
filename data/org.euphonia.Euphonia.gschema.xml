@@ -21,6 +21,7 @@
 	<schema id="org.euphonia.Euphonia" path="/org/euphonia/Euphonia/">
 		<child schema="org.euphonia.Euphonia.state" name="state"/>
 		<child schema="org.euphonia.Euphonia.library" name="library"/>
+		<child schema="org.euphonia.Euphonia.metaprovider" name="metaprovider"/>
 		<child schema="org.euphonia.Euphonia.player" name="player"/>
 		<child schema="org.euphonia.Euphonia.client" name="client"/>
 	</schema>
@@ -47,25 +48,15 @@
 		<key name="mpd-download-album-art" type="b">
 			<default>true</default>
 		</key>
-
-		<key name="use-lastfm" type="b">
-			<default>false</default>
-		</key>
-		<key name="lastfm-api-key" type="s">
-			<default>''</default>
-		</key>
-		<key name="lastfm-user-agent" type="s">
-			<default>'Euphonia Dev (MPD client)'</default>
-		</key>
-		<key name="lastfm-download-album-art" type="b">
-			<default>true</default>
-		</key>
-		<key name="lastfm-delay-between-requests-s" type="d">
-			<default>1.0</default>
-		</key>
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.library" path="/org/euphonia/Euphonia/library/">
+		<key name="artist-tag-delims" type="as">
+			<default>[",", ";", ":", "&amp;", "/", "//", "\\", "\\\\", " X ", "feat.", "ft.", "duet with", "special guest"]</default>
+		</key>
+		<key name="artist-tag-delim-exceptions" type="as">
+			<default>["Simon &amp; Garfunkel", "Above &amp; Beyond"]</default>
+		</key>
 		<key name="sort-nulls-first" type="b">
 			<default>false</default>
 		</key>
@@ -74,6 +65,68 @@
 		</key>
 		<key name="sort-case-sensitive" type="b">
 			<default>false</default>
+		</key>
+		<key name="hires-image-size" type="u">
+			<default>256</default>
+		</key>
+		<key name="thumbnail-image-size" type="u">
+			<default>64</default>
+		</key>
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.metaprovider" path="/org/euphonia/Euphonia/metaprovider/">
+		<key name="delay-between-requests-s" type="d">
+			<default>1.5</default>
+			<summary>How long to wait between metadata provider API calls</summary>
+			<description>
+			Services such as Last.fm and MusicBrainz, enforce rate limits. Exceeding these
+			rates may result in failed metadata fetches or even banning. A 1.5s wait between
+			requests is usually tolerated by most services.
+			</description>
+		</key>
+
+		<key name="order" type="as">
+			<default>["musicbrainz", "lastfm"]</default>
+			<summary>The order of providers within the daisy chain.</summary>
+			<description>
+			Providers will be called in this order. Provider names are as returned by the
+			key() method in the MetadataProvider trait. Providers down the line will also be
+			given the accumulated metadata fetched by the prior providers, and are expected
+			to keep filling in the blanks, leaving already-filled fields as-is.
+			</description>
+		</key>
+
+		<child schema="org.euphonia.Euphonia.metaprovider.lastfm" name="lastfm"/>
+		<child schema="org.euphonia.Euphonia.metaprovider.musicbrainz" name="musicbrainz"/>
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.metaprovider.lastfm" path="/org/euphonia/Euphonia/metaprovider/lastfm/">
+		<key name="name" type="s">
+			<default>'Last.fm'</default>
+		</key>
+		<key name="enabled" type="b">
+			<default>false</default>
+		</key>
+		<key name="api-key" type="s">
+			<default>''</default>
+		</key>
+		<key name="download-album-art" type="b">
+			<default>true</default>
+		</key>
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.metaprovider.musicbrainz" path="/org/euphonia/Euphonia/metaprovider/musicbrainz/">
+		<key name="name" type="s">
+			<default>'MusicBrainz'</default>
+		</key>
+		<key name="enabled" type="b">
+			<default>false</default>
+		</key>
+		<key name="download-album-art" type="b">
+			<default>true</default>
+		</key>
+		<key name="download-artist-avatar" type="b">
+			<default>true</default>
 		</key>
 	</schema>
 
@@ -100,6 +153,7 @@
 
 	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">
 		<child schema="org.euphonia.Euphonia.state.albumview" name="albumview"/>
+		<child schema="org.euphonia.Euphonia.state.artistview" name="artistview"/>
 
 		<!-- Remember last window size -->
 		<key name="last-window-width" type="i">
@@ -120,6 +174,14 @@
 		<key name="sort-direction" enum='org.euphonia.Euphonia.sortdir'>
 			<default>'asc'</default>
 			<summary>Album View sort direction</summary>
+		</key>
+	</schema>
+
+	<schema id="org.euphonia.Euphonia.state.artistview" path="/org/euphonia/Euphonia/state/artistview/">
+		<!-- Artist view state -->
+		<key name="sort-direction" enum='org.euphonia.Euphonia.sortdir'>
+			<default>'asc'</default>
+			<summary>Artist View sort direction</summary>
 		</key>
 	</schema>
 </schemalist>

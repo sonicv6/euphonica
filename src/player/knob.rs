@@ -33,7 +33,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/volume-knob.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player/volume-knob.ui")]
     pub struct VolumeKnob {
         #[template_child]
         pub draw_area: TemplateChild<gtk::DrawingArea>,

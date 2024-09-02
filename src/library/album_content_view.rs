@@ -7,13 +7,11 @@ use adw::subclass::prelude::*;
 use gtk::{
     prelude::*,
     gio,
-    gdk,
     glib,
     CompositeTemplate,
     SignalListItemFactory,
     ListItem,
 };
-use gdk::Texture;
 use glib::{
     clone,
     closure_local,
@@ -26,16 +24,16 @@ use super::{
     AlbumSongRow
 };
 use crate::{
-    utils::{format_secs_as_duration, settings_manager},
-    common::{Album, Song},
-    cache::{Cache, CacheState}
+    cache::{
+        placeholders::ALBUMART_PLACEHOLDER, Cache, CacheState
+    }, client::ClientState, common::{Album, AlbumInfo, Song}, utils::format_secs_as_duration
 };
 
 mod imp {
     use super::*;
 
-    #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/album-content-view.ui")]
+    #[derive(Debug, CompositeTemplate)]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-content-view.ui")]
     pub struct AlbumContentView {
         #[template_child]
         pub infobox_revealer: TemplateChild<gtk::Revealer>,
@@ -71,10 +69,39 @@ mod imp {
         #[template_child]
         pub append_queue: TemplateChild<gtk::Button>,
 
+        pub song_list: gio::ListStore,
+
         pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
-        pub cache: OnceCell<Rc<Cache>>
+        pub cache: OnceCell<Rc<Cache>>,
+    }
+
+    impl Default for AlbumContentView {
+        fn default() -> Self {
+            Self {
+                cover: TemplateChild::default(),
+                title: TemplateChild::default(),
+                artist: TemplateChild::default(),
+                release_date: TemplateChild::default(),
+                track_count: TemplateChild::default(),
+                infobox_revealer: TemplateChild::default(),
+                collapse_infobox: TemplateChild::default(),
+                wiki_box: TemplateChild::default(),
+                wiki_text: TemplateChild::default(),
+                wiki_link: TemplateChild::default(),
+                wiki_attrib: TemplateChild::default(),
+                runtime: TemplateChild::default(),
+                content: TemplateChild::default(),
+                song_list: gio::ListStore::new::<Song>(),
+                replace_queue: TemplateChild::default(),
+                append_queue: TemplateChild::default(),
+                album: RefCell::new(None),
+                bindings: RefCell::new(Vec::new()),
+                cover_signal_id: RefCell::new(None),
+                cache: OnceCell::new()
+            }
+        }
     }
 
     #[glib::object_subclass]
@@ -131,9 +158,7 @@ impl AlbumContentView {
         let wiki_link = self.imp().wiki_link.get();
         let wiki_attrib = self.imp().wiki_attrib.get();
         if let Some(meta) = cache.load_local_album_meta(
-            album.get_mb_album_id().as_deref(),
-            Some(album.get_title()).as_deref(),
-            album.get_artist().as_deref()
+            album.get_info()
         ) {
             if let Some(wiki) = meta.wiki {
                 wiki_box.set_visible(true);
@@ -156,7 +181,22 @@ impl AlbumContentView {
         }
     }
 
-    pub fn setup(&self, library: Library, cache: Rc<Cache>) {
+    pub fn setup(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+        cache.get_cache_state().connect_closure(
+            "album-art-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: CacheState, folder_uri: String| {
+                    if let Some(album) = this.imp().album.borrow().as_ref() {
+                        if folder_uri == album.get_uri() {
+                            this.update_cover(album.get_info());
+                        }
+                    }
+                }
+            )
+        );
         cache.get_cache_state().connect_closure(
             "album-meta-downloaded",
             false,
@@ -172,6 +212,22 @@ impl AlbumContentView {
                 }
             )
         );
+        client_state.connect_closure(
+            "album-songs-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: ClientState, tag: String, songs: glib::BoxedAnyObject| {
+                    if let Some(album) = this.imp().album.borrow().as_ref() {
+                        if album.get_title() == tag {
+                            this.add_songs(songs.borrow::<Vec<Song>>().as_ref());
+                        }
+                    }
+                }
+            )
+        );
+
         let _ = self.imp().cache.set(cache);
         let infobox_revealer = self.imp().infobox_revealer.get();
         let collapse_infobox = self.imp().collapse_infobox.get();
@@ -236,12 +292,11 @@ impl AlbumContentView {
 
         // Create an empty `AlbumSongRow` during setup
         factory.connect_setup(move |_, list_item| {
-            let song_row = AlbumSongRow::new();
-            song_row.setup(library.clone());
-            list_item
+            let item = list_item
                 .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem")
-                .set_child(Some(&song_row));
+                .expect("Needs to be ListItem");
+            let row = AlbumSongRow::new(library.clone(), &item);
+            item.set_child(Some(&row));
         });
         // Tell factory how to bind `AlbumSongRow` to one of our Album GObjects
         factory.connect_bind(move |_, list_item| {
@@ -282,16 +337,20 @@ impl AlbumContentView {
         self.imp().content.set_factory(Some(&factory));
     }
 
-    pub fn set_album(&self, album: Album, song_list: gio::ListStore) {
-        self.setup_content(song_list);
-        self.bind(album);
-    }
-
-    fn update_cover(&self, tex: Option<&Texture>) {
-        // Use high-resolution version here
-        if tex.is_some() {
-            self.imp().cover.set_paintable(tex);
+    /// Returns true if an album art was successfully retrieved.
+    /// On false, we will want to call cache.ensure_local_album_art()
+    fn update_cover(&self, info: &AlbumInfo) -> bool {
+        if let Some(cache) = self.imp().cache.get() {
+            if let Some(tex) = cache.load_local_album_art(info, false) {
+                self.imp().cover.set_paintable(Some(&tex));
+                return true;
+            }
+            else {
+                self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
+                return false;
+            }
         }
+        false
     }
 
     pub fn bind(&self, album: Album) {
@@ -349,23 +408,16 @@ impl AlbumContentView {
         // Save binding
         bindings.push(release_date_viz_binding);
 
-        self.update_cover(album.get_cover().as_ref());
-        self.imp().cover_signal_id.replace(Some(
-            album.connect_notify_local(
-                Some("cover"),
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    #[weak]
-                    album,
-                    move |_, _| {
-                        this.update_cover(album.get_cover().as_ref());
-                    }
-                )
-            )
-        ));
+        let info = album.get_info();
+        if !self.update_cover(info) {
+            if let Some(cache) = self.imp().cache.get() {
+                cache.ensure_local_album_art(info);
+            }
+        }
 
         // Save reference to album object
+        let sel_model = gtk::NoSelection::new(Some(self.imp().song_list.clone()));
+        self.imp().content.set_model(Some(&sel_model));
         self.imp().album.borrow_mut().replace(album);
     }
 
@@ -375,19 +427,21 @@ impl AlbumContentView {
             binding.unbind();
         }
         if let Some(id) = self.imp().cover_signal_id.take() {
-            if let Some(album) = self.imp().album.borrow_mut().take() {
-                album.disconnect(id);
+            if let Some(cache) = self.imp().cache.get() {
+                cache.get_cache_state().disconnect(id);
             }
         }
         // Unset metadata widgets
         self.imp().wiki_box.set_visible(false);
+        self.imp().song_list.remove_all();
     }
 
-    pub fn setup_content(&self, song_list: gio::ListStore) {
-        self.imp().track_count.set_label(&song_list.n_items().to_string());
+    fn add_songs(&self, songs: &[Song]) {
+        self.imp().song_list.extend_from_slice(songs);
+        self.imp().track_count.set_label(&self.imp().song_list.n_items().to_string());
         self.imp().runtime.set_label(
             &format_secs_as_duration(
-                song_list
+                self.imp().song_list
                     .iter()
                     .map(
                         |item: Result<Song, _>| {
@@ -400,11 +454,5 @@ impl AlbumContentView {
                     .sum::<u64>() as f64
             )
         );
-        let sel_model = gtk::NoSelection::new(Some(song_list));
-        self.imp().content.set_model(Some(&sel_model));
-    }
-
-    pub fn clear_content(&self) {
-        self.imp().content.set_model(Option::<&gtk::NoSelection>::None);
     }
 }

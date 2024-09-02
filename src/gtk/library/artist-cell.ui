@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+	<template class="EuphoniaArtistCell" parent="GtkBox">
+		<property name="halign">3</property>
+		<property name="valign">1</property>
+		<property name="orientation">1</property>
+		<property name="spacing">6</property>
+		<child>
+			<object class="AdwAvatar" id="avatar">
+				<property name="show-initials">true</property>
+				<property name="size">128</property>
+			</object>
+		</child>
+		<child>
+			<object class="GtkLabel" id="name">
+				<property name="ellipsize">3</property>
+				<property name="justify">center</property>
+				<style>
+					<class name="caption"/>
+				</style>
+			</object>
+		</child>
+	</template>
+</interface>

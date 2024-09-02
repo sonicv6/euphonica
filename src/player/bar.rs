@@ -31,7 +31,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player-bar.ui")]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player/player-bar.ui")]
     pub struct PlayerBar {
         // Left side: current song info
         #[template_child]
@@ -315,7 +315,6 @@ impl PlayerBar {
             )
             .get_only()
             .mapping(|v: &Variant, _| {
-                println!("use-dbfs: {:?}", v);
                 Some((v.get::<String>().unwrap().as_str() == "decibels").to_value())
             })
             .build();
