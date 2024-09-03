@@ -3,139 +3,162 @@
 	<requires lib="gtk" version="4.0" />
 	<template class="EuphoniaQueueView" parent="GtkWidget">
 		<child>
-			<object class="AdwToolbarView">
-				<child type="top">
-					<object class="AdwHeaderBar">
-						<property name="title-widget">
-							<object class="AdwWindowTitle">
-								<property name="title" translatable="true">Queue</property>
-								<property name="subtitle">0 songs</property>
-							</object>
-						</property>
-						<child type="end">
-							<object class="GtkButton" id="clear_queue">
-								<property name="icon-name">user-trash-symbolic</property>
-								<property name="sensitive">false</property>
-								<style>
-									<class name="destructive-action"/>
-								</style>
-							</object>
-						</child>
-					</object>
-				</child>
-				<property name="content">
-					<object class="GtkBox">
-
-						<child>
-							<object class="GtkScrolledWindow">
-								<property name="hscrollbar-policy">never</property>
-								<property name="vscrollbar-policy">automatic</property>
-								<property name="propagate-natural-height">true</property>
-								<property name="has-frame">false</property>
-								<property name="vexpand">true</property>
-								<property name="hexpand">true</property>
-								<property name="child">
-									<object class="GtkListView" id="queue">
-										<property name="single-click-activate">true</property>
-										<style>
-											<class name="queue-view-column" />
-											<class name="no-bg" />
-										</style>
-									</object>
-								</property>
-							</object>
-						</child>
-
-						<child>
-							<object class="GtkSeparator"></object>
-						</child>
-
-						<child>
-							<object class="GtkScrolledWindow">
-								<property name="hscrollbar-policy">never</property>
-								<property name="vscrollbar-policy">automatic</property>
-								<property name="propagate-natural-height">true</property>
-								<property name="vexpand">true</property>
-
-								<property name="child">
-									<object class="GtkBox">
-										<property name="orientation">vertical</property>
-										<property name="spacing">12</property>
-										<child>
-											<object class="GtkBox"> <!-- Wraps around image to give
-												it rounded corners & card shadow -->
+			<object class="AdwNavigationSplitView" id="queue_pane_view">
+				<property name="min-sidebar-width">240</property>
+				<property name="max-sidebar-width">1000</property>
+				<property name="sidebar-width-fraction">0.5</property>
+				<property name="sidebar">
+					<object class="AdwNavigationPage">
+						<property name="title" translatable="yes">Queue</property>
+						<property name="tag">queue</property>
+						<property name="child">
+							<object class="AdwToolbarView">
+								<child type="top">
+									<object class="AdwHeaderBar">
+										<property name="title-widget">
+											<object class="AdwWindowTitle">
+												<property name="title" translatable="true">Queue</property>
+												<property name="subtitle">0 songs</property>
+											</object>
+										</property>
+										<child type="end">
+											<object class="GtkButton" id="clear_queue">
+												<property name="icon-name">user-trash-symbolic</property>
+												<property name="sensitive">false</property>
 												<style>
-													<class name="card" />
+													<class name="destructive-action"/>
 												</style>
-												<property name="overflow">hidden</property> <!--
-												Needed to clip image behind corners -->
-												<child>
-													<object class="GtkImage" id="current_album_art">
-														<property name="pixel-size">256</property>
-														<property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
-													</object>
-												</child>
 											</object>
 										</child>
-
+									</object>
+								</child>
+								<property name="content">
+									<object class="GtkBox">
+										<property name="orientation">1</property>
 										<child>
-											<object class="GtkBox" id="song_info_box">
-												<property name="orientation">vertical</property>
-												<property name="visible">false</property>
-												<child>
-													<object class="GtkLabel" id="current_song_name">
-														<property name="label">Untitled</property>
-														<property name="wrap">true</property>
-														<property name="justify">2</property>
+											<object class="GtkScrolledWindow">
+												<property name="hscrollbar-policy">never</property>
+												<property name="vscrollbar-policy">automatic</property>
+												<property name="propagate-natural-height">true</property>
+												<property name="has-frame">false</property>
+												<property name="vexpand">true</property>
+												<property name="hexpand">true</property>
+												<property name="child">
+													<object class="GtkListView" id="queue">
+														<property name="single-click-activate">true</property>
 														<style>
-															<class name="title-4"/>
+															<class name="queue-view-column" />
+															<class name="no-bg" />
 														</style>
 													</object>
-												</child>
-												<child>
-													<object class="GtkLabel"
-														id="current_artist_name">
-														<property name="label">Unknown</property>
-														<property name="wrap">true</property>
-														<property name="justify">2</property>
-													</object>
-												</child>
-												<child>
-													<object class="GtkLabel" id="current_album_name">
-														<property name="label">Unknown</property>
-														<property name="wrap">true</property>
-														<property name="justify">2</property>
-													</object>
-												</child>
+												</property>
 											</object>
 										</child>
-
-										<child>
-											<object class="GtkBox">
-												<property name="height-request">384</property>
-												<property name="orientation">vertical</property>
-												<style>
-													<class name="card" />
-												</style>
-												<child>
-													<object class="AdwStatusPage" id="lyrics_tba">
-														<property name="title" translatable="true">Coming soon</property>
-														<property name="description"
-															translatable="true">TODO: fetch lyrics from Genius</property>
-														<property name="icon-name">help-about-symbolic</property>
-													</object>
-												</child>
-
-											</object>
-										</child>
-
-										<style>
-											<class name="queue-view-column" />
-										</style>
 									</object>
 								</property>
 							</object>
-						</child>
+						</property>
+					</object>
+				</property>
+				<property name="content">
+					<object class="AdwNavigationPage">
+						<property name="title" translatable="yes">Now Playing</property>
+						<property name="tag">now-playing</property>
+						<property name="child">
+							<object class="AdwToolbarView">
+								<child type="top">
+									<object class="AdwHeaderBar"/>
+								</child>
+								<property name="content">
+									<object class="GtkScrolledWindow">
+										<property name="hscrollbar-policy">never</property>
+										<property name="vscrollbar-policy">automatic</property>
+										<property name="propagate-natural-height">true</property>
+										<property name="vexpand">true</property>
+
+										<property name="child">
+											<object class="GtkBox">
+												<property name="orientation">vertical</property>
+												<property name="spacing">12</property>
+												<child>
+													<object class="AdwClamp">
+														<property name="maximum-size">480px</property>
+														<property name="tightening-threshold">360px</property>
+														<property name="child">
+															<object class="GtkBox"> <!-- Wraps around picture to give it rounded corners & card shadow -->
+																<property name="height-request">180sp</property>
+																<property name="halign">center</property>
+																<style>
+																	<class name="card" />
+																</style>
+																<property name="overflow">hidden</property> <!-- Needed to clip image behind corners -->
+																<child>
+																	<object class="GtkPicture" id="current_album_art">
+																	</object>
+																</child>
+															</object>
+														</property>
+													</object>
+												</child>
+
+												<child>
+													<object class="GtkBox" id="song_info_box">
+														<property name="orientation">vertical</property>
+														<property name="visible">false</property>
+														<child>
+															<object class="GtkLabel" id="current_song_name">
+																<property name="label">Untitled</property>
+																<property name="wrap">true</property>
+																<property name="justify">2</property>
+																<style>
+																	<class name="title-4"/>
+																</style>
+															</object>
+														</child>
+														<child>
+															<object class="GtkLabel" id="current_artist_name">
+																<property name="label">Unknown</property>
+																<property name="wrap">true</property>
+																<property name="justify">2</property>
+															</object>
+														</child>
+														<child>
+															<object class="GtkLabel" id="current_album_name">
+																<property name="label">Unknown</property>
+																<property name="wrap">true</property>
+																<property name="justify">2</property>
+															</object>
+														</child>
+													</object>
+												</child>
+
+												<child>
+													<object class="GtkBox">
+														<property name="height-request">384</property>
+														<property name="orientation">vertical</property>
+														<style>
+															<class name="card" />
+														</style>
+														<child>
+															<object class="AdwStatusPage" id="lyrics_tba">
+																<property name="title" translatable="true">Coming soon</property>
+																<property name="description" translatable="true">TODO: fetch lyrics from Genius</property>
+																<property name="icon-name">help-about-symbolic</property>
+															</object>
+														</child>
+
+													</object>
+												</child>
+
+												<style>
+													<class name="queue-view-column" />
+												</style>
+											</object>
+										</property>
+									</object>
+								</property>
+							</object>
+						</property>
 					</object>
 				</property>
 			</object>

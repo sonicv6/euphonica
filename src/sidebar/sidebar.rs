@@ -68,7 +68,7 @@ impl Sidebar {
         Self::default()
     }
 
-    pub fn setup(&self, stack: gtk::Stack) {
+    pub fn setup(&self, stack: gtk::Stack, player_bar_revealer: gtk::Revealer) {
         // Set default view. TODO: remember last view
         stack.set_visible_child_name("albums");
         self.imp().albums_btn.set_active(true);
@@ -76,27 +76,36 @@ impl Sidebar {
         self.imp().albums_btn.connect_toggled(clone!(
             #[weak]
             stack,
+            #[weak]
+            player_bar_revealer,
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("albums");
+                player_bar_revealer.set_reveal_child(true);
             }
         }));
 
         self.imp().artists_btn.connect_toggled(clone!(
             #[weak]
             stack,
+            #[weak]
+            player_bar_revealer,
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("artists");
+                player_bar_revealer.set_reveal_child(true);
             }
         }));
 
         self.imp().queue_btn.connect_toggled(clone!(
             #[weak]
             stack,
+            #[weak]
+            player_bar_revealer,
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("queue");
+                player_bar_revealer.set_reveal_child(false);
             }
         }));
     }

@@ -3,6 +3,12 @@
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
 	<template class="EuphoniaPlayerBar" parent="GtkBox">
+		<child>
+			<object class="AdwBreakpoint">
+				<condition>max-width: 850</condition>
+				<setter object="info_box" property="visible">false</setter>
+			</object>
+		</child>
 		<property name="hexpand">true</property>
 		<child>
 			<object class="GtkCenterBox">

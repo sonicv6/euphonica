@@ -71,14 +71,14 @@ mod imp {
 
         // Bottom bar
         #[template_child]
+        pub player_bar_revealer: TemplateChild<gtk::Revealer>,
+        #[template_child]
         pub player_bar: TemplateChild<PlayerBar>,
 
         // RefCells to notify IDs so we can unbind later
         pub notify_position_id: RefCell<Option<SignalHandlerId>>,
         pub notify_playback_state_id: RefCell<Option<SignalHandlerId>>,
-        pub notify_duration_id: RefCell<Option<SignalHandlerId>>,
-
-
+        pub notify_duration_id: RefCell<Option<SignalHandlerId>>
     }
 
     #[glib::object_subclass]
@@ -93,22 +93,6 @@ mod imp {
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
             obj.init_template();
-        }
-
-        fn new() -> Self {
-            Self {
-                album_view: TemplateChild::default(),
-                artist_view: TemplateChild::default(),
-                queue_view: TemplateChild::default(),
-                stack: TemplateChild::default(),
-                title: TemplateChild::default(),
-                busy_spinner: TemplateChild::default(),
-                sidebar: TemplateChild::default(),
-                player_bar: TemplateChild::default(),
-                notify_position_id: RefCell::new(None),
-                notify_duration_id: RefCell::new(None),
-                notify_playback_state_id: RefCell::new(None),
-            }
         }
     }
 
@@ -150,7 +134,8 @@ impl EuphoniaWindow {
             app.get_client().get_client_state()
         );
         win.imp().sidebar.setup(
-            win.imp().stack.clone()
+            win.imp().stack.get(),
+            win.imp().player_bar_revealer.get()
         );
         win.imp().player_bar.setup(
             app.get_player(),

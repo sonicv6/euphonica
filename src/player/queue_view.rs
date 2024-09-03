@@ -15,7 +15,7 @@ use gdk::Texture;
 use glib::clone;
 
 use crate::{
-    cache::Cache,
+    cache::{placeholders::ALBUMART_PLACEHOLDER, Cache},
     common::Song
 };
 
@@ -26,15 +26,22 @@ use super::{
 };
 
 mod imp {
+    use std::cell::Cell;
+
+    use glib::Properties;
+
     use super::*;
 
-    #[derive(Debug, Default, CompositeTemplate)]
+    #[derive(Debug, Properties, Default, CompositeTemplate)]
+    #[properties(wrapper_type = super::QueueView)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
+        pub queue_pane_view: TemplateChild<adw::NavigationSplitView>,
+        #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
         #[template_child]
-        pub current_album_art: TemplateChild<gtk::Image>,
+        pub current_album_art: TemplateChild<gtk::Picture>,
         #[template_child]
         pub song_info_box: TemplateChild<gtk::Box>,
         #[template_child]
@@ -44,7 +51,9 @@ mod imp {
         #[template_child]
         pub current_album_name: TemplateChild<gtk::Label>,
         #[template_child]
-        pub clear_queue: TemplateChild<gtk::Button>
+        pub clear_queue: TemplateChild<gtk::Button>,
+        #[property(get, set)]
+        pub collapsed: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -66,6 +75,7 @@ mod imp {
         }
     }
 
+    #[glib::derived_properties]
     impl ObjectImpl for QueueView {
         fn dispose(&self) {
             while let Some(child) = self.obj().first_child() {
@@ -75,6 +85,11 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+            let obj = self.obj();
+            obj
+                .bind_property("collapsed", &self.queue_pane_view.get(), "collapsed")
+                .sync_create()
+                .build();
         }
     }
 
@@ -182,7 +197,7 @@ impl QueueView {
             self.imp().current_album_art.set_paintable(tex);
         }
         else {
-            self.imp().current_album_art.set_resource(Some("/org/euphonia/Euphonia/albumart-placeholder.png"));
+            self.imp().current_album_art.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
         }
     }
 

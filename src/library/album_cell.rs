@@ -162,7 +162,7 @@ impl AlbumCell {
             self.imp().cover.set_paintable(Some(&tex));
         }
         else {
-            self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER))
+            self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
         }
     }
 
