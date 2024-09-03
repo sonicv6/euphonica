@@ -223,7 +223,7 @@
                                                                 <property name="spacing">6</property>
                                                                 <child>
                                                                     <object class="GtkButton" id="replace_queue">
-                                                                        <property name="tooltip-text" translatable="true">Replace queue with songs from this album</property>
+                                                                        <property name="tooltip-text" translatable="true">Replace queue with this artist's songs</property>
                                                                         <child>
                                                                             <object class="GtkBox">
                                                                                 <property name="spacing">6</property>
@@ -234,7 +234,7 @@
                                                                                 </child>
                                                                                 <child>
                                                                                     <object class="GtkLabel">
-                                                                                        <property name="label" translatable="true">Play</property>
+                                                                                        <property name="label" translatable="true">Play all</property>
                                                                                     </object>
                                                                                 </child>
                                                                             </object>
@@ -247,7 +247,7 @@
                                                                 </child>
                                                                 <child>
                                                                     <object class="GtkButton" id="append_queue">
-                                                                        <property name="tooltip-text" translatable="true">Add songs from this album to the end of the queue</property>
+                                                                        <property name="tooltip-text" translatable="true">Add all songs with this artist to the end of the queue</property>
                                                                         <child>
                                                                             <object class="GtkBox">
                                                                                 <property name="spacing">6</property>
@@ -258,7 +258,7 @@
                                                                                 </child>
                                                                                 <child>
                                                                                     <object class="GtkLabel">
-                                                                                        <property name="label" translatable="true">Add to queue</property>
+                                                                                        <property name="label" translatable="true">Add all to queue</property>
                                                                                     </object>
                                                                                 </child>
                                                                             </object>

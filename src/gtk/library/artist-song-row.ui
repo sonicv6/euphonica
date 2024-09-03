@@ -14,7 +14,7 @@
 				</style>
 				<child>
 					<object class="GtkImage" id="thumbnail">
-						<property name="pixel-size">32</property>
+						<property name="pixel-size">36</property>
 						<property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
 					</object>
 				</child>
