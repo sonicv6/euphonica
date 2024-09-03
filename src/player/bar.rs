@@ -8,17 +8,17 @@ use glib::{
     closure_local,
     BoxedAnyObject
 };
-use async_channel::Sender;
 use mpd::output::Output;
 
 use crate::{
-    utils::{settings_manager, format_secs_as_duration},
-    client::MpdMessage,
-    player::Player,
+    utils::settings_manager,
     common::{QualityGrade, paintables::FadePaintable}
 };
 
-use super::{PlaybackState, VolumeKnob, MpdOutput};
+use super::{
+    Player, Seekbar,
+    PlaybackState, VolumeKnob, MpdOutput
+};
 
 mod imp {
     use glib::{
@@ -28,6 +28,7 @@ mod imp {
         ParamSpecDouble
     };
     use once_cell::sync::Lazy;
+
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
@@ -36,8 +37,6 @@ mod imp {
         // Left side: current song info
         #[template_child]
         pub info_box: TemplateChild<gtk::Box>,
-        #[template_child]
-        pub seekbar_box: TemplateChild<gtk::CenterBox>,
         #[template_child]
         pub albumart: TemplateChild<gtk::Image>,
         #[template_child]
@@ -61,11 +60,7 @@ mod imp {
         #[template_child]
         pub next_btn: TemplateChild<gtk::Button>,
         #[template_child]
-        pub seekbar: TemplateChild<gtk::Scale>,
-        #[template_child]
-        pub elapsed: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub duration: TemplateChild<gtk::Label>,
+        pub seekbar: TemplateChild<Seekbar>,
 
         // Right side: output info & volume control
         #[template_child]
@@ -90,12 +85,7 @@ mod imp {
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
         pub output_count: Cell<usize>,
-        // Handle to seekbar polling task
-        pub seekbar_poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
-        // Temporary place for seekbar position before sending seekcur
-        // TODO: move both of these into a custom seekbar widget.
-        // pub new_position: Cell<f64>,
-        pub seekbar_clicked: Cell<bool>
+
     }
 
     // The central trait for subclassing a GObject
@@ -260,11 +250,11 @@ impl PlayerBar {
         Self::default()
     }
 
-    pub fn setup(&self, player: Player, sender: Sender<MpdMessage>) {
+    pub fn setup(&self, player: Player) {
         self.bind_settings();
         self.setup_volume_knob(player.clone());
-        self.bind_state(player.clone(), sender.clone());
-        self.setup_seekbar(player, sender);
+        self.bind_state(player.clone());
+        self.setup_seekbar(player);
     }
 
     fn bind_settings(&self) {
@@ -368,26 +358,13 @@ impl PlayerBar {
         );
     }
 
-    fn bind_state(&self, player: Player, sender: Sender<MpdMessage>) {
+    fn bind_state(&self, player: Player) {
         let imp = self.imp();
         let info_box = imp.info_box.get();
         player
             .bind_property(
                 "playback-state",
                 &info_box,
-                "visible"
-            )
-            .transform_to(|_, state: PlaybackState| {
-                Some(state != PlaybackState::Stopped)
-            })
-            .sync_create()
-            .build();
-
-        let seekbar_box = imp.seekbar_box.get();
-        player
-            .bind_property(
-                "playback-state",
-                &seekbar_box,
                 "visible"
             )
             .transform_to(|_, state: PlaybackState| {
@@ -488,40 +465,13 @@ impl PlayerBar {
         // seekbar to begin with.
         player.connect_notify_local(
             Some("playback-state"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                #[strong]
-                sender,
-                move |player, _| {
-                    if player.playback_state() == PlaybackState::Playing {
-                        this.maybe_start_polling(player.clone(), sender.clone());
-                    }
+            |player, _| {
+                if player.playback_state() == PlaybackState::Playing {
+                    player.maybe_start_polling();
                 }
-            )
+            }
         );
-        player.connect_notify_local(
-            Some("position"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |player, _| {
-                    this.imp().seekbar.set_value(player.position());
-                }
-            ),
-        );
-        player.connect_notify_local(
-            Some("duration"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |player, _| {
-                    let seekbar = this.imp().seekbar.get();
-                    seekbar.set_range(0.0, player.duration() as f64);
-                    seekbar.set_value(player.position());
-                }
-            ),
-        );
+
         player.connect_closure(
             "outputs-changed",
             false,
@@ -533,37 +483,6 @@ impl PlayerBar {
                 }
             )
         );
-
-        let elapsed = imp.elapsed.get();
-        player
-            .bind_property(
-                "position",
-                &elapsed,
-                "label"
-            )
-            .transform_to(|_, pos| {
-                Some(format_secs_as_duration(pos))
-            })
-            .sync_create()
-            .build();
-
-        let duration = imp.duration.get();
-        player
-            .bind_property(
-                "duration",
-                &duration,
-                "label"
-            )
-            .transform_to(|_, dur: u64| {
-                // If duration is 0s (no song), show --:-- instead
-                if dur > 0 {
-                    return Some(format_secs_as_duration(dur as f64));
-                }
-                Some("--:--".to_owned())
-
-            })
-            .sync_create()
-            .build();
 
         self.update_album_art(player.current_song_album_art());
         player.connect_notify_local(
@@ -582,9 +501,9 @@ impl PlayerBar {
         self.imp().prev_btn.connect_clicked(
             clone!(
                 #[strong]
-                sender,
+                player,
                 move |_| {
-                    let _ = sender.send_blocking(MpdMessage::Prev);
+                    player.prev_song();
                 }
             )
         );
@@ -600,9 +519,9 @@ impl PlayerBar {
         self.imp().next_btn.connect_clicked(
             clone!(
                 #[strong]
-                sender,
+                player,
                 move |_| {
-                    let _ = sender.send_blocking(MpdMessage::Next);
+                    player.next_song();
                 }
             )
         );
@@ -744,71 +663,55 @@ impl PlayerBar {
         self.set_visible_output(self.imp().current_output.get() as i32 - 1);
     }
 
-    fn setup_seekbar(&self, player: Player,  sender: Sender<MpdMessage>) {
-        // Capture mouse button release action for seekbar
-        // Funny story: gtk::Scale has its own GestureClick controller which will eat up mouse button events.
-        // Workaround: capture mouse button release event at window level in capture phase, using a bool
-        // set by the seekbar's change-value signal to determine whether it is related to the seekbar or not.
-        let seekbar_gesture = gtk::GestureClick::new();
-        seekbar_gesture.set_propagation_phase(gtk::PropagationPhase::Capture);
-        seekbar_gesture.connect_released(
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                #[strong]
-                sender,
-                #[strong]
+    fn setup_seekbar(&self, player: Player) {
+        let seekbar = self.imp().seekbar.get();
+        seekbar.connect_closure(
+            "pressed",
+            false,
+            closure_local!(
+                #[weak]
                 player,
-                move |gesture, _, _, _| {
-                    gesture.set_state(gtk::EventSequenceState::None); // allow propagating to seekbar
-                    if this.imp().seekbar_clicked.get() {
-                        let _ = sender.send_blocking(
-                            MpdMessage::SeekCur(
-                                this.imp().seekbar.adjustment().value()
-                            )
-                        );
-                        this.imp().seekbar_clicked.replace(false);
-                        this.maybe_start_polling(player.clone(), sender.clone());
-                    }
+                move |_: Seekbar| {
+                    player.block_polling();
+                    player.stop_polling();
                 }
             )
         );
 
-        self.imp().seekbar.connect_change_value(
+        seekbar.connect_closure(
+            "released",
+            false,
+            closure_local!(
+                #[weak]
+                player,
+                move |seekbar: Seekbar| {
+                    player.unblock_polling();
+                    player.seek(seekbar.value());
+                    // Player will start polling again on next status update,
+                    // which should be triggered by us seeking.
+                }
+            )
+        );
+
+        player.connect_notify_local(
+            Some("position"),
             clone!(
                 #[weak(rename_to = this)]
                 self,
-                #[upgrade_or]
-                glib::signal::Propagation::Proceed,
-                move |_, _, _| {
-                    let _ = this.imp().seekbar_clicked.replace(true);
-                    if let Some(handle) = this.imp().seekbar_poller_handle.take() {
-                        handle.abort();
-                    }
-                    glib::signal::Propagation::Proceed
+                move |player, _| {
+                    this.imp().seekbar.set_value(player.position());
                 }
-            )
+            ),
         );
-
-        self.add_controller(seekbar_gesture);
-    }
-
-    fn maybe_start_polling(&self, player: Player, sender: Sender<MpdMessage>) {
-        // Periodically poll for player progress to update seekbar
-        // Won't start a new loop if there is already one
-        let poller_handle = glib::MainContext::default().spawn_local(async move {
-            loop {
-                // Don't poll if not playing
-                if player.playback_state() != PlaybackState::Playing {
-                    break;
+        player.connect_notify_local(
+            Some("duration"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |player, _| {
+                    this.imp().seekbar.set_duration(player.duration() as f64);
                 }
-                // Skip poll if channel is full
-                if !sender.is_full() {
-                    let _ = sender.send_blocking(MpdMessage::Status);
-                }
-                glib::timeout_future_seconds(1).await;
-            }
-        });
-        self.imp().seekbar_poller_handle.replace(Some(poller_handle));
+            ),
+        );
     }
 }

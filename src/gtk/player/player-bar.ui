@@ -3,12 +3,6 @@
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
 	<template class="EuphoniaPlayerBar" parent="GtkBox">
-		<child>
-			<object class="AdwBreakpoint">
-				<condition>max-width: 850</condition>
-				<setter object="info_box" property="visible">false</setter>
-			</object>
-		</child>
 		<property name="hexpand">true</property>
 		<child>
 			<object class="GtkCenterBox">
@@ -191,35 +185,9 @@
 										</child>
 									</object>
 								</child>
-
 								<child>
 									<!-- Bottom: seekbar -->
-									<object class="GtkCenterBox" id="seekbar_box">
-										<!-- TODO: elapsed/duration labels -->
-										<property name="start-widget">
-											<object class="GtkLabel" id="elapsed">
-											</object>
-										</property>
-										<property name="center-widget">
-											<object class="GtkScale" id="seekbar">
-												<property name="draw-value">false</property>
-												<property name="hexpand">true</property>
-												<property name="orientation">0</property>
-												<property name="width-request">240</property>
-												<property name="adjustment">
-													<object class="GtkAdjustment">
-														<property name="lower">0</property>
-														<property name="upper">0</property>
-														<property name="value">0</property>
-													</object>
-												</property>
-											</object>
-										</property>
-										<property name="end-widget">
-											<object class="GtkLabel" id="duration">
-											</object>
-										</property>
-									</object>
+									<object class="EuphoniaSeekbar" id="seekbar"/>
 								</child>
 							</object>
 						</child>

@@ -51,6 +51,11 @@ mod imp {
         // loop through the whole queue & search for songs matching
         // that album URI to update their arts).
         pub cache: OnceCell<Rc<Cache>>,
+        // Handle to seekbar polling task
+        pub poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
+        // Set this to true to pause polling even if PlaybackState is Playing.
+        // Used by seekbar widgets.
+        pub poll_blocked: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -69,6 +74,8 @@ mod imp {
                 client_sender: OnceCell::new(),
                 cache: OnceCell::new(),
                 volume: Cell::new(0),
+                poller_handle: RefCell::new(None),
+                poll_blocked: Cell::new(false)
             }
         }
     }
@@ -230,6 +237,9 @@ impl Player {
             State::Pause => PlaybackState::Paused,
             State::Stop => PlaybackState::Stopped,
         };
+        if new_state == PlaybackState::Playing {
+            self.maybe_start_polling();
+        }
 
         let old_state = self.imp().state.replace(new_state);
         if old_state != new_state {
@@ -439,6 +449,12 @@ impl Player {
         self.imp().position.get()
     }
 
+    pub fn seek(&self, new_pos: f64) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::SeekCur(new_pos));
+        }
+    }
+
     pub fn queue(&self) -> gio::ListStore {
         self.imp().queue.borrow().clone()
     }
@@ -474,6 +490,18 @@ impl Player {
         }
     }
 
+    pub fn prev_song(&self) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::Prev);
+        }
+    }
+
+    pub fn next_song(&self) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::Next);
+        }
+    }
+
     pub fn clear_queue(&self) {
         if let Err(msg) = self.send(MpdMessage::Clear) {
             println!("{}", msg);
@@ -493,5 +521,46 @@ impl Player {
         if let Err(msg) = self.send(MpdMessage::PlayId(song.get_queue_id())) {
             println!("{}", msg);
         }
+    }
+
+    /// Periodically poll for player progress to update seekbar.
+    /// Won't start a new loop if there is already one or when polling is blocked by a seekbar.
+    pub fn maybe_start_polling(&self) {
+        let this = self.clone();
+        let sender = self.imp().client_sender.get().expect("Fatal: Player controller not set up").clone();
+        if self.imp().poller_handle.borrow().is_none() && !self.imp().poll_blocked.get() {
+            let poller_handle = glib::MainContext::default().spawn_local(async move {
+                loop {
+                    // Don't poll if not playing
+                    if this.playback_state() != PlaybackState::Playing {
+                        break;
+                    }
+                    // Skip poll if channel is full
+                    if !sender.is_full() {
+                        let _ = sender.send_blocking(MpdMessage::Status);
+                    }
+                    glib::timeout_future_seconds(1).await;
+                }
+            });
+            self.imp().poller_handle.replace(Some(poller_handle));
+        }
+        else if self.imp().poll_blocked.get() {
+            println!("Polling blocked");
+        }
+    }
+
+    /// Stop poller loop. Seekbar should call this when being interacted with.
+    pub fn stop_polling(&self) {
+        if let Some(handle) = self.imp().poller_handle.take() {
+            handle.abort();
+        }
+    }
+
+    pub fn block_polling(&self) {
+        let _ = self.imp().poll_blocked.replace(true);
+    }
+
+    pub fn unblock_polling(&self) {
+        let _ = self.imp().poll_blocked.replace(false);
     }
 }

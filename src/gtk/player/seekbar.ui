@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <template class="EuphoniaSeekbar" parent="GtkWidget">
+    <child>
+      <object class="GtkCenterBox" id="seekbar_box">
+        <property name="hexpand">true</property>
+        <property name="start-widget">
+          <object class="GtkLabel" id="elapsed">
+            <style>
+              <class name="caption"/>
+            </style>
+          </object>
+        </property>
+        <property name="center-widget">
+          <object class="GtkScale" id="seekbar">
+            <property name="draw-value">false</property>
+            <property name="hexpand">true</property>
+            <property name="orientation">0</property>
+            <property name="width-request">120</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0</property>
+                <property name="upper">0</property>
+                <property name="value">0</property>
+              </object>
+            </property>
+          </object>
+        </property>
+        <property name="end-widget">
+          <object class="GtkLabel" id="duration">
+            <style>
+              <class name="caption"/>
+            </style>
+          </object>
+        </property>
+      </object>
+    </child>
+  </template>
+</interface>

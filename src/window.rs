@@ -138,8 +138,7 @@ impl EuphoniaWindow {
             win.imp().player_bar_revealer.get()
         );
         win.imp().player_bar.setup(
-            app.get_player(),
-            app.get_sender()
+            app.get_player()
         );
 		win.bind_state();
         win.setup_signals();
