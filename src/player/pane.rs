@@ -46,6 +46,8 @@ mod imp {
         // Playback controls
         #[template_child]
         pub playback_controls: TemplateChild<PlaybackControls>,
+        #[template_child]
+        pub format_info: TemplateChild<gtk::Box>,
 
         // Bottom: output info, volume control & quality
         #[template_child]
@@ -197,10 +199,23 @@ impl PlayerPane {
     fn bind_state(&self, player: Player) {
         let imp = self.imp();
         let info_box = imp.info_box.get();
+        let format_info = imp.format_info.get();
         player
             .bind_property(
                 "playback-state",
                 &info_box,
+                "visible"
+            )
+            .transform_to(|_, state: PlaybackState| {
+                Some(state != PlaybackState::Stopped)
+            })
+            .sync_create()
+            .build();
+
+        player
+            .bind_property(
+                "playback-state",
+                &format_info,
                 "visible"
             )
             .transform_to(|_, state: PlaybackState| {

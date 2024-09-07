@@ -416,11 +416,6 @@ impl EuphoniaWindow {
             )
             .sync_create()
             .build();
-
-        self.imp().player_bar_revealer.connect_child_revealed_notify(|r| {
-            // Only fires after animation
-            println!("Player bar reveal status: {}", r.is_child_revealed());
-        });
     }
 
     fn setup_signals(&self) {

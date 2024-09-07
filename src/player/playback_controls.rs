@@ -15,11 +15,18 @@ use super::{
 // them in two different places: the bottom bar and the Now Playing pane. Only one
 // should be visible at any time though.
 mod imp {
+    use std::cell::Cell;
+
+    use glib::Properties;
+
     use super::*;
 
-    #[derive(Default, CompositeTemplate)]
+    #[derive(Default, Properties, CompositeTemplate)]
+    #[properties(wrapper_type = super::PlaybackControls)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/playback-controls.ui")]
     pub struct PlaybackControls {
+        #[template_child]
+        pub stack: TemplateChild<gtk::Stack>,
         #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
         #[template_child]
@@ -29,7 +36,9 @@ mod imp {
         #[template_child]
         pub next_btn: TemplateChild<gtk::Button>,
         #[template_child]
-        pub seekbar: TemplateChild<Seekbar>
+        pub seekbar: TemplateChild<Seekbar>,
+        #[property(get, set)]
+        pub playing: Cell<bool>
     }
 
     // The central trait for subclassing a GObject
@@ -50,6 +59,7 @@ mod imp {
     }
 
     // Trait shared by all GObjects
+    #[glib::derived_properties]
     impl ObjectImpl for PlaybackControls {}
 
     // Trait shared by all widgets
@@ -80,6 +90,7 @@ impl PlaybackControls {
         let imp = self.imp();
         // Set up buttons
         let play_pause_symbol = imp.play_pause_symbol.get();
+        let stack = imp.stack.get();
         player
             .bind_property(
                 "playback-state",
@@ -100,6 +111,28 @@ impl PlaybackControls {
             )
             .sync_create()
             .build();
+
+        player
+            .bind_property(
+                "playback-state",
+                &stack,
+                "visible-child-name"
+            )
+            .transform_to(
+                |_, state: PlaybackState| {
+                    match state {
+	                    PlaybackState::Playing | PlaybackState::Paused => {
+	                        Some("playing")
+                        },
+	                    PlaybackState::Stopped => {
+	                        Some("stopped")
+	                    },
+	                }
+                }
+            )
+            .sync_create()
+            .build();
+
         self.imp().prev_btn.connect_clicked(
             clone!(
                 #[strong]
@@ -156,7 +189,7 @@ impl PlaybackControls {
             closure_local!(
                 #[weak]
                 player,
-                move |seekbar: Seekbar| {
+                move |_: Seekbar| {
                     player.unblock_polling();
                     player.seek();
                     // Player will start polling again on next status update,
