@@ -45,7 +45,9 @@ mod imp {
         #[template_child]
         pub clear_queue: TemplateChild<gtk::Button>,
         #[property(get, set)]
-        pub collapsed: Cell<bool>
+        pub collapsed: Cell<bool>,
+        #[property(get, set)]
+        pub show_content: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -80,6 +82,15 @@ mod imp {
             let obj = self.obj();
             obj
                 .bind_property("collapsed", &self.queue_pane_view.get(), "collapsed")
+                .sync_create()
+                .build();
+
+            self.queue_pane_view
+                .bind_property(
+                    "show-content",
+                    obj.as_ref(),
+                    "show-content"
+                )
                 .sync_create()
                 .build();
 

@@ -165,6 +165,39 @@ mod imp {
                     "transition-duration"
                 )
                 .build();
+
+            self.sidebar.connect_notify_local(
+                Some("showing-queue-view"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    obj,
+                    move |_, _| {
+                        this.update_player_bar_visibility();
+                    }
+                )
+            );
+
+            self.queue_view.connect_notify_local(
+                Some("show-content"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    obj,
+                    move |_, _| {
+                        this.update_player_bar_visibility();
+                    }
+                )
+            );
+
+            self.queue_view.connect_notify_local(
+                Some("collapsed"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    obj,
+                    move |_, _| {
+                        this.update_player_bar_visibility();
+                    }
+                )
+            );
         }
     }
     impl WidgetImpl for EuphoniaWindow {
@@ -268,7 +301,6 @@ impl EuphoniaWindow {
         );
         win.imp().sidebar.setup(
             win.imp().stack.get(),
-            win.imp().player_bar_revealer.get(),
             app.get_player()
         );
         win.imp().player_bar.setup(
@@ -277,6 +309,22 @@ impl EuphoniaWindow {
 		win.bind_state();
         win.setup_signals();
         win
+    }
+
+    fn update_player_bar_visibility(&self) {
+        let revealer = self.imp().player_bar_revealer.get();
+        if self.imp().sidebar.showing_queue_view() {
+            let queue_view = self.imp().queue_view.get();
+            if (queue_view.collapsed() && queue_view.show_content()) || !queue_view.collapsed() {
+                revealer.set_reveal_child(false);
+            }
+            else {
+                revealer.set_reveal_child(true);
+            }
+        }
+        else {
+            revealer.set_reveal_child(true);
+        }
     }
 
     /// Update blurred background, if enabled

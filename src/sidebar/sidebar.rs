@@ -1,15 +1,18 @@
 use adw::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
-use glib::clone;
+use glib::{Properties, clone};
 
 use crate::player::Player;
 
 use super::SidebarButton;
 
 mod imp {
+    use std::cell::Cell;
+
     use super::*;
 
-    #[derive(Debug, Default, CompositeTemplate)]
+    #[derive(Debug, Properties, Default, CompositeTemplate)]
+    #[properties(wrapper_type = super::Sidebar)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/sidebar.ui")]
     pub struct Sidebar {
         #[template_child]
@@ -20,6 +23,8 @@ mod imp {
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub queue_len: TemplateChild<gtk::Label>,
+        #[property(get, set)]
+        pub showing_queue_view: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -37,15 +42,12 @@ mod imp {
         }
     }
 
+    #[glib::derived_properties]
     impl ObjectImpl for Sidebar {
         fn dispose(&self) {
             while let Some(child) = self.obj().first_child() {
                 child.unparent();
             }
-        }
-
-        fn constructed(&self) {
-            self.parent_constructed();
         }
     }
 
@@ -72,44 +74,46 @@ impl Sidebar {
         Self::default()
     }
 
-    pub fn setup(&self, stack: gtk::Stack, player_bar_revealer: gtk::Revealer, player: Player) {
+    pub fn setup(&self, stack: gtk::Stack, player: Player) {
         // Set default view. TODO: remember last view
         stack.set_visible_child_name("albums");
+        stack
+            .bind_property(
+                "visible-child-name",
+                self,
+                "showing-queue-view"
+            )
+            .transform_to(|_, name: String| {Some(name == "queue")})
+            .sync_create()
+            .build();
+
         self.imp().albums_btn.set_active(true);
         // Hook each button to their respective views
         self.imp().albums_btn.connect_toggled(clone!(
             #[weak]
             stack,
-            #[weak]
-            player_bar_revealer,
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("albums");
-                player_bar_revealer.set_reveal_child(true);
+
             }
         }));
 
         self.imp().artists_btn.connect_toggled(clone!(
             #[weak]
             stack,
-            #[weak]
-            player_bar_revealer,
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("artists");
-                player_bar_revealer.set_reveal_child(true);
             }
         }));
 
         self.imp().queue_btn.connect_toggled(clone!(
             #[weak]
             stack,
-            #[weak]
-            player_bar_revealer,
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("queue");
-                player_bar_revealer.set_reveal_child(false);
             }
         }));
 
