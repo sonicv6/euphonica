@@ -52,7 +52,7 @@
 					<object class="GtkCenterBox">
 						<property name="start-widget">
 							<object class="GtkLabel">
-								<property name="label">Queue</property>
+								<property name="label">Now Playing</property>
 							</object>
 						</property>
 

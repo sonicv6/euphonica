@@ -18,7 +18,8 @@
 
 		<file preprocess="xml-stripblanks">gtk/player/queue-view.ui</file>
 		<file preprocess="xml-stripblanks">gtk/player/queue-row.ui</file>
-		<file preprocess="xml-stripblanks">gtk/player/player-bar.ui</file>
+		<file preprocess="xml-stripblanks">gtk/player/bar.ui</file>
+		<file preprocess="xml-stripblanks">gtk/player/pane.ui</file>
 		<file preprocess="xml-stripblanks">gtk/player/seekbar.ui</file>
 		<file preprocess="xml-stripblanks">gtk/player/playback-controls.ui</file>
 		<file preprocess="xml-stripblanks">gtk/player/output.ui</file>

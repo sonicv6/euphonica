@@ -39,7 +39,7 @@ mod imp {
         pub state: Cell<PlaybackState>,
         pub position: Cell<f64>,
         pub current_song: RefCell<Option<Song>>,
-        pub queue: RefCell<gio::ListStore>,
+        pub queue: gio::ListStore,
         pub format: RefCell<Option<AudioFormat>>,
         // Rounded version, for sending to MPD.
         // Changes not big enough to cause an integer change
@@ -64,12 +64,11 @@ mod imp {
         type Type = super::Player;
 
         fn new() -> Self {
-            let queue = RefCell::new(gio::ListStore::new::<Song>());
             Self {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
                 current_song: RefCell::new(None),
-                queue,
+                queue: gio::ListStore::new::<Song>(),
                 format: RefCell::new(None),
                 client_sender: OnceCell::new(),
                 cache: OnceCell::new(),
@@ -350,7 +349,7 @@ impl Player {
 
     pub fn update_queue(&self, songs: &[Song]) {
         // TODO: use diffs instead of refreshing the whole queue
-        let queue = self.imp().queue.borrow();
+        let queue = &self.imp().queue;
         queue.remove_all();
         queue.extend_from_slice(songs);
         if let Some(cache) = self.imp().cache.get() {
@@ -471,7 +470,7 @@ impl Player {
     }
 
     pub fn queue(&self) -> gio::ListStore {
-        self.imp().queue.borrow().clone()
+        self.imp().queue.clone()
     }
 
     pub fn toggle_playback(&self) {

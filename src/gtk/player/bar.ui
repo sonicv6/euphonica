@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0" />
+  <requires lib="Adw" version="1.0" />
+  <template class="EuphoniaPlayerBar" parent="GtkBox">
+    <property name="hexpand">true</property>
+    <child>
+      <object class="GtkCenterBox">
+        <style>
+          <class name="player-bar"/>
+        </style>
+        <property name="hexpand">true</property>
+        <property name="start-widget">
+          <object class="GtkBox" id="info_box">
+            <property name="valign">3</property>
+            <property name="spacing">12</property>
+            <!-- Current song info (hidden when in queue view to avoid duplicated info) -->
+            <child>
+              <!-- Album art, hi-res -->
+              <object class="GtkBox">
+                <property name="overflow">hidden</property>
+                <style>
+                  <class name="border-radius-6" />
+                </style>
+                <child>
+                  <object class="GtkImage" id="albumart">
+                    <property name="pixel-size">96</property>
+                    <property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+
+            <child>
+              <!-- Textual info box -->
+              <object class="GtkBox">
+                <property name="valign">center</property>
+                <property name="orientation">1</property>
+                <property name="spacing">6</property>
+                <child>
+                  <object class="GtkLabel" id="song_name">
+                    <property name="ellipsize">end</property>
+                    <property name="halign">start</property>
+                    <style>
+                      <class name="heading" />
+                    </style>
+                    <property name="label">Untitled Song</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">6</property>
+                    <child>
+                      <object class="GtkImage">
+                        <property name="icon-name">music-artist-symbolic</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="artist">
+                        <property name="ellipsize">end</property>
+                        <property name="halign">start</property>
+                        <style>
+                          <class name="caption" />
+                        </style>
+                        <property name="label">Unknown Artist</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">6</property>
+                    <child>
+                      <object class="GtkImage">
+                        <property name="icon-name">library-music-symbolic</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="album">
+                        <property name="ellipsize">end</property>
+                        <property name="halign">start</property>
+                        <style>
+                          <class name="caption" />
+                        </style>
+                        <property name="label">Untitled Album</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">6</property>
+                    <child>
+                      <object class="GtkImage" id="quality_grade">
+                        <property name="icon-name">format-base-symbolic</property>
+                        <property name="icon-size">1</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="format_desc">
+                        <property name="label">Unknown format</property>
+                        <style>
+                          <class name="caption" />
+                        </style>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </property>
+
+        <property name="center-widget">
+          <!-- Playback controls -->
+          <object class="GtkBox">
+            <property name="hexpand">true</property>
+            <property name="valign">3</property>
+            <property name="margin-start">24</property>
+            <property name="margin-end">24</property>
+            <property name="spacing">12</property>
+            <child>
+              <object class="GtkSeparator"></object>
+            </child>
+            <child>
+              <object class="EuphoniaPlaybackControls" id="playback_controls"/>
+            </child>
+            <child>
+              <object class="GtkSeparator"></object>
+            </child>
+          </object>
+        </property>
+
+        <property name="end-widget">
+          <object class="GtkBox">
+            <property name="halign">end</property>
+            <property name="spacing">12</property>
+            <child>
+              <object class="GtkBox" id="output_section">
+                <property name="spacing">6</property>
+                <property name="visible">false</property>
+                <child>
+                  <object class="GtkButton" id="prev_output">
+                    <property name="visible">false</property>
+                    <property name="sensitive">false</property>
+                    <property name="valign">center</property>
+                    <property name="icon-name">left-symbolic</property>
+                    <style>
+                      <class name="flat"/>
+                      <class name="circular"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkStack" id="output_stack">
+                    <property name="transition-type">slide-left-right</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="next_output">
+                    <property name="visible">false</property>
+                    <property name="sensitive">false</property>
+                    <property name="valign">center</property>
+                    <property name="icon-name">right-symbolic</property>
+                    <style>
+                      <class name="flat"/>
+                      <class name="circular"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="EuphoniaVolumeKnob" id="vol_knob"/>
+            </child>
+          </object>
+        </property>
+      </object>
+    </child>
+  </template>
+</interface>

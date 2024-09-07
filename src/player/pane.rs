@@ -11,8 +11,7 @@ use glib::{
 use mpd::output::Output;
 
 use crate::{
-    utils::settings_manager,
-    common::{QualityGrade, paintables::FadePaintable}
+    cache::placeholders::ALBUMART_PLACEHOLDER, common::{paintables::FadePaintable, QualityGrade}, utils::settings_manager
 };
 
 use super::{
@@ -22,39 +21,34 @@ use super::{
 
 mod imp {
     use glib::{
-        ParamSpec,
-        ParamSpecBoolean,
-        ParamSpecUInt,
-        ParamSpecDouble
+        derived_properties, Properties
     };
-    use once_cell::sync::Lazy;
 
     use super::*;
 
-    #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/bar.ui")]
-    pub struct PlayerBar {
-        // Left side: current song info
+    #[derive(Default, Properties, CompositeTemplate)]
+    #[properties(wrapper_type = super::PlayerPane)]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player/pane.ui")]
+    pub struct PlayerPane {
+        // Song info
         #[template_child]
         pub info_box: TemplateChild<gtk::Box>,
         #[template_child]
-        pub albumart: TemplateChild<gtk::Image>,
+        pub albumart: TemplateChild<gtk::Picture>,
         #[template_child]
         pub song_name: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
         #[template_child]
         pub album: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub quality_grade: TemplateChild<gtk::Image>,
-        #[template_child]
-        pub format_desc: TemplateChild<gtk::Label>,
 
-        // Centre: playback controls
+        // TODO: Time-synced lyrics
+
+        // Playback controls
         #[template_child]
         pub playback_controls: TemplateChild<PlaybackControls>,
 
-        // Right side: output info & volume control
+        // Bottom: output info, volume control & quality
         #[template_child]
         pub output_section: TemplateChild<gtk::Box>,
         #[template_child]
@@ -65,14 +59,22 @@ mod imp {
         pub next_output: TemplateChild<gtk::Button>,
         #[template_child]
         pub vol_knob: TemplateChild<VolumeKnob>,
+        #[template_child]
+        pub quality_grade: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub format_desc: TemplateChild<gtk::Label>,
 
         // Kept here so we can access it in snapshot()
         pub bg_paintable: FadePaintable,
         pub output_widgets: RefCell<Vec<MpdOutput>>,
         // Kept here so snapshot() does not have to query GSettings on every frame
+        #[property(get, set)]
         pub use_album_art_bg: Cell<bool>,
+        #[property(get, set)]
         pub blur_radius: Cell<u32>,
+        #[property(get, set)]
         pub opacity: Cell<f64>,
+        #[property(get, set)]
         pub transition_duration: Cell<f64>,
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
@@ -82,10 +84,10 @@ mod imp {
 
     // The central trait for subclassing a GObject
     #[glib::object_subclass]
-    impl ObjectSubclass for PlayerBar {
+    impl ObjectSubclass for PlayerPane {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaPlayerBar";
-        type Type = super::PlayerBar;
+        const NAME: &'static str = "EuphoniaPlayerPane";
+        type Type = super::PlayerPane;
         type ParentType = gtk::Box;
 
         fn class_init(klass: &mut Self::Class) {
@@ -99,76 +101,70 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    impl ObjectImpl for PlayerBar {
-        fn properties() -> &'static [ParamSpec] {
-            static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
-                vec![
-                    ParamSpecBoolean::builder("use-album-art-bg").build(),
-                    ParamSpecDouble::builder("transition-duration").build(),
-                    ParamSpecDouble::builder("opacity").build(),
-                    ParamSpecUInt::builder("blur-radius").build(),
-                ]
-            });
-            PROPERTIES.as_ref()
-        }
+    #[derived_properties]
+    impl ObjectImpl for PlayerPane {
+        fn constructed(&self) {
+            self.parent_constructed();
+            let settings = settings_manager().child("player");
+            let obj_borrow = self.obj();
+            let obj = obj_borrow.as_ref();
+            settings
+                .bind(
+                    "use-album-art-as-bg",
+                    obj,
+                    "use-album-art-bg"
+                )
+                .build();
 
-        fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
-            match pspec.name() {
-                "use-album-art-bg" => self.use_album_art_bg.get().to_value(),
-                "transition-duration" => self.transition_duration.get().to_value(),
-                "opacity" => self.opacity.get().to_value(),
-                "blur-radius" => self.blur_radius.get().to_value(),
-                _ => unimplemented!(),
-            }
-        }
+            settings
+                .bind(
+                    "bg-blur-radius",
+                    obj,
+                    "blur-radius"
+                )
+                .build();
 
-        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
-            let obj = self.obj();
-            match pspec.name() {
-                "use-album-art-bg" => {
-                    // Always set to title tag
-                    if let Ok(b) = value.get::<bool>() {
-                        let old = self.use_album_art_bg.replace(b);
-                        if old != b {
-                            obj.notify("use-album-art-bg");
-                            obj.queue_draw();
-                        }
-                    }
-                }
-                "transition-duration" => {
-                    if let Ok(val) = value.get::<f64>() {
-                        let old = self.transition_duration.replace(val);
-                        if old != val {
-                            obj.notify("transition-duration");
-                            // No need to queue draw for this (no immediate change)
-                        }
-                    }
-                }
-                "opacity" => {
-                    if let Ok(val) = value.get::<f64>() {
-                        let old = self.opacity.replace(val);
-                        if old != val {
-                            obj.notify("opacity");
-                            obj.queue_draw();
-                        }
-                    }
-                }
-                "blur-radius" => {
-                    if let Ok(val) = value.get::<u32>() {
-                        let old = self.blur_radius.replace(val);
-                        if old != val {
-                            obj.notify("blur-radius");
-                            obj.queue_draw();
-                        }
-                    }
-                }
-                _ => unimplemented!(),
-            }
+            settings
+                .bind(
+                    "bg-opacity",
+                    obj,
+                    "opacity"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "bg-transition-duration-s",
+                    obj,
+                    "transition-duration"
+                )
+                .build();
+            let knob = self.vol_knob.get();
+            settings
+                .bind(
+                    "vol-knob-unit",
+                    &knob,
+                    "use-dbfs"
+                )
+                .get_only()
+                .mapping(|v: &Variant, _| {
+                    Some((v.get::<String>().unwrap().as_str() == "decibels").to_value())
+                })
+                .build();
+
+            settings
+                .bind(
+                    "vol-knob-sensitivity",
+                    &knob,
+                    "sensitivity"
+                )
+                .mapping(|v: &Variant, _| { Some(v.get::<f64>().unwrap().to_value())})
+                .build();
         }
     }
 
     // Trait shared by all widgets
-    impl WidgetImpl for PlayerBar {
+    impl WidgetImpl for PlayerPane {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let widget = self.obj();
             let width = widget.width() as f32;
@@ -220,95 +216,36 @@ mod imp {
         }
     }
 
-    // Trait shared by all boxes
-    impl BoxImpl for PlayerBar {}
+    impl BoxImpl for PlayerPane {}
 }
 
 
 glib::wrapper! {
-    pub struct PlayerBar(ObjectSubclass<imp::PlayerBar>)
+    pub struct PlayerPane(ObjectSubclass<imp::PlayerPane>)
         @extends gtk::Box, gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
 }
 
-impl Default for PlayerBar {
+impl Default for PlayerPane {
     fn default() -> Self {
         glib::Object::new()
     }
 }
 
-impl PlayerBar {
+impl PlayerPane {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn setup(&self, player: Player) {
-        self.bind_settings();
         self.setup_volume_knob(player.clone());
         self.bind_state(player.clone());
         self.imp().playback_controls.setup(player);
     }
 
-    fn bind_settings(&self) {
-        let settings = settings_manager().child("player");
-        settings
-            .bind(
-                "use-album-art-as-bg",
-                self,
-                "use-album-art-bg"
-            )
-            .build();
-
-        settings
-            .bind(
-                "bg-blur-radius",
-                self,
-                "blur-radius"
-            )
-            .build();
-
-        settings
-            .bind(
-                "bg-opacity",
-                self,
-                "opacity"
-            )
-            .build();
-
-        settings
-            .bind(
-                "bg-transition-duration-s",
-                self,
-                "transition-duration"
-            )
-            .build();
-    }
-
     fn setup_volume_knob(&self, player: Player) {
-        let settings = settings_manager().child("player");
         let knob = self.imp().vol_knob.get();
         knob.setup();
-
-        settings
-            .bind(
-                "vol-knob-unit",
-                &knob,
-                "use-dbfs"
-            )
-            .get_only()
-            .mapping(|v: &Variant, _| {
-                Some((v.get::<String>().unwrap().as_str() == "decibels").to_value())
-            })
-            .build();
-
-        settings
-            .bind(
-                "vol-knob-sensitivity",
-                &knob,
-                "sensitivity"
-            )
-            .mapping(|v: &Variant, _| { Some(v.get::<f64>().unwrap().to_value())})
-            .build();
 
         knob.connect_notify_local(
             Some("value"),
@@ -484,9 +421,7 @@ impl PlayerBar {
             self.imp().albumart.set_paintable(tex.as_ref());
         }
         else {
-            self.imp().albumart.set_resource(
-                Some("/org/euphonia/Euphonia/albumart-placeholder.png")
-            );
+            self.imp().albumart.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
         }
         // Update blurred background
         let bg_paintable = self.imp().bg_paintable.clone();

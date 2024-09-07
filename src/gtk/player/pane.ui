@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0" />
+  <requires lib="Adw" version="1.0" />
+  <template class="EuphoniaPlayerPane" parent="GtkBox">
+    <child>
+      <object class="GtkScrolledWindow">
+        <property name="hscrollbar-policy">never</property>
+        <property name="vscrollbar-policy">automatic</property>
+        <property name="propagate-natural-height">true</property>
+        <property name="vexpand">true</property>
+
+        <property name="child">
+          <object class="GtkBox">
+            <style>
+              <class name="padding-12"/>
+            </style>
+            <property name="orientation">vertical</property>
+            <property name="spacing">12</property>
+            <child>
+              <object class="AdwClamp">
+                <property name="maximum-size">480px</property>
+                <property name="tightening-threshold">360px</property>
+                <property name="child">
+                  <object class="GtkBox"> <!-- Wraps around picture to give it rounded corners & card shadow -->
+                    <property name="height-request">180sp</property>
+                    <property name="halign">center</property>
+                    <style>
+                      <class name="card" />
+                    </style>
+                    <property name="overflow">hidden</property> <!-- Needed to clip image behind corners -->
+                    <child>
+                      <object class="GtkPicture" id="albumart">
+                      </object>
+                    </child>
+                  </object>
+                </property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkBox" id="info_box">
+                <property name="orientation">vertical</property>
+                <property name="visible">false</property>
+                <child>
+                  <object class="GtkLabel" id="song_name">
+                    <property name="label">Untitled Song</property>
+                    <property name="wrap">true</property>
+                    <property name="justify">2</property>
+                    <style>
+                      <class name="title-4"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="artist">
+                    <property name="label">Unknown</property>
+                    <property name="wrap">true</property>
+                    <property name="justify">2</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="album">
+                    <property name="label">Unknown</property>
+                    <property name="wrap">true</property>
+                    <property name="justify">2</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+
+            <child>
+              <object class="EuphoniaPlaybackControls" id="playback_controls"/>
+            </child>
+
+            <child>
+              <object class="GtkBox">
+                <property name="halign">center</property>
+                <property name="spacing">12</property>
+                <child>
+                  <object class="GtkBox" id="output_section">
+                    <property name="spacing">6</property>
+                    <property name="visible">false</property>
+                    <child>
+                      <object class="GtkButton" id="prev_output">
+                        <property name="visible">false</property>
+                        <property name="sensitive">false</property>
+                        <property name="valign">center</property>
+                        <property name="icon-name">left-symbolic</property>
+                        <style>
+                          <class name="flat"/>
+                          <class name="circular"/>
+                        </style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkStack" id="output_stack">
+                        <property name="transition-type">slide-left-right</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="next_output">
+                        <property name="visible">false</property>
+                        <property name="sensitive">false</property>
+                        <property name="valign">center</property>
+                        <property name="icon-name">right-symbolic</property>
+                        <style>
+                          <class name="flat"/>
+                          <class name="circular"/>
+                        </style>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="EuphoniaVolumeKnob" id="vol_knob"/>
+                </child>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkBox">
+                <property name="halign">center</property>
+                <property name="spacing">6</property>
+                <child>
+                  <object class="GtkImage" id="quality_grade">
+                    <property name="icon-name">format-base-symbolic</property>
+                    <property name="icon-size">1</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="format_desc">
+                    <property name="label">Unknown format</property>
+                    <style>
+                      <class name="caption" />
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </child>
+  </template>
+</interface>
