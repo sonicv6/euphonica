@@ -117,6 +117,7 @@
 				<child>
 					<object class="GtkRevealer" id="player_bar_revealer">
 						<property name="hexpand">true</property>
+						<property name="reveal-child">true</property>
 						<property name="child">
 							<object class="EuphoniaPlayerBar" id="player_bar"/>
 						</property>

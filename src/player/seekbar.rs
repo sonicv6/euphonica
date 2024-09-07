@@ -10,7 +10,8 @@ use glib::{
 mod imp {
     use std::sync::OnceLock;
 
-    use glib::subclass::Signal;
+    use glib::{subclass::Signal, ParamSpec, ParamSpecDouble};
+    use once_cell::sync::Lazy;
     use crate::utils::format_secs_as_duration;
 
     use super::*;
@@ -18,6 +19,7 @@ mod imp {
     #[derive(Default, CompositeTemplate)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/seekbar.ui")]
     pub struct Seekbar {
+        pub position: Cell<f64>,
         #[template_child]
         pub seekbar: TemplateChild<gtk::Scale>,
         #[template_child]
@@ -129,23 +131,24 @@ mod imp {
                 .build();
         }
 
-        // fn properties() -> &'static [ParamSpec] {
-        //     static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
-        //         vec![
-        //             // Only modifiable via internal setter
-        //             ParamSpecDouble::builder("value").read_only().build()
-        //         ]
-        //     });
-        //     PROPERTIES.as_ref()
-        // }
+        fn properties() -> &'static [ParamSpec] {
+            static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
+                vec![
+                    ParamSpecDouble::builder("position").build(),
+                    ParamSpecDouble::builder("duration").build()
+                ]
+            });
+            PROPERTIES.as_ref()
+        }
 
-        // fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
-        //     let obj = self.obj();
-        //     match pspec.name() {
-        //         "value" => obj.value().to_value(),
-        //         _ => unimplemented!(),
-        //     }
-        // }
+        fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
+            let obj = self.obj();
+            match pspec.name() {
+                "position" => obj.position().to_value(),
+                "duration" => obj.duration().to_value(),
+                _ => unimplemented!(),
+            }
+        }
 
         fn signals() -> &'static [Signal] {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
@@ -159,13 +162,22 @@ mod imp {
             })
         }
 
-        // fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
-        //     let obj = self.obj();
-        //     match pspec.name() {
-        //         ,
-        //         _ => unimplemented!(),
-        //     }
-        // }
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            let obj = self.obj();
+            match pspec.name() {
+                "position" => {
+                    if let Ok(v) = value.get::<f64>() {
+                        obj.set_position(v);
+                    }
+                },
+                "duration" => {
+                    if let Ok(v) = value.get::<f64>() {
+                        obj.set_duration(v);
+                    }
+                },
+                _ => unimplemented!(),
+            }
+        }
     }
 
     // Trait shared by all widgets
@@ -189,13 +201,20 @@ impl Seekbar {
         Object::builder().build()
     }
 
-    pub fn value(&self) -> f64 {
-        self.imp().seekbar.adjustment().value()
+    pub fn position(&self) -> f64 {
+        self.imp().position.get()
     }
 
     /// Set a new value quietly (will not notify to outside). Used for external updates.
-    pub fn set_value(&self, new: f64) {
-        self.imp().seekbar.set_value(new);
+    /// While the internal position property will always be successfully set, the seekbar
+    /// might still display 0.0 if its duration is less than the new position.
+    /// Upon setting a sufficiently long duration, the stored position property will take
+    /// effect.
+    pub fn set_position(&self, new: f64) {
+        let old = self.imp().position.replace(new);
+        if old != new {
+            self.imp().seekbar.set_value(new);
+        }
     }
 
     pub fn duration(&self) -> f64 {
@@ -204,5 +223,7 @@ impl Seekbar {
 
     pub fn set_duration(&self, new: f64) {
         self.imp().seekbar.set_range(0.0, new);
+        // Re-apply position
+        self.imp().seekbar.set_value(self.imp().position.get());
     }
 }

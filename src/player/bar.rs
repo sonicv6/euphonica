@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    Player, Seekbar,
+    Player, PlaybackControls,
     PlaybackState, VolumeKnob, MpdOutput
 };
 
@@ -52,15 +52,7 @@ mod imp {
 
         // Centre: playback controls
         #[template_child]
-        pub play_pause_btn: TemplateChild<gtk::Button>,
-        #[template_child]
-        pub play_pause_symbol: TemplateChild<gtk::Stack>,  // inside the play/pause button
-        #[template_child]
-        pub prev_btn: TemplateChild<gtk::Button>,
-        #[template_child]
-        pub next_btn: TemplateChild<gtk::Button>,
-        #[template_child]
-        pub seekbar: TemplateChild<Seekbar>,
+        pub playback_controls: TemplateChild<PlaybackControls>,
 
         // Right side: output info & volume control
         #[template_child]
@@ -254,7 +246,7 @@ impl PlayerBar {
         self.bind_settings();
         self.setup_volume_knob(player.clone());
         self.bind_state(player.clone());
-        self.setup_seekbar(player);
+        self.imp().playback_controls.setup(player);
     }
 
     fn bind_settings(&self) {
@@ -438,40 +430,6 @@ impl PlayerBar {
             .sync_create()
             .build();
 
-        let play_pause_symbol = imp.play_pause_symbol.get();
-        player
-            .bind_property(
-                "playback-state",
-                &play_pause_symbol,
-                "visible-child-name"
-            )
-            .transform_to(
-                |_, state: PlaybackState| {
-                    match state {
-	                    PlaybackState::Playing => {
-	                        Some("play")
-                        },
-	                    PlaybackState::Paused | PlaybackState::Stopped => {
-	                        Some("pause")
-	                    },
-	                }
-                }
-            )
-            .sync_create()
-            .build();
-
-        // Only make player update seekbar upon change.
-        // Do not bind directly as that will prevent us from sliding the
-        // seekbar to begin with.
-        player.connect_notify_local(
-            Some("playback-state"),
-            |player, _| {
-                if player.playback_state() == PlaybackState::Playing {
-                    player.maybe_start_polling();
-                }
-            }
-        );
-
         player.connect_closure(
             "outputs-changed",
             false,
@@ -494,34 +452,6 @@ impl PlayerBar {
                 player,
                 move |_, _| {
                     this.update_album_art(player.current_song_album_art());
-                }
-            )
-        );
-
-        self.imp().prev_btn.connect_clicked(
-            clone!(
-                #[strong]
-                player,
-                move |_| {
-                    player.prev_song();
-                }
-            )
-        );
-        self.imp().play_pause_btn.connect_clicked(
-            clone!(
-                #[weak]
-                player,
-                move |_| {
-                    player.toggle_playback()
-                }
-            )
-        );
-        self.imp().next_btn.connect_clicked(
-            clone!(
-                #[strong]
-                player,
-                move |_| {
-                    player.next_song();
                 }
             )
         );
@@ -661,57 +591,5 @@ impl PlayerBar {
 
     fn prev_output(&self) {
         self.set_visible_output(self.imp().current_output.get() as i32 - 1);
-    }
-
-    fn setup_seekbar(&self, player: Player) {
-        let seekbar = self.imp().seekbar.get();
-        seekbar.connect_closure(
-            "pressed",
-            false,
-            closure_local!(
-                #[weak]
-                player,
-                move |_: Seekbar| {
-                    player.block_polling();
-                    player.stop_polling();
-                }
-            )
-        );
-
-        seekbar.connect_closure(
-            "released",
-            false,
-            closure_local!(
-                #[weak]
-                player,
-                move |seekbar: Seekbar| {
-                    player.unblock_polling();
-                    player.seek(seekbar.value());
-                    // Player will start polling again on next status update,
-                    // which should be triggered by us seeking.
-                }
-            )
-        );
-
-        player.connect_notify_local(
-            Some("position"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |player, _| {
-                    this.imp().seekbar.set_value(player.position());
-                }
-            ),
-        );
-        player.connect_notify_local(
-            Some("duration"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |player, _| {
-                    this.imp().seekbar.set_duration(player.duration() as f64);
-                }
-            ),
-        );
     }
 }

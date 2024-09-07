@@ -191,12 +191,17 @@ impl EuphoniaWindow {
             )
             .sync_create()
             .build();
-	}
 
-	fn setup_signals(&self) {
-	    self.connect_close_request(move |window| {
+        self.imp().player_bar_revealer.connect_child_revealed_notify(|r| {
+            // Only fires after animation
+            println!("Player bar reveal status: {}", r.is_child_revealed());
+        });
+    }
+
+    fn setup_signals(&self) {
+        self.connect_close_request(move |window| {
             let size = window.default_size();
-	        let width = size.0;
+            let width = size.0;
             let height = size.1;
             let settings = utils::settings_manager();
             let state = settings.child("state");

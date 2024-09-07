@@ -87,7 +87,7 @@ mod imp {
                     ParamSpecEnum::builder::<PlaybackState>("playback-state")
                         .read_only()
                         .build(),
-                    ParamSpecDouble::builder("position").read_only().build(),
+                    ParamSpecDouble::builder("position").build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
@@ -122,6 +122,18 @@ mod imp {
                 "queue-id" => obj.queue_id().to_value(),
                 "quality-grade" => obj.quality_grade().to_value(),
                 "format-desc" => obj.format_desc().to_value(),
+                _ => unimplemented!(),
+            }
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            let obj = self.obj();
+            match pspec.name() {
+                "position" => {
+                    if let Ok(v) = value.get::<f64>() {
+                        obj.set_position(v);
+                    }
+                },
                 _ => unimplemented!(),
             }
         }
@@ -262,16 +274,9 @@ impl Player {
         }
 
         if let Some(new_position_dur) = status.elapsed {
-            let new_position = new_position_dur.as_secs_f64();
-            let old_position = self.imp().position.replace(new_position);
-            if old_position != new_position {
-                self.notify("position");
-            }
+            self.set_position(new_position_dur.as_secs_f64());
         } else {
-            let old_position = self.imp().position.replace(0.0);
-            if old_position != 0.0 {
-                self.notify("position");
-            }
+            self.set_position(0.0);
         }
 
         // Queue always gets updated first before Player by idle.
@@ -449,9 +454,19 @@ impl Player {
         self.imp().position.get()
     }
 
-    pub fn seek(&self, new_pos: f64) {
+    /// Set new position. Only sets the property (does not send a seek command to MPD yet).
+    /// To apply this new position, call seek().
+    pub fn set_position(&self, new: f64) {
+        let old = self.imp().position.replace(new);
+        if new != old {
+            self.notify("position");
+        }
+    }
+
+    /// Seek to current position. Called when the seekbar is released.
+    pub fn seek(&self) {
         if let Some(sender) = self.imp().client_sender.get() {
-            let _ = sender.send_blocking(MpdMessage::SeekCur(new_pos));
+            let _ = sender.send_blocking(MpdMessage::SeekCur(self.position()));
         }
     }
 
