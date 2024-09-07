@@ -1,8 +1,11 @@
 use std::cell::{Cell, RefCell};
 use gtk::{
-    gdk, glib::{self, Variant}, graphene, prelude::*, subclass::prelude::*, CompositeTemplate
+    gdk,
+    glib::{self, Variant},
+    prelude::*,
+    subclass::prelude::*,
+    CompositeTemplate
 };
-use adw::prelude::*;
 use glib::{
     clone,
     closure_local,
@@ -20,14 +23,10 @@ use super::{
 };
 
 mod imp {
-    use glib::{
-        derived_properties, Properties
-    };
 
     use super::*;
 
-    #[derive(Default, Properties, CompositeTemplate)]
-    #[properties(wrapper_type = super::PlayerPane)]
+    #[derive(Default, CompositeTemplate)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/pane.ui")]
     pub struct PlayerPane {
         // Song info
@@ -67,15 +66,7 @@ mod imp {
         // Kept here so we can access it in snapshot()
         pub bg_paintable: FadePaintable,
         pub output_widgets: RefCell<Vec<MpdOutput>>,
-        // Kept here so snapshot() does not have to query GSettings on every frame
-        #[property(get, set)]
-        pub use_album_art_bg: Cell<bool>,
-        #[property(get, set)]
-        pub blur_radius: Cell<u32>,
-        #[property(get, set)]
-        pub opacity: Cell<f64>,
-        #[property(get, set)]
-        pub transition_duration: Cell<f64>,
+
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
         pub output_count: Cell<usize>,
@@ -101,44 +92,10 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    #[derived_properties]
     impl ObjectImpl for PlayerPane {
         fn constructed(&self) {
             self.parent_constructed();
             let settings = settings_manager().child("player");
-            let obj_borrow = self.obj();
-            let obj = obj_borrow.as_ref();
-            settings
-                .bind(
-                    "use-album-art-as-bg",
-                    obj,
-                    "use-album-art-bg"
-                )
-                .build();
-
-            settings
-                .bind(
-                    "bg-blur-radius",
-                    obj,
-                    "blur-radius"
-                )
-                .build();
-
-            settings
-                .bind(
-                    "bg-opacity",
-                    obj,
-                    "opacity"
-                )
-                .build();
-
-            settings
-                .bind(
-                    "bg-transition-duration-s",
-                    obj,
-                    "transition-duration"
-                )
-                .build();
             let knob = self.vol_knob.get();
             settings
                 .bind(
@@ -164,57 +121,7 @@ mod imp {
     }
 
     // Trait shared by all widgets
-    impl WidgetImpl for PlayerPane {
-        fn snapshot(&self, snapshot: &gtk::Snapshot) {
-            let widget = self.obj();
-            let width = widget.width() as f32;
-            let height = widget.height() as f32;
-
-            // Bluuuuuur
-            // Adopted from Nanling Zheng's implementation for Gapless.
-            if self.use_album_art_bg.get() {
-                let bg_width = self.bg_paintable.intrinsic_width() as f32;
-                let bg_height = self.bg_paintable.intrinsic_height() as f32;
-                let scale_x = width / bg_width as f32;
-                let scale_y = height / bg_height as f32;
-                let scale_max = scale_x.max(scale_y);
-                let view_width = bg_width * scale_max;
-                let view_height = bg_height * scale_max;
-                let delta_x = (width - view_width) * 0.5;
-                let delta_y = (height - view_height) * 0.5;
-                // Crop background to only the bottom bar
-                snapshot.push_clip(&graphene::Rect::new(
-                    0.0, 0.0, width, height
-                ));
-                snapshot.translate(&graphene::Point::new(
-                    delta_x, delta_y
-                ));
-                // Blur & opacity nodes
-                let blur_radius = self.blur_radius.get();
-                if blur_radius > 0 {
-                    snapshot.push_blur(blur_radius as f64);
-                }
-                let opacity = self.opacity.get();
-                if opacity < 1.0 {
-                    snapshot.push_opacity(opacity);
-                }
-                self.bg_paintable.snapshot(snapshot, view_width as f64, view_height as f64);
-                snapshot.translate(&graphene::Point::new(
-                    -delta_x, -delta_y
-                ));
-                snapshot.pop();
-                if opacity < 1.0 {
-                    snapshot.pop();
-                }
-                if blur_radius > 0 {
-                    snapshot.pop();
-                }
-            }
-
-            // Call the parent class's snapshot() method to render child widgets
-            self.parent_snapshot(snapshot);
-        }
-    }
+    impl WidgetImpl for PlayerPane {}
 
     impl BoxImpl for PlayerPane {}
 }
@@ -423,36 +330,6 @@ impl PlayerPane {
         else {
             self.imp().albumart.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
         }
-        // Update blurred background
-        let bg_paintable = self.imp().bg_paintable.clone();
-        if let Some(tex) = tex {
-            bg_paintable.set_new_paintable(Some(tex.upcast::<gdk::Paintable>()));
-        }
-        else {
-            bg_paintable.set_new_paintable(None);
-        }
-
-        // Run fade transition
-        // Remember to queue draw too
-        let anim_target = adw::CallbackAnimationTarget::new(
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                #[weak]
-                bg_paintable,
-                move |progress: f64| {
-                    bg_paintable.set_fade(progress);
-                    this.queue_draw();
-                }
-            )
-        );
-        let anim = adw::TimedAnimation::new(
-            self,
-            0.0, 1.0,
-            (self.imp().transition_duration.get() * 1000.0).round() as u32,
-            anim_target
-        );
-        anim.play();
     }
 
     fn update_outputs(&self, player: Player, outputs: &[Output]) {

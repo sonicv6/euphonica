@@ -20,7 +20,7 @@
 			</object>
 		</child>
 		<property name="content">
-			<object class="GtkBox">
+			<object class="GtkBox" id="content">
 				<property name="halign">fill</property>
 				<property name="orientation">1</property>
 				<child>

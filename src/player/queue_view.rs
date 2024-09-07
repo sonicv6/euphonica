@@ -35,11 +35,11 @@ mod imp {
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
-        pub queue_pane_view: TemplateChild<adw::OverlaySplitView>,
+        pub queue_pane_view: TemplateChild<adw::NavigationSplitView>,
         #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
         #[template_child]
-        pub queue_len: TemplateChild<gtk::Label>,
+        pub queue_title: TemplateChild<adw::WindowTitle>,
         #[template_child]
         pub player_pane: TemplateChild<PlayerPane>,
         #[template_child]
@@ -118,6 +118,21 @@ glib::wrapper! {
 impl Default for QueueView {
     fn default() -> Self {
         glib::Object::new()
+    }
+}
+
+fn format_song_count(count: u32) -> Option<String> {
+    // TODO: translatable
+    if count == 0 {
+        None
+    }
+    else {
+        if count == 1 {
+            Some(String::from("1 song"))
+        }
+        else {
+            Some(format!("{} songs", count))
+        }
     }
 }
 
@@ -206,7 +221,7 @@ impl QueueView {
 
     pub fn bind_state(&self, player: Player) {
         let player_queue = player.queue();
-        let queue_len = self.imp().queue_len.get();
+        let queue_title = self.imp().queue_title.get();
         let clear_queue_btn = self.imp().clear_queue.get();
         player_queue
             .bind_property(
@@ -221,10 +236,11 @@ impl QueueView {
         player_queue
             .bind_property(
                 "n-items",
-                &queue_len,
-                "label"
+                &queue_title,
+                "subtitle"
             )
-            .transform_to(|_, size: u32| {Some(size.to_string())})
+            // TODO: l10n
+            .transform_to(|_, size: u32| {format_song_count(size)})
             .sync_create()
             .build();
 

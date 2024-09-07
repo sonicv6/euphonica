@@ -43,3 +43,23 @@ windowhandle {
     border-top: 1px solid @borders;
     padding: 12pt;
 }
+
+/* To achieve full-window blurred background effect, we must replace the default opaque colours used
+ * by the nav sidebars' backgrounds by their shade_color equivalent.
+ * Only do this when blurred background is enabled AND there is a song with an album art playing. */
+.no-shading navigation-split-view > .sidebar-pane {
+  background: @sidebar_shade_color;
+}
+
+/* Any other widget needing to be shaded similarly to the sidebar when album art is used as background. */
+.no-shading .sidebar-shade {
+  background: @sidebar_shade_color;
+}
+
+.no-shading .nested-split-view > .sidebar-pane {
+  background: transparent;
+}
+
+.no-shading .nested-split-view > .background {
+  background: transparent;
+}

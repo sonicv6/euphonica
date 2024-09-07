@@ -2,6 +2,8 @@ use adw::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
 use glib::clone;
 
+use crate::player::Player;
+
 use super::SidebarButton;
 
 mod imp {
@@ -16,6 +18,8 @@ mod imp {
         pub artists_btn: TemplateChild<SidebarButton>,
         #[template_child]
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
+        #[template_child]
+        pub queue_len: TemplateChild<gtk::Label>,
     }
 
     #[glib::object_subclass]
@@ -68,7 +72,7 @@ impl Sidebar {
         Self::default()
     }
 
-    pub fn setup(&self, stack: gtk::Stack, player_bar_revealer: gtk::Revealer) {
+    pub fn setup(&self, stack: gtk::Stack, player_bar_revealer: gtk::Revealer, player: Player) {
         // Set default view. TODO: remember last view
         stack.set_visible_child_name("albums");
         self.imp().albums_btn.set_active(true);
@@ -108,5 +112,14 @@ impl Sidebar {
                 player_bar_revealer.set_reveal_child(false);
             }
         }));
+
+        player.queue()
+              .bind_property(
+                  "n-items",
+                  &self.imp().queue_len.get(),
+                  "label"
+              )
+              .transform_to(|_, size: u32| {Some(size.to_string())})
+              .build();
     }
 }

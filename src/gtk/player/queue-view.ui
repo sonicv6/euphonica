@@ -3,99 +3,108 @@
   <requires lib="gtk" version="4.0" />
   <template class="EuphoniaQueueView" parent="GtkWidget">
     <child>
-			<object class="AdwToolbarView">
-				<child type="top">
-					<object class="AdwHeaderBar">
-						<property name="title-widget">
-							<object class="AdwWindowTitle">
-								<property name="title" translatable="true">Now Playing</property>
-							</object>
-						</property>
-						<child type="start">
-              <object class="GtkToggleButton" id="show_queue_btn">
-                <property name="icon-name">sidebar-show-symbolic</property>
-                <property name="tooltip-text" translatable="true">Show Queue</property>
-                <property name="active" bind-source="queue_pane_view" bind-property="show-sidebar" bind-flags="sync-create|bidirectional"/>
-              </object>
-            </child>
-					</object>
-				</child>
+			<object class="AdwNavigationSplitView" id="queue_pane_view">
+				<style>
+					<class name="nested-split-view"/>
+				</style>
+				<property name="min-sidebar-width">240</property>
+				<property name="max-sidebar-width">3840</property>
+				<property name="sidebar-width-fraction">0.65</property>
 				<property name="content">
-					<object class="AdwOverlaySplitView" id="queue_pane_view">
-						<property name="min-sidebar-width">240</property>
-						<property name="max-sidebar-width">3840</property>
-						<property name="sidebar-width-fraction">0.7</property>
-						<property name="content">
-							<object class="AdwNavigationPage">
-								<property name="title" translatable="yes">Now Playing</property>
-								<property name="tag">now_playing</property>
-								<property name="child">
+					<object class="AdwNavigationPage">
+						<property name="title" translatable="yes">Now Playing</property>
+						<property name="tag">now_playing</property>
+						<property name="child">
+							<object class="AdwToolbarView">
+								<child type="top">
+									<object class="AdwHeaderBar"/>
+								</child>
+								<property name="content">
 									<object class="EuphoniaPlayerPane" id="player_pane"/>
 								</property>
 							</object>
 						</property>
-						<property name="sidebar">
-							<object class="GtkBox">
-								<property name="orientation">1</property>
-								<child>
-									<object class="GtkCenterBox">
-										<style>
-											<class name="padding-6"/>
-										</style>
-										<property name="start-widget">
-											<object class="GtkBox">
-												<property name="spacing">12</property>
+					</object>
+				</property>
+				<property name="sidebar">
+					<object class="AdwNavigationPage">
+						<property name="title" translatable="yes">Queue</property>
+						<property name="tag">queue</property>
+						<property name="child">
+							<object class="AdwToolbarView">
+								<child type="top">
+									<object class="AdwHeaderBar">
+										<property name="title-widget">
+											<object class="AdwWindowTitle" id="queue_title">
+												<property name="title" translatable="true">Queue</property>
+											</object>
+										</property>
+										<child type="end">
+											<object class="GtkButton" id="now_playing_button">
+												<property name="visible" bind-source="queue_pane_view" bind-property="collapsed" bind-flags="sync-create"/>
+												<property name="action-name">navigation.push</property>
+                        <property name="action-target">'now_playing'</property>
 												<child>
-													<object class="GtkLabel">
-														<style>
-															<class name="heading"/>
-														</style>
-														<property name="label" translatable="true">Queue</property>
+													<object class="GtkBox">
+														<property name="spacing">6</property>
+														<child>
+															<object class="GtkLabel">
+																<property name="label" translatable="true">Now Playing</property>
+															</object>
+														</child>
+														<child>
+															<object class="GtkImage">
+																<property name="icon-name">right-symbolic</property>
+															</object>
+														</child>
 													</object>
 												</child>
-												<child>
-													<object class="GtkLabel" id="queue_len">
+											</object>
+										</child>
+									</object>
+								</child>
+								<property name="content">
+									<object class="GtkBox">
+										<property name="orientation">1</property>
+										<child>
+											<object class="GtkCenterBox">
+												<style>
+													<class name="padding-6"/>
+												</style>
+												<property name="end-widget">
+													<object class="GtkButton" id="clear_queue">
+														<property name="icon-name">edit-clear-symbolic</property>
+														<property name="tooltip-text" translatable="true">Clear the queue</property>
+														<property name="sensitive">false</property>
 														<style>
-															<class name="dim-label"/>
+															<class name="destructive-action"/>
 														</style>
-														<property name="label">0</property>
 													</object>
-												</child>
+												</property>
 											</object>
-										</property>
-										<property name="end-widget">
-											<object class="GtkButton" id="clear_queue">
-												<property name="icon-name">edit-clear-symbolic</property>
-												<property name="tooltip-text" translatable="true">Clear the queue</property>
-												<property name="sensitive">false</property>
-												<style>
-													<class name="destructive-action"/>
-												</style>
+										</child>
+										<child>
+											<object class="GtkScrolledWindow">
+												<property name="hscrollbar-policy">never</property>
+												<property name="vscrollbar-policy">automatic</property>
+												<property name="propagate-natural-height">true</property>
+												<property name="has-frame">false</property>
+												<property name="vexpand">true</property>
+												<property name="hexpand">true</property>
+												<property name="child">
+													<object class="GtkListView" id="queue">
+														<property name="show-separators">true</property>
+														<property name="single-click-activate">true</property>
+														<style>
+															<class name="no-bg" />
+														</style>
+													</object>
+												</property>
 											</object>
-										</property>
+										</child>
 									</object>
-								</child>
-								<child>
-									<object class="GtkScrolledWindow">
-										<property name="hscrollbar-policy">never</property>
-										<property name="vscrollbar-policy">automatic</property>
-										<property name="propagate-natural-height">true</property>
-										<property name="has-frame">false</property>
-										<property name="vexpand">true</property>
-										<property name="hexpand">true</property>
-										<property name="child">
-											<object class="GtkListView" id="queue">
-												<property name="show-separators">true</property>
-												<property name="single-click-activate">true</property>
-												<style>
-													<class name="no-bg" />
-												</style>
-											</object>
-										</property>
-									</object>
-								</child>
+								</property>
 							</object>
-
 						</property>
 					</object>
 				</property>
