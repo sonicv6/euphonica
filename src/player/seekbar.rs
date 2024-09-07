@@ -98,6 +98,7 @@ mod imp {
                                 &[]
                             );
                         }
+                        this.obj().set_position(this.seekbar.adjustment().value());
                         glib::signal::Propagation::Proceed
                     }
                 )
@@ -205,7 +206,6 @@ impl Seekbar {
         self.imp().position.get()
     }
 
-    /// Set a new value quietly (will not notify to outside). Used for external updates.
     /// While the internal position property will always be successfully set, the seekbar
     /// might still display 0.0 if its duration is less than the new position.
     /// Upon setting a sufficiently long duration, the stored position property will take
@@ -214,6 +214,7 @@ impl Seekbar {
         let old = self.imp().position.replace(new);
         if old != new {
             self.imp().seekbar.set_value(new);
+            self.notify("position");
         }
     }
 
@@ -225,5 +226,6 @@ impl Seekbar {
         self.imp().seekbar.set_range(0.0, new);
         // Re-apply position
         self.imp().seekbar.set_value(self.imp().position.get());
+        self.notify("duration");
     }
 }
