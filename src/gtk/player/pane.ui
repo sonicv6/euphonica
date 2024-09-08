@@ -44,6 +44,7 @@
                 <property name="visible">false</property>
                 <child>
                   <object class="GtkLabel" id="song_name">
+                    <property name="wrap">true</property>
                     <property name="label">Untitled Song</property>
                     <property name="wrap">true</property>
                     <property name="justify">2</property>
@@ -54,6 +55,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel" id="artist">
+                    <property name="wrap">true</property>
                     <property name="label">Unknown</property>
                     <property name="wrap">true</property>
                     <property name="justify">2</property>
@@ -61,6 +63,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel" id="album">
+                    <property name="wrap">true</property>
                     <property name="label">Unknown</property>
                     <property name="wrap">true</property>
                     <property name="justify">2</property>
