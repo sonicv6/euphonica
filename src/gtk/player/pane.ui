@@ -75,6 +75,21 @@
             <child>
               <object class="EuphoniaPlaybackControls" id="playback_controls"/>
             </child>
+            <child>
+              <object class="GtkBox">
+                <property name="visible" bind-source="playback_controls" bind-property="visible" bind-flags="sync-create"/>
+                <property name="spacing">6</property>
+                <property name="halign">center</property>
+                <child>
+                  <object class="GtkButton" id="rg_btn">
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                    <property name="icon-name">rg-off-symbolic</property>
+                  </object>
+                </child>
+              </object>
+            </child>
 
             <child>
               <object class="GtkBox" id="format_info">

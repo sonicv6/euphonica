@@ -25,6 +25,14 @@
                   <object class="GtkBox">
                     <property name="halign">3</property>
                     <child>
+                      <object class="GtkButton" id="flow_btn">
+                        <property name="icon-name">playlist-consecutive-symbolic</property>
+                        <style>
+                          <class name="flat"/>
+                        </style>
+                      </object>
+                    </child>
+                    <child>
                       <object class="GtkButton" id="prev_btn">
                         <property name="icon-name">skip-backward-large-symbolic</property>
                         <style>
@@ -72,6 +80,15 @@
                     <child>
                       <object class="GtkButton" id="next_btn">
                         <property name="icon-name">skip-forward-large-symbolic</property>
+                        <style>
+                          <class name="flat"/>
+                        </style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkToggleButton" id="random_btn">
+                        <property name="icon-name">media-playlist-shuffle-symbolic</property>
+                        <property name="tooltip-text" translatable="true">Shuffle Queue</property>
                         <style>
                           <class name="flat"/>
                         </style>

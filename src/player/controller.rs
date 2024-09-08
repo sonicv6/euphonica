@@ -10,7 +10,7 @@ use async_channel::Sender;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject};
 use gtk::gdk::Texture;
 use gtk::{gio, glib, prelude::*};
-use mpd::status::{AudioFormat, State, Status};
+use mpd::{status::{AudioFormat, State, Status}, ReplayGain};
 use std::{
     cell::{Cell, OnceCell, RefCell},
     rc::Rc,
@@ -27,11 +27,94 @@ pub enum PlaybackState {
     Paused,
 }
 
+#[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
+#[enum_type(name = "EuphoniaPlaybackFlow")]
+pub enum PlaybackFlow {
+    #[default]
+    Sequential,  // Plays through the queue once
+    Repeat,      // Loops through the queue
+    Single,      // Plays one song then stops & waits for click to play next song
+    RepeatSingle // Loops current song
+}
+
+impl PlaybackFlow {
+    pub fn from_status(st: &mpd::status::Status) -> Self {
+        if st.repeat {
+            if st.single {
+                PlaybackFlow::RepeatSingle
+            }
+            else {
+                PlaybackFlow::Repeat
+            }
+        }
+        else {
+            if st.single {
+                PlaybackFlow::Single
+            }
+            else {
+                PlaybackFlow::Sequential
+            }
+        }
+    }
+
+    pub fn icon_name(&self) -> &'static str {
+        match self {
+            &PlaybackFlow::Sequential => "playlist-consecutive-symbolic",
+            &PlaybackFlow::Repeat => "playlist-repeat-symbolic",
+            &PlaybackFlow::Single => "stop-sign-outline-symbolic",
+            &PlaybackFlow::RepeatSingle => "playlist-repeat-song-symbolic"
+        }
+    }
+
+    pub fn next_in_cycle(&self) -> Self {
+        match self {
+            &PlaybackFlow::Sequential => PlaybackFlow::Repeat,
+            &PlaybackFlow::Repeat => PlaybackFlow::Single,
+            &PlaybackFlow::Single => PlaybackFlow::RepeatSingle,
+            &PlaybackFlow::RepeatSingle => PlaybackFlow::Sequential
+        }
+    }
+
+    // TODO: translatable
+    pub fn description(&self) -> &'static str {
+        match self {
+            &PlaybackFlow::Sequential => "Sequential",
+            &PlaybackFlow::Repeat => "Repeat Queue",
+            &PlaybackFlow::Single => "Single Song",
+            &PlaybackFlow::RepeatSingle => "Repeat Current Song"
+        }
+    }
+}
+
+fn cycle_replaygain(curr: ReplayGain) -> ReplayGain {
+    match curr {
+        ReplayGain::Off => ReplayGain::Auto,
+        ReplayGain::Auto => ReplayGain::Track,
+        ReplayGain::Track => ReplayGain::Album,
+        ReplayGain::Album => ReplayGain::Off
+    }
+}
+
+fn get_replaygain_icon_name(mode: ReplayGain) -> &'static str {
+    match mode {
+        ReplayGain::Off => "rg-off-symbolic",
+        ReplayGain::Auto => "rg-auto-symbolic",
+        ReplayGain::Track => "rg-track-symbolic",
+        ReplayGain::Album => "rg-album-symbolic"
+    }
+}
+
 mod imp {
     use super::*;
     use glib::{
-        ParamSpec, ParamSpecDouble, ParamSpecEnum, ParamSpecObject, ParamSpecString, ParamSpecUInt,
-        ParamSpecUInt64,
+        ParamSpec,
+        ParamSpecBoolean,
+        ParamSpecDouble,
+        ParamSpecEnum,
+        ParamSpecObject,
+        ParamSpecString,
+        ParamSpecUInt,
+        ParamSpecUInt64
     };
     use once_cell::sync::Lazy;
 
@@ -41,6 +124,9 @@ mod imp {
         pub current_song: RefCell<Option<Song>>,
         pub queue: gio::ListStore,
         pub format: RefCell<Option<AudioFormat>>,
+        pub flow: Cell<PlaybackFlow>,
+        pub random: Cell<bool>,
+        pub replaygain: Cell<ReplayGain>,
         // Rounded version, for sending to MPD.
         // Changes not big enough to cause an integer change
         // will not be sent to MPD.
@@ -67,9 +153,12 @@ mod imp {
             Self {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
+                random: Cell::new(false),
+                replaygain: Cell::new(ReplayGain::Off),
                 current_song: RefCell::new(None),
                 queue: gio::ListStore::new::<Song>(),
                 format: RefCell::new(None),
+                flow: Cell::default(),
                 client_sender: OnceCell::new(),
                 cache: OnceCell::new(),
                 volume: Cell::new(0),
@@ -86,6 +175,11 @@ mod imp {
                     ParamSpecEnum::builder::<PlaybackState>("playback-state")
                         .read_only()
                         .build(),
+                    ParamSpecEnum::builder::<PlaybackFlow>("playback-flow")
+                        .read_only()
+                        .build(),
+                    ParamSpecString::builder("replaygain").read_only().build(), // use icon name directly to simplify implementation
+                    ParamSpecBoolean::builder("random").build(),
                     ParamSpecDouble::builder("position").build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
@@ -110,7 +204,10 @@ mod imp {
         fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
             let obj = self.obj();
             match pspec.name() {
-                "playback-state" => obj.playback_state().to_value(),
+                "playback-state" => self.state.get().to_value(),
+                "playback-flow" => self.flow.get().to_value(),
+                "random" => self.random.get().to_value(),
+                "replaygain" => get_replaygain_icon_name(self.replaygain.get()).to_value(),
                 "position" => obj.position().to_value(),
                 // These are proxies for Song properties
                 "title" => obj.title().to_value(),
@@ -133,6 +230,13 @@ mod imp {
                         obj.set_position(v);
                     }
                 },
+                "random" => {
+                    if let Ok(state) = value.get::<bool>() {
+                        obj.set_random(state);
+                        // Don't actually set the property here yet.
+                        // Idle status will update it later.
+                    }
+                }
                 _ => unimplemented!(),
             }
         }
@@ -258,6 +362,24 @@ impl Player {
             self.notify("playback-state");
         }
 
+        let new_rg = status.replaygain.unwrap_or(ReplayGain::Off);
+        let old_rg = self.imp().replaygain.replace(new_rg);
+        if old_rg != new_rg {
+            // These properties are affected by the "state" field.
+            self.notify("replaygain");
+        }
+
+        let new_flow = PlaybackFlow::from_status(status);
+        let old_flow = self.imp().flow.replace(new_flow);
+        if old_flow != new_flow {
+            self.notify("playback-flow");
+        }
+
+        let old_rand = self.imp().random.replace(status.random);
+        if old_rand != status.random {
+            self.notify("random");
+        }
+
         let old_format = self.imp().format.replace(status.audio);
         if old_format != status.audio {
             self.notify("format-desc");
@@ -379,6 +501,26 @@ impl Player {
     // Here we try to define getters and setters in terms of the GObject
     // properties as defined above in mod imp {} instead of the actual
     // internal fields.
+    pub fn cycle_playback_flow(&self) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let next_flow = self.imp().flow.get().next_in_cycle();
+            let _ = sender.send_blocking(MpdMessage::SetPlaybackFlow(next_flow));
+        }
+    }
+
+    pub fn cycle_replaygain(&self) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let next_rg = cycle_replaygain(self.imp().replaygain.get());
+            let _ = sender.send_blocking(MpdMessage::ReplayGain(next_rg));
+        }
+    }
+
+    pub fn set_random(&self, new: bool) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::Random(new));
+        }
+    }
+
     pub fn title(&self) -> Option<String> {
         if let Some(song) = &*self.imp().current_song.borrow() {
             return Some(song.get_name().to_owned());
@@ -445,10 +587,6 @@ impl Player {
         u32::MAX
     }
 
-    pub fn playback_state(&self) -> PlaybackState {
-        self.imp().state.get()
-    }
-
     pub fn position(&self) -> f64 {
         self.imp().position.get()
     }
@@ -479,7 +617,7 @@ impl Player {
         // we need to explicitly tell MPD to start playing the first song in
         // the queue.
 
-        match self.playback_state() {
+        match self.imp().state.get() {
             PlaybackState::Stopped => {
                 // Check if queue is not empty
                 if self.queue().n_items() > 0 {
@@ -546,7 +684,7 @@ impl Player {
             let poller_handle = glib::MainContext::default().spawn_local(async move {
                 loop {
                     // Don't poll if not playing
-                    if this.playback_state() != PlaybackState::Playing {
+                    if this.imp().state.get() != PlaybackState::Playing {
                         break;
                     }
                     // Skip poll if channel is full

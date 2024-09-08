@@ -36,6 +36,11 @@
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
 	<gresource prefix="/org/euphonia/Euphonia/icons/scalable/actions/">
+		<file preprocess="xml-stripblanks" alias="rg-off-symbolic.svg">gtk/icons/rg-off-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="rg-track-symbolic.svg">gtk/icons/rg-track-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="rg-album-symbolic.svg">gtk/icons/rg-album-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="rg-auto-symbolic.svg">gtk/icons/rg-auto-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="blend-tool-symbolic.svg">gtk/icons/blend-tool-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="alsa-symbolic.svg">gtk/icons/alsa-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="pulseaudio-symbolic.svg">gtk/icons/pulseaudio-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="pipewire-symbolic.svg">gtk/icons/pipewire-symbolic.svg</file>
@@ -53,6 +58,10 @@
 		<file preprocess="xml-stripblanks" alias="play-symbolic.svg">gtk/icons/play-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="clock-alt-symbolic.svg">gtk/icons/clock-alt-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="pause-large-symbolic.svg">gtk/icons/pause-large-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="playlist-consecutive-symbolic.svg">gtk/icons/playlist-consecutive-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="playlist-repeat-symbolic.svg">gtk/icons/playlist-repeat-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="stop-sign-outline-symbolic.svg">gtk/icons/stop-sign-outline-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="playlist-repeat-song-symbolic.svg">gtk/icons/playlist-repeat-song-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="skip-forward-large-symbolic.svg">gtk/icons/skip-forward-large-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="music-artist-symbolic.svg">gtk/icons/music-artist-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="library-symbolic.svg">gtk/icons/library-symbolic.svg</file>

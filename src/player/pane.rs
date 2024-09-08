@@ -47,6 +47,8 @@ mod imp {
         #[template_child]
         pub playback_controls: TemplateChild<PlaybackControls>,
         #[template_child]
+        pub rg_btn: TemplateChild<gtk::Button>,
+        #[template_child]
         pub format_info: TemplateChild<gtk::Box>,
 
         // Bottom: output info, volume control & quality
@@ -72,7 +74,6 @@ mod imp {
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
         pub output_count: Cell<usize>,
-
     }
 
     // The central trait for subclassing a GObject
@@ -194,6 +195,41 @@ impl PlayerPane {
                 }
             )
         );
+
+        let rg_btn = self.imp().rg_btn.get();
+        player
+            .bind_property(
+                "replaygain",
+                &rg_btn,
+                "icon-name"
+            )
+            .sync_create()
+            .build();
+        player
+            .bind_property(
+                "replaygain",
+                &rg_btn,
+                "tooltip-text"
+            )
+            // TODO: translatable
+            .transform_to(|_, icon: String| {
+                match icon.as_ref() {
+                    "rg-off-symbolic" => Some("ReplayGain: off"),
+                    "rg-auto-symbolic" => Some("ReplayGain: auto-select between track & album"),
+                    "rg-track-symbolic" => Some("ReplayGain: track"),
+                    "rg-album-symbolic" => Some("ReplayGain: album"),
+                    _ => None
+                }
+            })
+            .sync_create()
+            .build();
+        rg_btn.connect_clicked(clone!(
+            #[weak]
+            player,
+            move |_| {
+                player.cycle_replaygain();
+            }
+        ));
     }
 
     fn bind_state(&self, player: Player) {

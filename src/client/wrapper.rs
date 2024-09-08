@@ -4,6 +4,7 @@ use std::{
     rc::Rc,
     path::PathBuf
 };
+use chrono::Duration;
 use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
 use futures::executor;
@@ -22,9 +23,7 @@ use image::DynamicImage;
 use uuid::Uuid;
 
 use crate::{
-    utils,
-    common::{Album, AlbumInfo, Song, SongInfo, ArtistInfo, Artist},
-    meta_providers::Metadata
+    common::{Album, AlbumInfo, Artist, ArtistInfo, Song, SongInfo}, meta_providers::Metadata, player::PlaybackFlow, utils
 };
 
 use super::state::{ClientState, ConnectionState};
@@ -53,7 +52,9 @@ pub enum MpdMessage {
     Connect, // Host and port are always read from gsettings
     Update, // Update DB
     Output(u32, bool), // Set output state. Specify target ID and state to set to.
-	Play,
+    SetPlaybackFlow(PlaybackFlow),
+    Random(bool),
+    Play,
     Pause,
     Add(String), // Add by URI
     PlayPos(u32), // Play song at queue position
@@ -61,15 +62,20 @@ pub enum MpdMessage {
     Clear, // Clear queue
     Prev,
     Next,
-	Status,
-	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
+    Status,
+    SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
     FindAdd(Query<'static>),
-	Queue, // Get songs in current queue
+    Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
     Artists(bool), // Get artists. Will return one by one. If bool flag is true, will parse AlbumArtist tag.
     AlbumContent(String), // Get list of songs with given album tag
     ArtistContent(String), // Get songs and albums of artist with given name
     Volume(i8),
+    MixRampDb(f32),
+    MixRampDelay(Duration),
+    Crossfade(Duration),
+    ReplayGain(mpd::status::ReplayGain),
+    Consume(bool),
 
     // Reserved for cache controller
     // folder-level URI, key doc & paths to write the hires & thumbnail versions
@@ -555,6 +561,9 @@ impl MpdWrapper {
             MpdMessage::Volume(vol) => self.volume(vol),
             MpdMessage::Status => self.get_status(),
             MpdMessage::Add(uri) => self.add(uri.as_ref()),
+            MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
+            MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
+            MpdMessage::Random(state) => self.set_random(state),
             MpdMessage::Play => self.pause(false),
             MpdMessage::PlayId(id) => self.play_at(id, true),
             MpdMessage::PlayPos(pos) => self.play_at(pos, false),
@@ -622,6 +631,7 @@ impl MpdWrapper {
             ),
             MpdMessage::DBUpdated => {},
             MpdMessage::Busy(busy) => self.state.set_busy(busy),
+            _ => {}
         }
         glib::ControlFlow::Continue
     }
@@ -629,7 +639,7 @@ impl MpdWrapper {
     async fn handle_idle_changes(&self, changes: Vec<Subsystem>) {
         for subsystem in changes {
             match subsystem {
-                Subsystem::Player => {
+                Subsystem::Player | Subsystem::Options => {
                     // No need to get current song separately as we'll just pull it
                     // from the queue
                     self.get_status();
@@ -753,14 +763,44 @@ impl MpdWrapper {
         }
     }
 
+    pub fn set_playback_flow(&self, flow: PlaybackFlow) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match flow {
+                PlaybackFlow::Sequential => {
+                    let _ = client.repeat(false);
+                    let _ = client.single(false);
+                }
+                PlaybackFlow::Repeat => {
+                    let _ = client.repeat(true);
+                    let _ = client.single(false);
+                }
+                PlaybackFlow::Single => {
+                    let _ = client.repeat(false);
+                    let _ = client.single(true);
+                }
+                PlaybackFlow::RepeatSingle => {
+                    let _ = client.repeat(true);
+                    let _ = client.single(true);
+                }
+            }
+        }
+    }
+
+    pub fn set_replaygain(&self, mode: mpd::status::ReplayGain) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.replaygain(mode);
+        }
+    }
+
+    pub fn set_random(&self, state: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.random(state);
+        }
+    }
+
     pub fn pause(self: Rc<Self>, is_pause: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            // TODO: Make it stop/play base on toggle
             let _ = client.pause(is_pause);
-            // TODO: handle error
-        }
-        else {
-            // TODO: handle error
         }
     }
     pub fn prev(self: Rc<Self>) {

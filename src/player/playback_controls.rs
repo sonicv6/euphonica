@@ -8,7 +8,7 @@ use glib::{
 };
 
 use super::{
-    PlaybackState, Player, Seekbar
+    PlaybackFlow, PlaybackState, Player, Seekbar
 };
 
 // All playback controls are grouped in this custom widget since we'll need to draw
@@ -28,6 +28,8 @@ mod imp {
         #[template_child]
         pub stack: TemplateChild<gtk::Stack>,
         #[template_child]
+        pub flow_btn: TemplateChild<gtk::Button>,
+        #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub play_pause_symbol: TemplateChild<gtk::Stack>,  // inside the play/pause button
@@ -35,6 +37,8 @@ mod imp {
         pub prev_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub next_btn: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub random_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub seekbar: TemplateChild<Seekbar>,
         #[property(get, set)]
@@ -152,6 +156,33 @@ impl PlaybackControls {
             .sync_create()
             .build();
 
+        let flow_btn = imp.flow_btn.get();
+        player
+            .bind_property(
+                "playback-flow",
+                &flow_btn,
+                "icon-name"
+            )
+            .transform_to(|_, flow: PlaybackFlow| { Some(flow.icon_name()) })
+            .sync_create()
+            .build();
+        player
+            .bind_property(
+                "playback-flow",
+                &flow_btn,
+                "tooltip-text"
+            )
+            // TODO: translatable
+            .transform_to(|_, flow: PlaybackFlow| { Some(format!("Playback Mode: {}", flow.description())) })
+            .sync_create()
+            .build();
+        flow_btn.connect_clicked(clone!(
+            #[weak]
+            player,
+            move |_| {
+                player.cycle_playback_flow();
+            }
+        ));
         self.imp().prev_btn.connect_clicked(
             clone!(
                 #[strong]
@@ -179,6 +210,16 @@ impl PlaybackControls {
                 }
             )
         );
+        let shuffle_btn = imp.random_btn.get();
+        shuffle_btn
+            .bind_property(
+                "active",
+                &player,
+                "random"
+            )
+            .bidirectional()
+            .sync_create()
+            .build();
 
         self.setup_seekbar(player);
     }
