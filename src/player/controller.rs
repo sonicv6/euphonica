@@ -126,6 +126,7 @@ mod imp {
         pub format: RefCell<Option<AudioFormat>>,
         pub flow: Cell<PlaybackFlow>,
         pub random: Cell<bool>,
+        pub consume: Cell<bool>,
         pub replaygain: Cell<ReplayGain>,
         // Rounded version, for sending to MPD.
         // Changes not big enough to cause an integer change
@@ -154,6 +155,7 @@ mod imp {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
                 random: Cell::new(false),
+                consume: Cell::new(false),
                 replaygain: Cell::new(ReplayGain::Off),
                 current_song: RefCell::new(None),
                 queue: gio::ListStore::new::<Song>(),
@@ -180,6 +182,7 @@ mod imp {
                         .build(),
                     ParamSpecString::builder("replaygain").read_only().build(), // use icon name directly to simplify implementation
                     ParamSpecBoolean::builder("random").build(),
+                    ParamSpecBoolean::builder("consume").build(),
                     ParamSpecDouble::builder("position").build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
@@ -207,6 +210,7 @@ mod imp {
                 "playback-state" => self.state.get().to_value(),
                 "playback-flow" => self.flow.get().to_value(),
                 "random" => self.random.get().to_value(),
+                "consume" => self.consume.get().to_value(),
                 "replaygain" => get_replaygain_icon_name(self.replaygain.get()).to_value(),
                 "position" => obj.position().to_value(),
                 // These are proxies for Song properties
@@ -233,6 +237,13 @@ mod imp {
                 "random" => {
                     if let Ok(state) = value.get::<bool>() {
                         obj.set_random(state);
+                        // Don't actually set the property here yet.
+                        // Idle status will update it later.
+                    }
+                }
+                "consume" => {
+                    if let Ok(state) = value.get::<bool>() {
+                        obj.set_consume(state);
                         // Don't actually set the property here yet.
                         // Idle status will update it later.
                     }
@@ -380,6 +391,11 @@ impl Player {
             self.notify("random");
         }
 
+        let old_consume = self.imp().consume.replace(status.consume);
+        if old_consume != status.consume {
+            self.notify("consume");
+        }
+
         let old_format = self.imp().format.replace(status.audio);
         if old_format != status.audio {
             self.notify("format-desc");
@@ -518,6 +534,12 @@ impl Player {
     pub fn set_random(&self, new: bool) {
         if let Some(sender) = self.imp().client_sender.get() {
             let _ = sender.send_blocking(MpdMessage::Random(new));
+        }
+    }
+
+    pub fn set_consume(&self, new: bool) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::Consume(new));
         }
     }
 

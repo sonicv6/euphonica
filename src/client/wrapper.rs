@@ -564,6 +564,7 @@ impl MpdWrapper {
             MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
             MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
             MpdMessage::Random(state) => self.set_random(state),
+            MpdMessage::Consume(state) => self.set_consume(state),
             MpdMessage::Play => self.pause(false),
             MpdMessage::PlayId(id) => self.play_at(id, true),
             MpdMessage::PlayPos(pos) => self.play_at(pos, false),
@@ -795,6 +796,12 @@ impl MpdWrapper {
     pub fn set_random(&self, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.random(state);
+        }
+    }
+
+    pub fn set_consume(&self, state: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.consume(state);
         }
     }
 

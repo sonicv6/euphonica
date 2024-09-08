@@ -43,6 +43,8 @@ mod imp {
         #[template_child]
         pub player_pane: TemplateChild<PlayerPane>,
         #[template_child]
+        pub consume: TemplateChild<gtk::ToggleButton>,
+        #[template_child]
         pub clear_queue: TemplateChild<gtk::Button>,
         #[property(get, set)]
         pub collapsed: Cell<bool>,
@@ -235,6 +237,7 @@ impl QueueView {
         let player_queue = player.queue();
         let queue_title = self.imp().queue_title.get();
         let clear_queue_btn = self.imp().clear_queue.get();
+        let consume = self.imp().consume.get();
         player_queue
             .bind_property(
                 "n-items",
@@ -253,6 +256,16 @@ impl QueueView {
             )
             // TODO: l10n
             .transform_to(|_, size: u32| {format_song_count(size)})
+            .sync_create()
+            .build();
+
+        consume
+            .bind_property(
+                "active",
+                &player,
+                "consume"
+            )
+            .bidirectional()
             .sync_create()
             .build();
 
