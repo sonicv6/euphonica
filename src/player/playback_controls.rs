@@ -38,7 +38,9 @@ mod imp {
         #[template_child]
         pub seekbar: TemplateChild<Seekbar>,
         #[property(get, set)]
-        pub playing: Cell<bool>
+        pub playing: Cell<bool>,
+        #[property(get, set)]
+        pub collapsed: Cell<bool>  // If true, will only show prev track, play/pause and next track
     }
 
     // The central trait for subclassing a GObject
@@ -60,7 +62,24 @@ mod imp {
 
     // Trait shared by all GObjects
     #[glib::derived_properties]
-    impl ObjectImpl for PlaybackControls {}
+    impl ObjectImpl for PlaybackControls {
+        fn constructed(&self) {
+            self.parent_constructed();
+
+            let obj = self.obj();
+
+            // Hide certain widgets when not in expanded mode
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.seekbar.get(),
+                    "visible"
+                )
+                .transform_to(|_, val: bool| {Some(!val)})
+                .sync_create()
+                .build();
+        }
+    }
 
     // Trait shared by all widgets
     impl WidgetImpl for PlaybackControls {}

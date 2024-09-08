@@ -211,14 +211,16 @@ mod imp {
             if self.use_album_art_bg.get() {
                 let bg_width = self.bg_paintable.intrinsic_width() as f32;
                 let bg_height = self.bg_paintable.intrinsic_height() as f32;
-                let scale_x = width / bg_width as f32;
-                let scale_y = height / bg_height as f32;
+                // Also zoom in enough to avoid the "transparent edges" caused by blurring edge pixels
+                let blur_radius = self.blur_radius.get();
+                let scale_x = width / (bg_width - blur_radius as f32) as f32;
+                let scale_y = height / (bg_height - blur_radius as f32) as f32;
                 let scale_max = scale_x.max(scale_y);
                 let view_width = bg_width * scale_max;
                 let view_height = bg_height * scale_max;
                 let delta_x = (width - view_width) * 0.5;
                 let delta_y = (height - view_height) * 0.5;
-                // Crop background to only the bottom bar
+
                 snapshot.push_clip(&graphene::Rect::new(
                     0.0, 0.0, width, height
                 ));
@@ -226,7 +228,7 @@ mod imp {
                     delta_x, delta_y
                 ));
                 // Blur & opacity nodes
-                let blur_radius = self.blur_radius.get();
+
                 if blur_radius > 0 {
                     snapshot.push_blur(blur_radius as f64);
                 }

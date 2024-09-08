@@ -42,6 +42,7 @@
                                                         <property name="halign">start</property>
                                                         <property name="justify">left</property>
                                                         <property name="label">Untitled Artist</property>
+                                                        <property name="wrap">true</property>
                                                         <style>
                                                             <class name="title-2"/>
                                                         </style>

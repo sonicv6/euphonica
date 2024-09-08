@@ -20,9 +20,12 @@ use super::{
 };
 
 mod imp {
+    use glib::Properties;
+
     use super::*;
 
-    #[derive(Default, CompositeTemplate)]
+    #[derive(Default, Properties, CompositeTemplate)]
+    #[properties(wrapper_type = super::PlayerBar)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/bar.ui")]
     pub struct PlayerBar {
         // Left side: current song info
@@ -60,7 +63,8 @@ mod imp {
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
         pub output_count: Cell<usize>,
-
+        #[property(get, set)]
+        pub collapsed: Cell<bool>  // If true, will turn into a minimal bar that can fit narrow displays (e.g., phones)
     }
 
     // The central trait for subclassing a GObject
@@ -81,7 +85,89 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    impl ObjectImpl for PlayerBar {}
+    #[glib::derived_properties]
+    impl ObjectImpl for PlayerBar {
+        fn constructed(&self) {
+            self.parent_constructed();
+            let obj = self.obj();
+
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.albumart.get(),
+                    "pixel-size"
+                )
+                .transform_to(|_, collapsed: bool| {
+                    if collapsed {
+                        Some(48)
+                    } else {
+                        Some(96)
+                    }
+                })
+                .sync_create()
+                .build();
+
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.playback_controls.get(),
+                    "collapsed"
+                )
+                .sync_create()
+                .build();
+
+            // Hide certain widgets when in compact mode
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.album.get(),
+                    "visible"
+                )
+                .invert_boolean()
+                .sync_create()
+                .build();
+
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.quality_grade.get(),
+                    "visible"
+                )
+                .invert_boolean()
+                .sync_create()
+                .build();
+
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.format_desc.get(),
+                    "visible"
+                )
+                .invert_boolean()
+                .sync_create()
+                .build();
+
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.output_section.get(),
+                    "visible"
+                )
+                .invert_boolean()
+                .sync_create()
+                .build();
+
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.vol_knob.get(),
+                    "visible"
+                )
+                .invert_boolean()
+                .sync_create()
+                .build();
+        }
+    }
 
     // Trait shared by all widgets
     impl WidgetImpl for PlayerBar {}

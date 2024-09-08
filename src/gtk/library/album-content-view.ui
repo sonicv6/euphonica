@@ -54,6 +54,7 @@
                                                 <child>
                                                     <object class="GtkLabel" id="title">
                                                         <property name="halign">start</property>
+                                                        <property name="wrap">true</property>
                                                         <property name="justify">left</property>
                                                         <property name="label">Untitled Album</property>
                                                         <style>
@@ -71,6 +72,7 @@
                                                         </child>
                                                         <child>
                                                             <object class="GtkLabel" id="artist">
+                                                                <property name="wrap">true</property>
                                                                 <property name="label">Unknown Artist</property>
                                                             </object>
                                                         </child>

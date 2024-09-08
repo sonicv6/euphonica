@@ -73,6 +73,7 @@
                 <child>
                   <object class="GtkBox">
                     <property name="spacing">6</property>
+                    <property name="visible" bind-source="album" bind-property="visible" bind-flags="sync-create"/>
                     <child>
                       <object class="GtkImage">
                         <property name="icon-name">library-music-symbolic</property>
@@ -92,6 +93,7 @@
                 </child>
                 <child>
                   <object class="GtkBox">
+                    <property name="visible" bind-source="format_desc" bind-property="visible" bind-flags="sync-create"/>
                     <property name="spacing">6</property>
                     <child>
                       <object class="GtkImage" id="quality_grade">
@@ -117,19 +119,13 @@
         <property name="center-widget">
           <!-- Playback controls -->
           <object class="GtkBox">
-            <property name="hexpand">true</property>
+            <property name="hexpand" bind-source="playback_controls" bind-property="collapsed" bind-flags="sync-create|invert-boolean"/>
             <property name="valign">3</property>
             <property name="margin-start">24</property>
             <property name="margin-end">24</property>
             <property name="spacing">12</property>
             <child>
-              <object class="GtkSeparator"></object>
-            </child>
-            <child>
               <object class="EuphoniaPlaybackControls" id="playback_controls"/>
-            </child>
-            <child>
-              <object class="GtkSeparator"></object>
             </child>
           </object>
         </property>
