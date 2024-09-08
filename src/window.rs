@@ -51,7 +51,9 @@ mod imp {
     #[properties(wrapper_type = super::EuphoniaWindow)]
     #[template(resource = "/org/euphonia/Euphonia/window.ui")]
     pub struct EuphoniaWindow {
-        // Top level widget (for toggling root class)
+        // Top level widgets
+        #[template_child]
+        pub split_view: TemplateChild<adw::NavigationSplitView>,
         #[template_child]
         pub content: TemplateChild<gtk::Box>,
         // Main views
@@ -303,6 +305,7 @@ impl EuphoniaWindow {
         );
         win.imp().sidebar.setup(
             win.imp().stack.get(),
+            win.imp().split_view.get(),
             app.get_player()
         );
         win.imp().player_bar.setup(

@@ -74,7 +74,7 @@ impl Sidebar {
         Self::default()
     }
 
-    pub fn setup(&self, stack: gtk::Stack, player: Player) {
+    pub fn setup(&self, stack: gtk::Stack, split_view: adw::NavigationSplitView, player: Player) {
         // Set default view. TODO: remember last view
         stack.set_visible_child_name("albums");
         stack
@@ -95,7 +95,6 @@ impl Sidebar {
             move |btn| {
             if btn.is_active() {
                 stack.set_visible_child_name("albums");
-
             }
         }));
 
@@ -116,6 +115,27 @@ impl Sidebar {
                 stack.set_visible_child_name("queue");
             }
         }));
+
+        // Connect the raw "clicked" signals to show-content
+        self.imp().queue_btn.upcast_ref::<gtk::Button>().connect_clicked(clone!(
+            #[weak]
+            split_view,
+            move |_| {
+                split_view.set_show_content(true);
+            }
+        ));
+        for btn in [
+            &self.imp().albums_btn.get(),
+            &self.imp().artists_btn.get()
+        ] {
+            btn.upcast_ref::<gtk::ToggleButton>().upcast_ref::<gtk::Button>().connect_clicked(clone!(
+                #[weak]
+                split_view,
+                move |_| {
+                    split_view.set_show_content(true);
+                }
+            ));
+        }
 
         player.queue()
               .bind_property(
