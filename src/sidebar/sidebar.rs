@@ -1,13 +1,18 @@
 use adw::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
-use glib::clone;
+use glib::{Properties, clone};
+
+use crate::player::Player;
 
 use super::SidebarButton;
 
 mod imp {
+    use std::cell::Cell;
+
     use super::*;
 
-    #[derive(Debug, Default, CompositeTemplate)]
+    #[derive(Debug, Properties, Default, CompositeTemplate)]
+    #[properties(wrapper_type = super::Sidebar)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/sidebar.ui")]
     pub struct Sidebar {
         #[template_child]
@@ -16,6 +21,10 @@ mod imp {
         pub artists_btn: TemplateChild<SidebarButton>,
         #[template_child]
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
+        #[template_child]
+        pub queue_len: TemplateChild<gtk::Label>,
+        #[property(get, set)]
+        pub showing_queue_view: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -33,15 +42,12 @@ mod imp {
         }
     }
 
+    #[glib::derived_properties]
     impl ObjectImpl for Sidebar {
         fn dispose(&self) {
             while let Some(child) = self.obj().first_child() {
                 child.unparent();
             }
-        }
-
-        fn constructed(&self) {
-            self.parent_constructed();
         }
     }
 
@@ -68,9 +74,19 @@ impl Sidebar {
         Self::default()
     }
 
-    pub fn setup(&self, stack: gtk::Stack) {
+    pub fn setup(&self, stack: gtk::Stack, split_view: adw::NavigationSplitView, player: Player) {
         // Set default view. TODO: remember last view
         stack.set_visible_child_name("albums");
+        stack
+            .bind_property(
+                "visible-child-name",
+                self,
+                "showing-queue-view"
+            )
+            .transform_to(|_, name: String| {Some(name == "queue")})
+            .sync_create()
+            .build();
+
         self.imp().albums_btn.set_active(true);
         // Hook each button to their respective views
         self.imp().albums_btn.connect_toggled(clone!(
@@ -99,5 +115,35 @@ impl Sidebar {
                 stack.set_visible_child_name("queue");
             }
         }));
+
+        // Connect the raw "clicked" signals to show-content
+        self.imp().queue_btn.upcast_ref::<gtk::Button>().connect_clicked(clone!(
+            #[weak]
+            split_view,
+            move |_| {
+                split_view.set_show_content(true);
+            }
+        ));
+        for btn in [
+            &self.imp().albums_btn.get(),
+            &self.imp().artists_btn.get()
+        ] {
+            btn.upcast_ref::<gtk::ToggleButton>().upcast_ref::<gtk::Button>().connect_clicked(clone!(
+                #[weak]
+                split_view,
+                move |_| {
+                    split_view.set_show_content(true);
+                }
+            ));
+        }
+
+        player.queue()
+              .bind_property(
+                  "n-items",
+                  &self.imp().queue_len.get(),
+                  "label"
+              )
+              .transform_to(|_, size: u32| {Some(size.to_string())})
+              .build();
     }
 }

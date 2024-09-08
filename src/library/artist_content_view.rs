@@ -434,6 +434,36 @@ impl ArtistContentView {
         self.imp().album_subview.set_factory(Some(&factory));
         let sel_model = gtk::NoSelection::new(Some(self.imp().album_list.clone()));
         self.imp().album_subview.set_model(Some(&sel_model));
+
+        // Hook up buttons
+        let replace_queue_btn = self.imp().replace_queue.get();
+        replace_queue_btn.connect_clicked(
+            clone!(
+                #[strong(rename_to = this)]
+                self,
+                #[weak]
+                library,
+                move |_| {
+                    if let Some(artist) = this.imp().artist.borrow().as_ref() {
+                        library.queue_artist(artist.clone(), false, true, true);
+                    }
+                }
+            )
+        );
+        let append_queue_btn = self.imp().append_queue.get();
+        append_queue_btn.connect_clicked(
+            clone!(
+                #[strong(rename_to = this)]
+                self,
+                #[weak]
+                library,
+                move |_| {
+                    if let Some(artist) = this.imp().artist.borrow().as_ref() {
+                        library.queue_artist(artist.clone(), false, false, false);
+                    }
+                }
+            )
+        );
     }
 
     pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {

@@ -25,13 +25,12 @@ use std::{
     fs::create_dir_all,
     path::PathBuf
 };
-use async_channel::{Sender, Receiver};
+use async_channel::Sender;
 
 use crate::{
     library::Library,
     player::Player,
     client::{MpdWrapper, MpdMessage},
-    meta_providers::Metadata,
     cache::Cache,
     config::{VERSION, APPLICATION_USER_AGENT},
     preferences::Preferences,

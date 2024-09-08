@@ -19,35 +19,43 @@
  */
 
 use std::cell::RefCell;
-use adw::subclass::prelude::*;
-use gtk::{
+use adw::{
     prelude::*,
-    gio,
-    glib
+    subclass::prelude::*
+};
+use gtk::{
+    gdk, gio, glib::{self, clone},
 };
 use glib::signal::SignalHandlerId;
 use crate::{
-    utils,
-    client::ConnectionState,
     application::EuphoniaApplication,
-    player::{QueueView, PlayerBar},
+    client::ConnectionState,
     library::{AlbumView, ArtistView},
-    sidebar::Sidebar
+    player::{PlayerBar, QueueView},
+    sidebar::Sidebar,
+    utils
 };
 
 mod imp {
+    use std::cell::{Cell, OnceCell};
+
+    use glib::Properties;
+    use gtk::graphene;
+    use utils::settings_manager;
+
+    use crate::{common::paintables::FadePaintable, player::Player};
+
     use super::*;
 
-    #[derive(Debug, Default, gtk::CompositeTemplate)]
+    #[derive(Debug, Default, Properties, gtk::CompositeTemplate)]
+    #[properties(wrapper_type = super::EuphoniaWindow)]
     #[template(resource = "/org/euphonia/Euphonia/window.ui")]
     pub struct EuphoniaWindow {
-        // Template widgets
-        // #[template_child]
-        // pub view_switcher: TemplateChild<adw::ViewSwitcher>,
-        // #[template_child]
-        // pub header_bar: TemplateChild<adw::HeaderBar>,
-
-
+        // Top level widgets
+        #[template_child]
+        pub split_view: TemplateChild<adw::NavigationSplitView>,
+        #[template_child]
+        pub content: TemplateChild<gtk::Box>,
         // Main views
         #[template_child]
         pub album_view: TemplateChild<AlbumView>,
@@ -71,6 +79,8 @@ mod imp {
 
         // Bottom bar
         #[template_child]
+        pub player_bar_revealer: TemplateChild<gtk::Revealer>,
+        #[template_child]
         pub player_bar: TemplateChild<PlayerBar>,
 
         // RefCells to notify IDs so we can unbind later
@@ -78,7 +88,17 @@ mod imp {
         pub notify_playback_state_id: RefCell<Option<SignalHandlerId>>,
         pub notify_duration_id: RefCell<Option<SignalHandlerId>>,
 
-
+        // Kept here so snapshot() does not have to query GSettings on every frame
+        #[property(get, set)]
+        pub use_album_art_bg: Cell<bool>,
+        #[property(get, set)]
+        pub blur_radius: Cell<u32>,
+        #[property(get, set)]
+        pub opacity: Cell<f64>,
+        #[property(get, set)]
+        pub transition_duration: Cell<f64>,
+        pub bg_paintable: FadePaintable,
+        pub player: OnceCell<Player>
     }
 
     #[glib::object_subclass]
@@ -89,31 +109,152 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             klass.bind_template();
+            // klass.set_layout_manager_type::<gtk::BoxLayout>();
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
             obj.init_template();
         }
-
-        fn new() -> Self {
-            Self {
-                album_view: TemplateChild::default(),
-                artist_view: TemplateChild::default(),
-                queue_view: TemplateChild::default(),
-                stack: TemplateChild::default(),
-                title: TemplateChild::default(),
-                busy_spinner: TemplateChild::default(),
-                sidebar: TemplateChild::default(),
-                player_bar: TemplateChild::default(),
-                notify_position_id: RefCell::new(None),
-                notify_duration_id: RefCell::new(None),
-                notify_playback_state_id: RefCell::new(None),
-            }
-        }
     }
 
-    impl ObjectImpl for EuphoniaWindow {}
-    impl WidgetImpl for EuphoniaWindow {}
+    #[glib::derived_properties]
+    impl ObjectImpl for EuphoniaWindow {
+        fn constructed(&self) {
+            self.parent_constructed();
+            let settings = settings_manager().child("player");
+            let obj_borrow = self.obj();
+            let obj = obj_borrow.as_ref();
+            settings
+                .bind(
+                    "use-album-art-as-bg",
+                    obj,
+                    "use-album-art-bg"
+                )
+                .build();
+
+            // If using album art as background we must disable the default coloured
+            // backgrounds that navigation views use for their sidebars.
+            // We do this by toggling the "no-shading" CSS class for the top-level
+            // content widget, which in turn toggles the CSS selectors selecting those
+            // views.
+            obj.connect_notify_local(
+                Some("use-album-art-bg"),
+                |this, _| {
+                    this.update_background();
+                }
+            );
+
+            settings
+                .bind(
+                    "bg-blur-radius",
+                    obj,
+                    "blur-radius"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "bg-opacity",
+                    obj,
+                    "opacity"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "bg-transition-duration-s",
+                    obj,
+                    "transition-duration"
+                )
+                .build();
+
+            self.sidebar.connect_notify_local(
+                Some("showing-queue-view"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    obj,
+                    move |_, _| {
+                        this.update_player_bar_visibility();
+                    }
+                )
+            );
+
+            self.queue_view.connect_notify_local(
+                Some("show-content"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    obj,
+                    move |_, _| {
+                        this.update_player_bar_visibility();
+                    }
+                )
+            );
+
+            self.queue_view.connect_notify_local(
+                Some("collapsed"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    obj,
+                    move |_, _| {
+                        this.update_player_bar_visibility();
+                    }
+                )
+            );
+        }
+    }
+    impl WidgetImpl for EuphoniaWindow {
+        fn snapshot(&self, snapshot: &gtk::Snapshot) {
+            let widget = self.obj();
+            let width = widget.width() as f32;
+            let height = widget.height() as f32;
+
+            // Bluuuuuur
+            // Adopted from Nanling Zheng's implementation for Gapless.
+            if self.use_album_art_bg.get() {
+                let bg_width = self.bg_paintable.intrinsic_width() as f32;
+                let bg_height = self.bg_paintable.intrinsic_height() as f32;
+                // Also zoom in enough to avoid the "transparent edges" caused by blurring edge pixels
+                let blur_radius = self.blur_radius.get();
+                let scale_x = width / (bg_width - blur_radius as f32) as f32;
+                let scale_y = height / (bg_height - blur_radius as f32) as f32;
+                let scale_max = scale_x.max(scale_y);
+                let view_width = bg_width * scale_max;
+                let view_height = bg_height * scale_max;
+                let delta_x = (width - view_width) * 0.5;
+                let delta_y = (height - view_height) * 0.5;
+
+                snapshot.push_clip(&graphene::Rect::new(
+                    0.0, 0.0, width, height
+                ));
+                snapshot.translate(&graphene::Point::new(
+                    delta_x, delta_y
+                ));
+                // Blur & opacity nodes
+
+                if blur_radius > 0 {
+                    snapshot.push_blur(blur_radius as f64);
+                }
+                let opacity = self.opacity.get();
+                if opacity < 1.0 {
+                    snapshot.push_opacity(opacity);
+                }
+                self.bg_paintable.snapshot(snapshot, view_width as f64, view_height as f64);
+                snapshot.translate(&graphene::Point::new(
+                    -delta_x, -delta_y
+                ));
+                snapshot.pop();
+                if opacity < 1.0 {
+                    snapshot.pop();
+                }
+                if blur_radius > 0 {
+                    snapshot.pop();
+                }
+            }
+
+            // Call the parent class's snapshot() method to render child widgets
+            self.parent_snapshot(snapshot);
+        }
+    }
     impl WindowImpl for EuphoniaWindow {}
     impl ApplicationWindowImpl for EuphoniaWindow {}
     impl AdwApplicationWindowImpl for EuphoniaWindow {}
@@ -133,6 +274,19 @@ impl EuphoniaWindow {
             .build();
 
         let app = win.downcast_application();
+        let player = app.get_player();
+        win.update_background();
+        player.connect_notify_local(
+            Some("album-art"),
+            clone!(
+                #[weak(rename_to = this)]
+                win,
+                move |_, _| {
+                    this.update_background();
+                }
+            )
+        );
+        let _ = win.imp().player.set(player);
 
         win.restore_window_state();
         win.imp().queue_view.setup(
@@ -150,15 +304,75 @@ impl EuphoniaWindow {
             app.get_client().get_client_state()
         );
         win.imp().sidebar.setup(
-            win.imp().stack.clone()
+            win.imp().stack.get(),
+            win.imp().split_view.get(),
+            app.get_player()
         );
         win.imp().player_bar.setup(
-            app.get_player(),
-            app.get_sender()
+            app.get_player()
         );
 		win.bind_state();
         win.setup_signals();
         win
+    }
+
+    fn update_player_bar_visibility(&self) {
+        let revealer = self.imp().player_bar_revealer.get();
+        if self.imp().sidebar.showing_queue_view() {
+            let queue_view = self.imp().queue_view.get();
+            if (queue_view.collapsed() && queue_view.show_content()) || !queue_view.collapsed() {
+                revealer.set_reveal_child(false);
+            }
+            else {
+                revealer.set_reveal_child(true);
+            }
+        }
+        else {
+            revealer.set_reveal_child(true);
+        }
+    }
+
+    /// Update blurred background, if enabled
+    fn update_background(&self) {
+        if let Some(player) = self.imp().player.get() {
+            let tex: Option<gdk::Texture> = player.current_song_album_art();
+            let imp = self.imp();
+            let bg_paintable = imp.bg_paintable.clone();
+            if imp.use_album_art_bg.get() && tex.is_some() {
+                if !imp.content.has_css_class("no-shading") {
+                    imp.content.add_css_class("no-shading");
+                }
+                bg_paintable.set_new_paintable(Some(tex.unwrap().upcast::<gdk::Paintable>()));
+            }
+            else {
+                if imp.content.has_css_class("no-shading") {
+                    imp.content.remove_css_class("no-shading");
+                }
+                bg_paintable.set_new_paintable(None);
+            }
+
+            // Run fade transition
+            // Remember to queue draw too
+            let anim_target = adw::CallbackAnimationTarget::new(
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    bg_paintable,
+                    move |progress: f64| {
+                        bg_paintable.set_fade(progress);
+                        this.queue_draw();
+                    }
+                )
+            );
+            let anim = adw::TimedAnimation::new(
+                self,
+                0.0, 1.0,
+                (self.imp().transition_duration.get() * 1000.0).round() as u32,
+                anim_target
+            );
+            anim.play();
+        }
     }
 
     fn restore_window_state(&self) {
@@ -207,12 +421,12 @@ impl EuphoniaWindow {
             )
             .sync_create()
             .build();
-	}
+    }
 
-	fn setup_signals(&self) {
-	    self.connect_close_request(move |window| {
+    fn setup_signals(&self) {
+        self.connect_close_request(move |window| {
             let size = window.default_size();
-	        let width = size.0;
+            let width = size.0;
             let height = size.1;
             let settings = utils::settings_manager();
             let state = settings.child("state");

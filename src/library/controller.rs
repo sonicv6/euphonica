@@ -30,7 +30,7 @@ use glib::{
 
 use adw::subclass::prelude::*;
 
-use mpd::{Query, Term};
+use mpd::{search::Operation, Query, Term};
 
 mod imp {
     use super::*;
@@ -117,6 +117,27 @@ impl Library {
             }
             let mut query = Query::new();
             query.and(Term::Tag(Cow::Borrowed("album")), album.get_title().to_owned());
+            let _ = sender.send_blocking(MpdMessage::FindAdd(query));
+            if replace && play {
+                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
+            }
+        }
+    }
+
+    /// Queue all songs of an artist. TODO: allow specifying order.
+    pub fn queue_artist(&self, artist: Artist, use_albumartist: bool, replace: bool, play: bool) {
+        if let Some(sender) = self.imp().sender.get() {
+            if replace {
+                let _ = sender.send_blocking(MpdMessage::Clear);
+            }
+            let mut query = Query::new();
+            query.and_with_op(
+                Term::Tag(Cow::Borrowed(
+                    if use_albumartist { "albumartist" } else { "artist" }
+                )),
+                Operation::Contains,
+                artist.get_name().to_owned()
+            );
             let _ = sender.send_blocking(MpdMessage::FindAdd(query));
             if replace && play {
                 let _ = sender.send_blocking(MpdMessage::PlayPos(0));

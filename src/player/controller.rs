@@ -39,7 +39,7 @@ mod imp {
         pub state: Cell<PlaybackState>,
         pub position: Cell<f64>,
         pub current_song: RefCell<Option<Song>>,
-        pub queue: RefCell<gio::ListStore>,
+        pub queue: gio::ListStore,
         pub format: RefCell<Option<AudioFormat>>,
         // Rounded version, for sending to MPD.
         // Changes not big enough to cause an integer change
@@ -51,6 +51,11 @@ mod imp {
         // loop through the whole queue & search for songs matching
         // that album URI to update their arts).
         pub cache: OnceCell<Rc<Cache>>,
+        // Handle to seekbar polling task
+        pub poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
+        // Set this to true to pause polling even if PlaybackState is Playing.
+        // Used by seekbar widgets.
+        pub poll_blocked: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -59,16 +64,17 @@ mod imp {
         type Type = super::Player;
 
         fn new() -> Self {
-            let queue = RefCell::new(gio::ListStore::new::<Song>());
             Self {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
                 current_song: RefCell::new(None),
-                queue,
+                queue: gio::ListStore::new::<Song>(),
                 format: RefCell::new(None),
                 client_sender: OnceCell::new(),
                 cache: OnceCell::new(),
                 volume: Cell::new(0),
+                poller_handle: RefCell::new(None),
+                poll_blocked: Cell::new(false)
             }
         }
     }
@@ -80,7 +86,7 @@ mod imp {
                     ParamSpecEnum::builder::<PlaybackState>("playback-state")
                         .read_only()
                         .build(),
-                    ParamSpecDouble::builder("position").read_only().build(),
+                    ParamSpecDouble::builder("position").build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
@@ -115,6 +121,18 @@ mod imp {
                 "queue-id" => obj.queue_id().to_value(),
                 "quality-grade" => obj.quality_grade().to_value(),
                 "format-desc" => obj.format_desc().to_value(),
+                _ => unimplemented!(),
+            }
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            let obj = self.obj();
+            match pspec.name() {
+                "position" => {
+                    if let Ok(v) = value.get::<f64>() {
+                        obj.set_position(v);
+                    }
+                },
                 _ => unimplemented!(),
             }
         }
@@ -230,6 +248,9 @@ impl Player {
             State::Pause => PlaybackState::Paused,
             State::Stop => PlaybackState::Stopped,
         };
+        if new_state == PlaybackState::Playing {
+            self.maybe_start_polling();
+        }
 
         let old_state = self.imp().state.replace(new_state);
         if old_state != new_state {
@@ -252,16 +273,9 @@ impl Player {
         }
 
         if let Some(new_position_dur) = status.elapsed {
-            let new_position = new_position_dur.as_secs_f64();
-            let old_position = self.imp().position.replace(new_position);
-            if old_position != new_position {
-                self.notify("position");
-            }
+            self.set_position(new_position_dur.as_secs_f64());
         } else {
-            let old_position = self.imp().position.replace(0.0);
-            if old_position != 0.0 {
-                self.notify("position");
-            }
+            self.set_position(0.0);
         }
 
         // Queue always gets updated first before Player by idle.
@@ -335,7 +349,7 @@ impl Player {
 
     pub fn update_queue(&self, songs: &[Song]) {
         // TODO: use diffs instead of refreshing the whole queue
-        let queue = self.imp().queue.borrow();
+        let queue = &self.imp().queue;
         queue.remove_all();
         queue.extend_from_slice(songs);
         if let Some(cache) = self.imp().cache.get() {
@@ -439,8 +453,24 @@ impl Player {
         self.imp().position.get()
     }
 
+    /// Set new position. Only sets the property (does not send a seek command to MPD yet).
+    /// To apply this new position, call seek().
+    pub fn set_position(&self, new: f64) {
+        let old = self.imp().position.replace(new);
+        if new != old {
+            self.notify("position");
+        }
+    }
+
+    /// Seek to current position. Called when the seekbar is released.
+    pub fn seek(&self) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::SeekCur(self.position()));
+        }
+    }
+
     pub fn queue(&self) -> gio::ListStore {
-        self.imp().queue.borrow().clone()
+        self.imp().queue.clone()
     }
 
     pub fn toggle_playback(&self) {
@@ -474,6 +504,18 @@ impl Player {
         }
     }
 
+    pub fn prev_song(&self) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::Prev);
+        }
+    }
+
+    pub fn next_song(&self) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::Next);
+        }
+    }
+
     pub fn clear_queue(&self) {
         if let Err(msg) = self.send(MpdMessage::Clear) {
             println!("{}", msg);
@@ -493,5 +535,46 @@ impl Player {
         if let Err(msg) = self.send(MpdMessage::PlayId(song.get_queue_id())) {
             println!("{}", msg);
         }
+    }
+
+    /// Periodically poll for player progress to update seekbar.
+    /// Won't start a new loop if there is already one or when polling is blocked by a seekbar.
+    pub fn maybe_start_polling(&self) {
+        let this = self.clone();
+        let sender = self.imp().client_sender.get().expect("Fatal: Player controller not set up").clone();
+        if self.imp().poller_handle.borrow().is_none() && !self.imp().poll_blocked.get() {
+            let poller_handle = glib::MainContext::default().spawn_local(async move {
+                loop {
+                    // Don't poll if not playing
+                    if this.playback_state() != PlaybackState::Playing {
+                        break;
+                    }
+                    // Skip poll if channel is full
+                    if !sender.is_full() {
+                        let _ = sender.send_blocking(MpdMessage::Status);
+                    }
+                    glib::timeout_future_seconds(1).await;
+                }
+            });
+            self.imp().poller_handle.replace(Some(poller_handle));
+        }
+        else if self.imp().poll_blocked.get() {
+            println!("Polling blocked");
+        }
+    }
+
+    /// Stop poller loop. Seekbar should call this when being interacted with.
+    pub fn stop_polling(&self) {
+        if let Some(handle) = self.imp().poller_handle.take() {
+            handle.abort();
+        }
+    }
+
+    pub fn block_polling(&self) {
+        let _ = self.imp().poll_blocked.replace(true);
+    }
+
+    pub fn unblock_polling(&self) {
+        let _ = self.imp().poll_blocked.replace(false);
     }
 }

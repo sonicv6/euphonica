@@ -5,14 +5,13 @@ use gtk::{
     prelude::*,
     gio,
     glib,
-    gdk,
     CompositeTemplate,
     SingleSelection,
     SignalListItemFactory,
     ListItem,
 };
-use gdk::Texture;
 use glib::clone;
+use super::PlayerPane;
 
 use crate::{
     cache::Cache,
@@ -22,29 +21,33 @@ use crate::{
 use super::{
     QueueRow,
     Player,
-    PlaybackState
 };
 
 mod imp {
+    use std::cell::Cell;
+
+    use glib::Properties;
+
     use super::*;
 
-    #[derive(Debug, Default, CompositeTemplate)]
+    #[derive(Debug, Properties, Default, CompositeTemplate)]
+    #[properties(wrapper_type = super::QueueView)]
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
+        pub queue_pane_view: TemplateChild<adw::NavigationSplitView>,
+        #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
         #[template_child]
-        pub current_album_art: TemplateChild<gtk::Image>,
+        pub queue_title: TemplateChild<adw::WindowTitle>,
         #[template_child]
-        pub song_info_box: TemplateChild<gtk::Box>,
+        pub player_pane: TemplateChild<PlayerPane>,
         #[template_child]
-        pub current_song_name: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub current_artist_name: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub current_album_name: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub clear_queue: TemplateChild<gtk::Button>
+        pub clear_queue: TemplateChild<gtk::Button>,
+        #[property(get, set)]
+        pub collapsed: Cell<bool>,
+        #[property(get, set)]
+        pub show_content: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -66,6 +69,7 @@ mod imp {
         }
     }
 
+    #[glib::derived_properties]
     impl ObjectImpl for QueueView {
         fn dispose(&self) {
             while let Some(child) = self.obj().first_child() {
@@ -75,6 +79,41 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+            let obj = self.obj();
+            obj
+                .bind_property("collapsed", &self.queue_pane_view.get(), "collapsed")
+                .sync_create()
+                .build();
+
+            self.queue_pane_view
+                .bind_property(
+                    "show-content",
+                    obj.as_ref(),
+                    "show-content"
+                )
+                .sync_create()
+                .build();
+
+            // // After un-collapsing, set show_pane to inactive.
+            // // This is because on collapsing, the OverlaySplitView will default to not
+            // // showing the sidebar.
+            // self.queue_pane_view.connect_collapsed_notify(clone!(
+            //     #[weak(rename_to = this)]
+            //     self,
+            //     move |pane_view: &adw::OverlaySplitView| {
+            //         if !pane_view.is_collapsed() {
+            //             this.show_pane.set_active(true);
+            //         }
+            //         else {
+            //             this.show_pane.set_active(false);
+            //         }
+            //     }
+            // ));
+
+            // self.show_pane
+            //     .bind_property("active", &self.queue_pane_view.get(), "show-sidebar")
+            //     .sync_create()
+            //     .build();
         }
     }
 
@@ -90,6 +129,21 @@ glib::wrapper! {
 impl Default for QueueView {
     fn default() -> Self {
         glib::Object::new()
+    }
+}
+
+fn format_song_count(count: u32) -> Option<String> {
+    // TODO: translatable
+    if count == 0 {
+        None
+    }
+    else {
+        if count == 1 {
+            Some(String::from("1 song"))
+        }
+        else {
+            Some(format!("{} songs", count))
+        }
     }
 }
 
@@ -176,76 +230,9 @@ impl QueueView {
         });
     }
 
-    fn update_album_art(&self, tex: Option<&Texture>) {
-        // Use high-resolution version here
-        if tex.is_some() {
-            self.imp().current_album_art.set_paintable(tex);
-        }
-        else {
-            self.imp().current_album_art.set_resource(Some("/org/euphonia/Euphonia/albumart-placeholder.png"));
-        }
-    }
-
     pub fn bind_state(&self, player: Player) {
-        let imp = self.imp();
-        let info_box = imp.song_info_box.get();
-        player
-            .bind_property(
-                "playback-state",
-                &info_box,
-                "visible"
-            )
-            .transform_to(|_, state: PlaybackState| {
-                Some(state != PlaybackState::Stopped)
-            })
-            .sync_create()
-            .build();
-
-        let song_name = imp.current_song_name.get();
-        player
-            .bind_property(
-                "title",
-                &song_name,
-                "label"
-            )
-            .sync_create()
-            .build();
-
-        let album = imp.current_album_name.get();
-        player
-            .bind_property(
-                "album",
-                &album,
-                "label"
-            )
-            .sync_create()
-            .build();
-
-        let artist = imp.current_artist_name.get();
-        player
-            .bind_property(
-                "artist",
-                &artist,
-                "label"
-            )
-            .sync_create()
-            .build();
-
-        self.update_album_art(player.current_song_album_art().as_ref());
-        player.connect_notify_local(
-            Some("album-art"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                #[weak]
-                player,
-                move |_, _| {
-                    this.update_album_art(player.current_song_album_art().as_ref());
-                }
-            )
-        );
-
         let player_queue = player.queue();
+        let queue_title = self.imp().queue_title.get();
         let clear_queue_btn = self.imp().clear_queue.get();
         player_queue
             .bind_property(
@@ -257,6 +244,17 @@ impl QueueView {
             .sync_create()
             .build();
 
+        player_queue
+            .bind_property(
+                "n-items",
+                &queue_title,
+                "subtitle"
+            )
+            // TODO: l10n
+            .transform_to(|_, size: u32| {format_song_count(size)})
+            .sync_create()
+            .build();
+
         clear_queue_btn.connect_clicked(clone!(#[weak] player, move |_| {
             player.clear_queue();
         }));
@@ -264,6 +262,7 @@ impl QueueView {
 
     pub fn setup(&self, player: Player, cache: Rc<Cache>) {
         self.setup_listview(player.clone(), cache);
+        self.imp().player_pane.setup(player.clone());
         self.bind_state(player);
     }
 }

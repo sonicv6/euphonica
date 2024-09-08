@@ -3,6 +3,8 @@
 	<template class="EuphoniaArtistCell" parent="GtkBox">
 		<property name="halign">3</property>
 		<property name="valign">1</property>
+		<property name="margin-top">6</property>
+		<property name="margin-bottom">6</property>
 		<property name="orientation">1</property>
 		<property name="spacing">6</property>
 		<child>
@@ -16,7 +18,7 @@
 				<property name="ellipsize">3</property>
 				<property name="justify">center</property>
 				<style>
-					<class name="caption"/>
+					<class name="caption-heading"/>
 				</style>
 			</object>
 		</child>

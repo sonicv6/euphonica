@@ -1,6 +1,10 @@
 use std::cell::{Cell, RefCell};
 use gtk::{
-    gdk, glib::{self, Variant}, prelude::*, subclass::prelude::*, CompositeTemplate
+    gdk,
+    glib::{self, Variant},
+    prelude::*,
+    subclass::prelude::*,
+    CompositeTemplate
 };
 use glib::{
     clone,
@@ -10,8 +14,7 @@ use glib::{
 use mpd::output::Output;
 
 use crate::{
-    utils::settings_manager,
-    common::QualityGrade
+    cache::placeholders::ALBUMART_PLACEHOLDER, common::{paintables::FadePaintable, QualityGrade}, utils::settings_manager
 };
 
 use super::{
@@ -20,35 +23,33 @@ use super::{
 };
 
 mod imp {
-    use glib::Properties;
 
     use super::*;
 
-    #[derive(Default, Properties, CompositeTemplate)]
-    #[properties(wrapper_type = super::PlayerBar)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/bar.ui")]
-    pub struct PlayerBar {
-        // Left side: current song info
+    #[derive(Default, CompositeTemplate)]
+    #[template(resource = "/org/euphonia/Euphonia/gtk/player/pane.ui")]
+    pub struct PlayerPane {
+        // Song info
         #[template_child]
         pub info_box: TemplateChild<gtk::Box>,
         #[template_child]
-        pub albumart: TemplateChild<gtk::Image>,
+        pub albumart: TemplateChild<gtk::Picture>,
         #[template_child]
         pub song_name: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
         #[template_child]
         pub album: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub quality_grade: TemplateChild<gtk::Image>,
-        #[template_child]
-        pub format_desc: TemplateChild<gtk::Label>,
 
-        // Centre: playback controls
+        // TODO: Time-synced lyrics
+
+        // Playback controls
         #[template_child]
         pub playback_controls: TemplateChild<PlaybackControls>,
+        #[template_child]
+        pub format_info: TemplateChild<gtk::Box>,
 
-        // Right side: output info & volume control
+        // Bottom: output info, volume control & quality
         #[template_child]
         pub output_section: TemplateChild<gtk::Box>,
         #[template_child]
@@ -59,24 +60,32 @@ mod imp {
         pub next_output: TemplateChild<gtk::Button>,
         #[template_child]
         pub vol_knob: TemplateChild<VolumeKnob>,
+        #[template_child]
+        pub quality_grade: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub format_desc: TemplateChild<gtk::Label>,
+
+        // Kept here so we can access it in snapshot()
+        pub bg_paintable: FadePaintable,
         pub output_widgets: RefCell<Vec<MpdOutput>>,
+
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
         pub output_count: Cell<usize>,
-        #[property(get, set)]
-        pub collapsed: Cell<bool>  // If true, will turn into a minimal bar that can fit narrow displays (e.g., phones)
+
     }
 
     // The central trait for subclassing a GObject
     #[glib::object_subclass]
-    impl ObjectSubclass for PlayerBar {
+    impl ObjectSubclass for PlayerPane {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaPlayerBar";
-        type Type = super::PlayerBar;
+        const NAME: &'static str = "EuphoniaPlayerPane";
+        type Type = super::PlayerPane;
         type ParentType = gtk::Box;
 
         fn class_init(klass: &mut Self::Class) {
             klass.bind_template();
+            klass.set_layout_manager_type::<gtk::BoxLayout>();
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -85,111 +94,54 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    #[glib::derived_properties]
-    impl ObjectImpl for PlayerBar {
+    impl ObjectImpl for PlayerPane {
         fn constructed(&self) {
             self.parent_constructed();
-            let obj = self.obj();
-
-            obj
-                .bind_property(
-                    "collapsed",
-                    &self.albumart.get(),
-                    "pixel-size"
+            let settings = settings_manager().child("player");
+            let knob = self.vol_knob.get();
+            settings
+                .bind(
+                    "vol-knob-unit",
+                    &knob,
+                    "use-dbfs"
                 )
-                .transform_to(|_, collapsed: bool| {
-                    if collapsed {
-                        Some(48)
-                    } else {
-                        Some(96)
-                    }
+                .get_only()
+                .mapping(|v: &Variant, _| {
+                    Some((v.get::<String>().unwrap().as_str() == "decibels").to_value())
                 })
-                .sync_create()
                 .build();
 
-            obj
-                .bind_property(
-                    "collapsed",
-                    &self.playback_controls.get(),
-                    "collapsed"
+            settings
+                .bind(
+                    "vol-knob-sensitivity",
+                    &knob,
+                    "sensitivity"
                 )
-                .sync_create()
-                .build();
-
-            // Hide certain widgets when in compact mode
-            obj
-                .bind_property(
-                    "collapsed",
-                    &self.album.get(),
-                    "visible"
-                )
-                .invert_boolean()
-                .sync_create()
-                .build();
-
-            obj
-                .bind_property(
-                    "collapsed",
-                    &self.quality_grade.get(),
-                    "visible"
-                )
-                .invert_boolean()
-                .sync_create()
-                .build();
-
-            obj
-                .bind_property(
-                    "collapsed",
-                    &self.format_desc.get(),
-                    "visible"
-                )
-                .invert_boolean()
-                .sync_create()
-                .build();
-
-            obj
-                .bind_property(
-                    "collapsed",
-                    &self.output_section.get(),
-                    "visible"
-                )
-                .invert_boolean()
-                .sync_create()
-                .build();
-
-            obj
-                .bind_property(
-                    "collapsed",
-                    &self.vol_knob.get(),
-                    "visible"
-                )
-                .invert_boolean()
-                .sync_create()
+                .mapping(|v: &Variant, _| { Some(v.get::<f64>().unwrap().to_value())})
                 .build();
         }
     }
 
     // Trait shared by all widgets
-    impl WidgetImpl for PlayerBar {}
+    impl WidgetImpl for PlayerPane {}
 
-    // Trait shared by all boxes
-    impl BoxImpl for PlayerBar {}
+    impl BoxImpl for PlayerPane {}
 }
 
 
 glib::wrapper! {
-    pub struct PlayerBar(ObjectSubclass<imp::PlayerBar>)
+    pub struct PlayerPane(ObjectSubclass<imp::PlayerPane>)
         @extends gtk::Box, gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
 }
 
-impl Default for PlayerBar {
+impl Default for PlayerPane {
     fn default() -> Self {
         glib::Object::new()
     }
 }
 
-impl PlayerBar {
+impl PlayerPane {
     pub fn new() -> Self {
         Self::default()
     }
@@ -201,30 +153,8 @@ impl PlayerBar {
     }
 
     fn setup_volume_knob(&self, player: Player) {
-        let settings = settings_manager().child("player");
         let knob = self.imp().vol_knob.get();
         knob.setup();
-
-        settings
-            .bind(
-                "vol-knob-unit",
-                &knob,
-                "use-dbfs"
-            )
-            .get_only()
-            .mapping(|v: &Variant, _| {
-                Some((v.get::<String>().unwrap().as_str() == "decibels").to_value())
-            })
-            .build();
-
-        settings
-            .bind(
-                "vol-knob-sensitivity",
-                &knob,
-                "sensitivity"
-            )
-            .mapping(|v: &Variant, _| { Some(v.get::<f64>().unwrap().to_value())})
-            .build();
 
         knob.connect_notify_local(
             Some("value"),
@@ -269,10 +199,23 @@ impl PlayerBar {
     fn bind_state(&self, player: Player) {
         let imp = self.imp();
         let info_box = imp.info_box.get();
+        let format_info = imp.format_info.get();
         player
             .bind_property(
                 "playback-state",
                 &info_box,
+                "visible"
+            )
+            .transform_to(|_, state: PlaybackState| {
+                Some(state != PlaybackState::Stopped)
+            })
+            .sync_create()
+            .build();
+
+        player
+            .bind_property(
+                "playback-state",
+                &format_info,
                 "visible"
             )
             .transform_to(|_, state: PlaybackState| {
@@ -400,9 +343,7 @@ impl PlayerBar {
             self.imp().albumart.set_paintable(tex.as_ref());
         }
         else {
-            self.imp().albumart.set_resource(
-                Some("/org/euphonia/Euphonia/albumart-placeholder.png")
-            );
+            self.imp().albumart.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
         }
     }
 
