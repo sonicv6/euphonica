@@ -91,6 +91,7 @@ mod imp {
                     obj.as_ref(),
                     "show-content"
                 )
+                .bidirectional()
                 .sync_create()
                 .build();
 

@@ -127,6 +127,16 @@
             <child>
               <object class="EuphoniaPlaybackControls" id="playback_controls"/>
             </child>
+            <child>
+              <object class="GtkButton" id="goto_pane">
+                <property name="tooltip-text">Jump to Now Playing</property>
+                <style>
+                  <class name="flat"/>
+                </style>
+                <property name="visible">false</property>
+                <property name="icon-name">sidebar-show-right-symbolic</property>
+              </object>
+            </child>
           </object>
         </property>
 

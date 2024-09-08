@@ -24,7 +24,7 @@ use adw::{
     subclass::prelude::*
 };
 use gtk::{
-    gdk, gio, glib::{self, clone},
+    gdk, gio, glib::{self, clone, closure_local},
 };
 use glib::signal::SignalHandlerId;
 use crate::{
@@ -311,7 +311,20 @@ impl EuphoniaWindow {
         win.imp().player_bar.setup(
             app.get_player()
         );
-		win.bind_state();
+
+        win.imp().player_bar.connect_closure(
+            "goto-pane-clicked",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                win,
+                move |_: PlayerBar| {
+                    this.goto_pane();
+                }
+            )
+        );
+
+        win.bind_state();
         win.setup_signals();
         win
     }
@@ -330,6 +343,12 @@ impl EuphoniaWindow {
         else {
             revealer.set_reveal_child(true);
         }
+    }
+
+    fn goto_pane(&self) {
+        self.imp().stack.set_visible_child_name("queue");
+        self.imp().split_view.set_show_content(true);
+        self.imp().queue_view.set_show_content(true);
     }
 
     /// Update blurred background, if enabled

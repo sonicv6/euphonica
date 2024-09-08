@@ -20,7 +20,9 @@ use super::{
 };
 
 mod imp {
-    use glib::Properties;
+    use std::sync::OnceLock;
+
+    use glib::{subclass::Signal, Properties};
 
     use super::*;
 
@@ -57,6 +59,8 @@ mod imp {
         pub prev_output: TemplateChild<gtk::Button>,
         #[template_child]
         pub next_output: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub goto_pane: TemplateChild<gtk::Button>,
         #[template_child]
         pub vol_knob: TemplateChild<VolumeKnob>,
         pub output_widgets: RefCell<Vec<MpdOutput>>,
@@ -166,6 +170,33 @@ mod imp {
                 .invert_boolean()
                 .sync_create()
                 .build();
+
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.goto_pane.get(),
+                    "visible"
+                )
+                .sync_create()
+                .build();
+
+            self.goto_pane.connect_clicked(clone!(
+                #[weak(rename_to = this)]
+                obj,
+                move |_| {
+                    this.emit_by_name::<()>("goto-pane-clicked", &[]);
+                }
+            ));
+        }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("goto-pane-clicked")
+                        .build()
+                ]
+            })
         }
     }
 
