@@ -3,6 +3,103 @@
   <requires lib="gtk" version="4.0" />
   <requires lib="Adw" version="1.0" />
   <template class="EuphoniaPlayerPane" parent="GtkBox">
+    <object class="GtkPopover" id="crossfade_popover">
+      <property name="has-arrow">true</property>
+      <property name="name">crossfade_popover</property>
+      <property name="child">
+        <object class="GtkBox">
+          <property name="spacing">6</property>
+          <child>
+            <object class="GtkSpinButton" id="crossfade">
+              <property name="numeric">true</property>
+              <property name="adjustment">
+                <object class="GtkAdjustment">
+                  <property name="lower">0</property>
+                  <property name="upper">30</property>
+                  <property name="step-increment">1</property>
+                  <property name="page-increment">2</property>
+                </object>
+              </property>
+            </object>
+          </child>
+          <child>
+            <object class="GtkLabel">
+              <property name="label" translatable="true">seconds</property>
+            </object>
+          </child>
+        </object>
+      </property>
+    </object>
+    <object class="GtkPopover" id="mixramp_popover">
+      <property name="has-arrow">true</property>
+      <property name="name">crossfade_popover</property>
+      <property name="child">
+        <object class="GtkGrid">
+          <property name="row-spacing">6</property>
+          <property name="column-spacing">6</property>
+          <child>
+            <object class="GtkLabel">
+              <property name="label" translatable="true">Threshold (dB)</property>
+              <property name="justify">left</property>
+              <property name="hexpand">true</property>
+              <layout>
+                <property name="column">0</property>
+                <property name="row">0</property>
+              </layout>
+            </object>
+          </child>
+          <child>
+            <object class="GtkSpinButton" id="mixramp_db">
+              <property name="digits">1</property>
+              <property name="numeric">true</property>
+              <property name="adjustment">
+                <object class="GtkAdjustment">
+                  <property name="lower">-135</property>
+                  <property name="upper">0</property>
+                  <property name="step-increment">1</property>
+                  <property name="page-increment">10</property>
+                </object>
+              </property>
+              <layout>
+                <property name="column">1</property>
+                <property name="row">0</property>
+              </layout>
+            </object>
+          </child>
+
+          <child>
+            <object class="GtkLabel">
+              <property name="label" translatable="true">Delay (s)</property>
+              <property name="justify">left</property>
+              <property name="hexpand">true</property>
+              <layout>
+                <property name="column">0</property>
+                <property name="row">1</property>
+              </layout>
+            </object>
+          </child>
+          <child>
+            <object class="GtkSpinButton" id="mixramp_delay">
+              <property name="digits">1</property>
+              <property name="numeric">true</property>
+              <property name="update-policy">if-valid</property>
+              <property name="adjustment">
+                <object class="GtkAdjustment">
+                  <property name="lower">0</property>
+                  <property name="upper">30</property>
+                  <property name="step-increment">1</property>
+                  <property name="page-increment">2</property>
+                </object>
+              </property>
+              <layout>
+                <property name="column">1</property>
+                <property name="row">1</property>
+              </layout>
+            </object>
+          </child>
+        </object>
+      </property>
+    </object>
     <child>
       <object class="GtkScrolledWindow">
         <property name="hscrollbar-policy">never</property>
@@ -77,15 +174,28 @@
             </child>
             <child>
               <object class="GtkBox">
-                <property name="visible" bind-source="playback_controls" bind-property="visible" bind-flags="sync-create"/>
+                <style>
+                  <class name="toolbar"/>
+                </style>
                 <property name="spacing">6</property>
                 <property name="halign">center</property>
                 <child>
                   <object class="GtkButton" id="rg_btn">
-                    <style>
-                      <class name="flat"/>
-                    </style>
                     <property name="icon-name">rg-off-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="crossfade_btn">
+                    <property name="icon-name">crossfade-off-symbolic</property>
+                    <property name="tooltip-text" translatable="true">Crossfade</property>
+                    <property name="popover">crossfade_popover</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="mixramp_btn">
+                    <property name="icon-name">mixramp-off-symbolic</property>
+                    <property name="tooltip-text" translatable="true">MixRamp</property>
+                    <property name="popover">mixramp_popover</property>
                   </object>
                 </child>
               </object>

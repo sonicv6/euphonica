@@ -107,14 +107,7 @@ fn get_replaygain_icon_name(mode: ReplayGain) -> &'static str {
 mod imp {
     use super::*;
     use glib::{
-        ParamSpec,
-        ParamSpecBoolean,
-        ParamSpecDouble,
-        ParamSpecEnum,
-        ParamSpecObject,
-        ParamSpecString,
-        ParamSpecUInt,
-        ParamSpecUInt64
+        ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecObject, ParamSpecString, ParamSpecUInt, ParamSpecUInt64
     };
     use once_cell::sync::Lazy;
 
@@ -128,6 +121,9 @@ mod imp {
         pub random: Cell<bool>,
         pub consume: Cell<bool>,
         pub replaygain: Cell<ReplayGain>,
+        pub crossfade: Cell<f64>,
+        pub mixramp_db: Cell<f32>,
+        pub mixramp_delay: Cell<f64>,
         // Rounded version, for sending to MPD.
         // Changes not big enough to cause an integer change
         // will not be sent to MPD.
@@ -157,6 +153,9 @@ mod imp {
                 random: Cell::new(false),
                 consume: Cell::new(false),
                 replaygain: Cell::new(ReplayGain::Off),
+                crossfade: Cell::new(0.0),
+                mixramp_db: Cell::new(0.0),
+                mixramp_delay: Cell::new(0.0),
                 current_song: RefCell::new(None),
                 queue: gio::ListStore::new::<Song>(),
                 format: RefCell::new(None),
@@ -181,6 +180,9 @@ mod imp {
                         .read_only()
                         .build(),
                     ParamSpecString::builder("replaygain").read_only().build(), // use icon name directly to simplify implementation
+                    ParamSpecDouble::builder("crossfade").build(), // seconds
+                    ParamSpecFloat::builder("mixramp-db").build(),
+                    ParamSpecDouble::builder("mixramp-delay").build(), // seconds
                     ParamSpecBoolean::builder("random").build(),
                     ParamSpecBoolean::builder("consume").build(),
                     ParamSpecDouble::builder("position").build(),
@@ -196,9 +198,6 @@ mod imp {
                         .read_only()
                         .build(),
                     ParamSpecString::builder("format-desc").read_only().build(),
-                    // ParamSpecObject::builder::<gdk::Texture>("cover")
-                    //     .read_only()
-                    //     .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -211,6 +210,9 @@ mod imp {
                 "playback-flow" => self.flow.get().to_value(),
                 "random" => self.random.get().to_value(),
                 "consume" => self.consume.get().to_value(),
+                "crossfade" => self.crossfade.get().to_value(),
+                "mixramp-db" => self.mixramp_db.get().to_value(),
+                "mixramp-delay" => self.mixramp_delay.get().to_value(),
                 "replaygain" => get_replaygain_icon_name(self.replaygain.get()).to_value(),
                 "position" => obj.position().to_value(),
                 // These are proxies for Song properties
@@ -229,6 +231,21 @@ mod imp {
         fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
             let obj = self.obj();
             match pspec.name() {
+                "crossfade" => {
+                    if let Ok(v) = value.get::<f64>() {
+                        obj.set_crossfade(v);
+                    }
+                },
+                "mixramp-db" => {
+                    if let Ok(v) = value.get::<f32>() {
+                        obj.set_mixramp_db(v);
+                    }
+                },
+                "mixramp-delay" => {
+                    if let Ok(v) = value.get::<f64>() {
+                        obj.set_mixramp_delay(v);
+                    }
+                },
                 "position" => {
                     if let Ok(v) = value.get::<f64>() {
                         obj.set_position(v);
@@ -401,6 +418,37 @@ impl Player {
             self.notify("format-desc");
         }
 
+        let old_mixramp_db = self.imp().mixramp_db.replace(status.mixrampdb);
+        if old_mixramp_db != status.mixrampdb {
+            self.notify("mixramp-db");
+        }
+
+        let new_mixramp_delay: f64;
+        println!("status.mixrampdelay: {:?}", &status.mixrampdelay);
+        if let Some(dur) = status.mixrampdelay {
+            new_mixramp_delay = dur.as_secs_f64();
+        }
+        else {
+            new_mixramp_delay = 0.0;
+        }
+        let old_mixramp_delay = self.imp().mixramp_delay.replace(new_mixramp_delay);
+        if old_mixramp_delay != new_mixramp_delay {
+            println!("Updated mixramp-delay");
+            self.notify("mixramp-delay");
+        }
+
+        let new_crossfade: f64;
+        if let Some(dur) = status.crossfade {
+            new_crossfade = dur.as_secs_f64();
+        }
+        else {
+            new_crossfade = 0.0;
+        }
+        let old_crossfade = self.imp().crossfade.replace(new_crossfade);
+        if old_crossfade != new_crossfade {
+            self.notify("crossfade");
+        }
+
         // If stopped, remove playing indicator
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if new_state == PlaybackState::Stopped {
@@ -540,6 +588,24 @@ impl Player {
     pub fn set_consume(&self, new: bool) {
         if let Some(sender) = self.imp().client_sender.get() {
             let _ = sender.send_blocking(MpdMessage::Consume(new));
+        }
+    }
+
+    pub fn set_crossfade(&self, new: f64) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::Crossfade(new));
+        }
+    }
+
+    pub fn set_mixramp_db(&self, new: f32) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::MixRampDb(new));
+        }
+    }
+
+    pub fn set_mixramp_delay(&self, new: f64) {
+        if let Some(sender) = self.imp().client_sender.get() {
+            let _ = sender.send_blocking(MpdMessage::MixRampDelay(new));
         }
     }
 

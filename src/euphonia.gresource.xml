@@ -36,11 +36,14 @@
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
 	<gresource prefix="/org/euphonia/Euphonia/icons/scalable/actions/">
+		<file preprocess="xml-stripblanks" alias="mixramp-off-symbolic.svg">gtk/icons/mixramp-off-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="mixramp-symbolic.svg">gtk/icons/mixramp-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="rg-off-symbolic.svg">gtk/icons/rg-off-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="rg-track-symbolic.svg">gtk/icons/rg-track-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="rg-album-symbolic.svg">gtk/icons/rg-album-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="rg-auto-symbolic.svg">gtk/icons/rg-auto-symbolic.svg</file>
-		<file preprocess="xml-stripblanks" alias="blend-tool-symbolic.svg">gtk/icons/blend-tool-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="crossfade-off-symbolic.svg">gtk/icons/crossfade-off-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="crossfade-symbolic.svg">gtk/icons/crossfade-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="alsa-symbolic.svg">gtk/icons/alsa-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="pulseaudio-symbolic.svg">gtk/icons/pulseaudio-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="pipewire-symbolic.svg">gtk/icons/pipewire-symbolic.svg</file>

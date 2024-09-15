@@ -49,6 +49,16 @@ mod imp {
         #[template_child]
         pub rg_btn: TemplateChild<gtk::Button>,
         #[template_child]
+        pub crossfade_btn: TemplateChild<gtk::MenuButton>,
+        #[template_child]
+        pub crossfade: TemplateChild<gtk::SpinButton>,
+        #[template_child]
+        pub mixramp_btn: TemplateChild<gtk::MenuButton>,
+        #[template_child]
+        pub mixramp_db: TemplateChild<gtk::SpinButton>,
+        #[template_child]
+        pub mixramp_delay: TemplateChild<gtk::SpinButton>,
+        #[template_child]
         pub format_info: TemplateChild<gtk::Box>,
 
         // Bottom: output info, volume control & quality
@@ -230,6 +240,73 @@ impl PlayerPane {
                 player.cycle_replaygain();
             }
         ));
+
+        let crossfade_btn = self.imp().crossfade_btn.get();
+        player
+            .bind_property(
+                "crossfade",
+                &crossfade_btn,
+                "icon-name"
+            )
+            .transform_to(|_, secs: f64| {
+                if secs > 0.0 {
+                    Some("crossfade-symbolic")
+                }
+                else {
+                    Some("crossfade-off-symbolic")
+                }
+            })
+            .sync_create()
+            .build();
+
+        let crossfade = self.imp().crossfade.get();
+        player
+            .bind_property(
+                "crossfade",
+                &crossfade,
+                "value"
+            )
+            .bidirectional()
+            .sync_create()
+            .build();
+
+        let mixramp_btn = self.imp().mixramp_btn.get();
+        player
+            .bind_property(
+                "mixramp-delay",
+                &mixramp_btn,
+                "icon-name"
+            )
+            .transform_to(|_, secs: f64| {
+                if secs > 0.0 {
+                    Some("mixramp-symbolic")
+                }
+                else {
+                    Some("mixramp-off-symbolic")
+                }
+            })
+            .sync_create()
+            .build();
+        let mixramp_db = self.imp().mixramp_db.get();
+        player
+            .bind_property(
+                "mixramp-db",
+                &mixramp_db,
+                "value"
+            )
+            .bidirectional()
+            .sync_create()
+            .build();
+        let mixramp_delay = self.imp().mixramp_delay.get();
+        player
+            .bind_property(
+                "mixramp-delay",
+                &mixramp_delay,
+                "value"
+            )
+            .bidirectional()
+            .sync_create()
+            .build();
     }
 
     fn bind_state(&self, player: Player) {

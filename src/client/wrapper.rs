@@ -4,7 +4,6 @@ use std::{
     rc::Rc,
     path::PathBuf
 };
-use chrono::Duration;
 use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
 use futures::executor;
@@ -72,8 +71,8 @@ pub enum MpdMessage {
     ArtistContent(String), // Get songs and albums of artist with given name
     Volume(i8),
     MixRampDb(f32),
-    MixRampDelay(Duration),
-    Crossfade(Duration),
+    MixRampDelay(f64),
+    Crossfade(f64),
     ReplayGain(mpd::status::ReplayGain),
     Consume(bool),
 
@@ -559,6 +558,9 @@ impl MpdWrapper {
             MpdMessage::Update => self.queue_task(BackgroundTask::Update),
             MpdMessage::Output(id, state) => self.set_output(id, state),
             MpdMessage::Volume(vol) => self.volume(vol),
+            MpdMessage::Crossfade(fade) => self.set_crossfade(fade),
+            MpdMessage::MixRampDb(db) => self.set_mixramp_db(db),
+            MpdMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
             MpdMessage::Status => self.get_status(),
             MpdMessage::Add(uri) => self.add(uri.as_ref()),
             MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
@@ -632,7 +634,6 @@ impl MpdWrapper {
             ),
             MpdMessage::DBUpdated => {},
             MpdMessage::Busy(busy) => self.state.set_busy(busy),
-            _ => {}
         }
         glib::ControlFlow::Continue
     }
@@ -787,9 +788,27 @@ impl MpdWrapper {
         }
     }
 
+    pub fn set_crossfade(&self, fade: f64) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.crossfade(fade as i64);
+        }
+    }
+
     pub fn set_replaygain(&self, mode: mpd::status::ReplayGain) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.replaygain(mode);
+        }
+    }
+
+    pub fn set_mixramp_db(&self, db: f32) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.mixrampdb(db);
+        }
+    }
+
+    pub fn set_mixramp_delay(&self, delay: f64) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.mixrampdelay(delay);
         }
     }
 

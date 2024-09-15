@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="16"
+   height="16"
+   viewBox="0 0 4.2333332 4.2333333"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.3.2 (091e20ef0f, 2023-11-25, custom)"
+   sodipodi:docname="crossfade-off-symbolic.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="true"
+     inkscape:zoom="23.404489"
+     inkscape:cx="7.477198"
+     inkscape:cy="9.8912648"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1">
+    <inkscape:grid
+       id="grid1"
+       units="px"
+       originx="0"
+       originy="0"
+       spacingx="0.26458332"
+       spacingy="0.26458333"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       dotted="false"
+       gridanglex="30"
+       gridanglez="30"
+       visible="true" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       id="rect1"
+       style="fill:#222222;fill-opacity:0.5;stroke-width:0.375165;stroke-linecap:round;paint-order:markers stroke fill"
+       d="M 0.52916667 0.52916667 C 0.23600864 0.52916667 0 0.76517531 0 1.0583333 L 0 1.3229167 C 0 1.6160747 0.23600864 1.8520833 0.52916667 1.8520833 L 1.3229167 1.8520833 L 1.5875 1.8520833 L 2.1166667 1.8520833 L 2.1166667 1.3229167 L 2.1166667 1.0583333 L 2.1166667 0.52916667 L 1.5875 0.52916667 L 1.3229167 0.52916667 L 0.52916667 0.52916667 z " />
+    <path
+       id="rect1-5"
+       style="fill:#222222;fill-opacity:0.5;stroke-width:0.397923;stroke-linecap:round;paint-order:markers stroke fill"
+       d="M 2.1166667 2.38125 L 2.1166667 3.7041667 L 2.38125 3.7041667 L 2.6458333 3.7041667 L 3.7041667 3.7041667 C 3.9973244 3.7041667 4.2333333 3.4681577 4.2333333 3.175 L 4.2333333 2.9104167 C 4.2333333 2.6172589 3.9973244 2.38125 3.7041667 2.38125 L 2.6458333 2.38125 L 2.38125 2.38125 L 2.1166667 2.38125 z " />
+  </g>
+</svg>
