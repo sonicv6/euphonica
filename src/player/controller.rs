@@ -424,7 +424,6 @@ impl Player {
         }
 
         let new_mixramp_delay: f64;
-        println!("status.mixrampdelay: {:?}", &status.mixrampdelay);
         if let Some(dur) = status.mixrampdelay {
             new_mixramp_delay = dur.as_secs_f64();
         }
@@ -433,7 +432,6 @@ impl Player {
         }
         let old_mixramp_delay = self.imp().mixramp_delay.replace(new_mixramp_delay);
         if old_mixramp_delay != new_mixramp_delay {
-            println!("Updated mixramp-delay");
             self.notify("mixramp-delay");
         }
 
@@ -545,9 +543,8 @@ impl Player {
                 .filter(|ao| ao.is_some())
                 .map(|info| info.unwrap())
                 .collect();
-            // Might queue downloads, depending on user settings, but will not
-            // actually load anything into memory just yet.
-            cache.ensure_local_album_arts(&infos);
+            // Might queue downloads, depending on user settings
+            cache.ensure_cached_album_arts(&infos);
         }
         // Downstream widgets should now receive an item-changed signal.
     }
@@ -638,7 +635,8 @@ impl Player {
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if let Some(cache) = self.imp().cache.get() {
                 if let Some(album) = song.get_album() {
-                    return cache.load_local_album_art(album, false);
+                    // Should have been scheduled by queue updates
+                    return cache.load_cached_album_art(album, false, false);
                 }
             }
             return None;

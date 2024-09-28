@@ -114,7 +114,7 @@ impl ArtistCell {
 
     fn update_artist_avatar(&self, info: &ArtistInfo, cache: Rc<Cache>) {
         self.imp().avatar.set_custom_image(
-            cache.load_local_artist_avatar(info, false).as_ref()
+            cache.load_cached_artist_avatar(info, false).as_ref()
         );
     }
 

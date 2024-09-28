@@ -165,7 +165,7 @@ impl ArtistContentView {
         let bio_text = self.imp().bio_text.get();
         let bio_link = self.imp().bio_link.get();
         let bio_attrib = self.imp().bio_attrib.get();
-        if let Some(meta) = cache.load_local_artist_meta(artist.get_info()) {
+        if let Some(meta) = cache.load_cached_artist_meta(artist.get_info()) {
             if let Some(bio) = meta.bio {
                 bio_box.set_visible(true);
                 bio_text.set_label(&bio.content);
@@ -385,16 +385,18 @@ impl ArtistContentView {
 
         // Set up factory
         let factory = SignalListItemFactory::new();
-        factory.connect_setup(
+        factory.connect_setup(clone!(
+            #[weak]
+            cache,
             move |_, list_item| {
                 let item = list_item
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem");
                 // TODO: refactor album cells to use expressions too
-                let album_cell = AlbumCell::new(&item);
+                let album_cell = AlbumCell::new(&item, cache);
                 item.set_child(Some(&album_cell));
             }
-        );
+        ));
         factory.connect_bind(clone!(
             #[weak]
             cache,
@@ -413,7 +415,7 @@ impl ArtistContentView {
                     .expect("The child has to be an `AlbumCell`.");
 
                 // Within this binding fn is where the cached artist avatar texture gets used.
-                child.bind(&item, cache);
+                child.bind(&item);
             }
         ));
 
@@ -427,7 +429,7 @@ impl ArtistContentView {
                 .child()
                 .and_downcast::<AlbumCell>()
                 .expect("The child has to be an `AlbumCell`.");
-            child.unbind(cache);
+            child.unbind();
         }));
 
         // Set the factory of the list view
@@ -474,12 +476,12 @@ impl ArtistContentView {
     }
 
     /// Returns true if an avatar was successfully retrieved.
-    /// On false, we will want to call cache.ensure_local_album_art()
+    /// On false, we will want to call cache.ensure_cached_album_art()
     fn update_avatar(&self, info: &ArtistInfo) -> bool {
         // Set text in case there is no image
         self.imp().avatar.set_text(Some(&info.name));
         if let Some(cache) = self.imp().cache.get() {
-            if let Some(tex) = cache.load_local_artist_avatar(info, false) {
+            if let Some(tex) = cache.load_cached_artist_avatar(info, false) {
                 self.imp().avatar.set_custom_image(Some(&tex));
                 return true;
             }
@@ -529,7 +531,8 @@ impl ArtistContentView {
 
     fn add_album(&self, album: Album, cache: Rc<Cache>) {
         self.imp().album_list.append(&album);
-        cache.ensure_local_album_art(album.get_info());
+        println!("add_album: calling ensure_cached_album_art");
+        cache.ensure_cached_album_art(album.get_info(), false);
         self.imp().album_count.set_label(&self.imp().album_list.n_items().to_string());
     }
 
@@ -543,7 +546,7 @@ impl ArtistContentView {
             .collect();
         // Might queue downloads, depending on user settings, but will not
         // actually load anything into memory just yet.
-        cache.ensure_local_album_arts(&infos);
+        cache.ensure_cached_album_arts(&infos);
         self.imp().song_count.set_label(&self.imp().song_list.n_items().to_string());
     }
 

@@ -54,7 +54,6 @@ pub mod utils {
             None
         }
         else {
-            println!("Empty URL, won't download");
             None
         }
     }

@@ -7,26 +7,19 @@ use std::{
 };
 use async_channel::Sender;
 use crate::{
-    client::{
-        ClientState,
-        MpdMessage
-    },
+    client::MpdMessage,
     cache::Cache,
     common::{
         Album,
         Artist
-    },
-    utils::settings_manager
+    }
 };
 use gtk::{
     glib,
     gio,
     prelude::*,
 };
-use glib::{
-    closure_local,
-    subclass::Signal
-};
+use glib::subclass::Signal;
 
 use adw::subclass::prelude::*;
 
@@ -102,7 +95,7 @@ impl Library {
     /// TODO: implement provider daisy-chaining on the cache side
     pub fn init_album(&self, album: Album) {
         if let Some(cache) = self.imp().cache.get() {
-            cache.ensure_local_album_meta(album.get_info());
+            cache.ensure_cached_album_meta(album.get_info());
         }
         if let Some(sender) = self.imp().sender.get() {
             let _ = sender.send_blocking(MpdMessage::AlbumContent(album.get_title().to_owned()));
@@ -150,7 +143,7 @@ impl Library {
     /// TODO: implement provider daisy-chaining on the cache side
     pub fn init_artist(&self, artist: Artist) {
         if let Some(cache) = self.imp().cache.get() {
-            cache.ensure_local_artist_meta(artist.get_info());
+            cache.ensure_cached_artist_meta(artist.get_info());
         }
         if let Some(sender) = self.imp().sender.get() {
             // Will get both albums (Discography sub-view) and songs (All Songs sub-view)

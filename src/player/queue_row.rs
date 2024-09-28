@@ -21,7 +21,7 @@ use crate::{
         placeholders::ALBUMART_PLACEHOLDER,
         Cache, CacheState
     },
-    common::{AlbumInfo, Song}, utils::format_secs_as_duration
+    common::{AlbumInfo, Song}
 };
 
 // fn ease_in_out_sine(progress: f64) -> f64 {
@@ -279,9 +279,9 @@ impl QueueRow {
     //     );
     // }
 
-    fn update_thumbnail(&self, info: Option<&AlbumInfo>, cache: Rc<Cache>) {
+    fn update_thumbnail(&self, info: Option<&AlbumInfo>, cache: Rc<Cache>, schedule: bool) {
         if let Some(album) = info {
-            if let Some(tex) = cache.load_local_album_art(album, true) {
+            if let Some(tex) = cache.load_cached_album_art(album, true, schedule) {
                 self.imp().thumbnail.set_paintable(Some(&tex));
                 return;
             }
@@ -293,7 +293,10 @@ impl QueueRow {
         // The string properties are bound using property expressions in setup().
         // Here we only need to manually bind to the cache controller to fetch album art.
         // Set once first (like sync_create)
-        self.update_thumbnail(song.get_album(), cache.clone());
+        // We need schedule = True here since the QueueView only requested caching the entire
+        // queue's worth of album arts once (at the beginning), and by now some might have been
+        // evicted from the cache.
+        self.update_thumbnail(song.get_album(), cache.clone(), true);
         let thumbnail_binding = cache.get_cache_state().connect_closure(
             "album-art-downloaded",
             false,
@@ -307,7 +310,11 @@ impl QueueRow {
                 move |_: CacheState, folder_uri: String| {
                     if let Some(album) = song.get_album() {
                         if album.uri == folder_uri {
-                            this.update_thumbnail(Some(album), cache);
+                            // If we have been notified and yet the cache does not contain
+                            // the corresponding art, then we either failed to fetch the
+                            // art to begin with or the cache is experiencing serious thrashing.
+                            // Do not attempt to re-schedule.
+                            this.update_thumbnail(Some(album), cache, false);
                         }
                     }
                 }
