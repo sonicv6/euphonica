@@ -466,23 +466,20 @@ impl AlbumView {
         );
 
         factory.connect_teardown(
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |_, list_item| {
-                    // Get `AlbumCell` from `ListItem` (the UI widget)
-                    let child: AlbumCell = list_item
-                        .downcast_ref::<ListItem>()
-                        .expect("Needs to be ListItem")
-                        .child()
-                        .and_downcast::<AlbumCell>()
-                        .expect("The child has to be an `AlbumCell`.");
-                    child.teardown();
+            move |_, list_item| {
+                // Get `AlbumCell` from `ListItem` (the UI widget)
+                let child: Option<AlbumCell> = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .child()
+                    .and_downcast::<AlbumCell>();
+                if let Some(c) = child {
+                    c.teardown();
                 }
-            )
+            }
         );
 
-        // tell factory how to bind `AlbumCell` to one of our Album GObjects.
+        // Tell factory how to bind `AlbumCell` to one of our Album GObjects.
         // If this cell is being bound to an album, that means it might be displayed.
         // As such, we'll also make it listen to the cache controller for any new
         // album art downloads. This ensures we will never have to iterate through
@@ -490,7 +487,7 @@ impl AlbumView {
         // will be updated, thus yielding a constant update cost).
         factory.connect_bind(
             move |_, list_item| {
-                // Get `Song` from `ListItem` (that is, the data side)
+                // Get `Album` from `ListItem` (that is, the data side)
                 let item: Album = list_item
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem")

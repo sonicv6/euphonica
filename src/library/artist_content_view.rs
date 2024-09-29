@@ -397,9 +397,7 @@ impl ArtistContentView {
                 item.set_child(Some(&album_cell));
             }
         ));
-        factory.connect_bind(clone!(
-            #[weak]
-            cache,
+        factory.connect_bind(
             move |_, list_item| {
                 let item: Album = list_item
                     .downcast_ref::<ListItem>()
@@ -417,11 +415,9 @@ impl ArtistContentView {
                 // Within this binding fn is where the cached artist avatar texture gets used.
                 child.bind(&item);
             }
-        ));
+        );
 
-        factory.connect_unbind(clone!(
-            #[weak]
-            cache,
+        factory.connect_unbind(
             move |_, list_item| {
             let child: AlbumCell = list_item
                 .downcast_ref::<ListItem>()
@@ -430,7 +426,7 @@ impl ArtistContentView {
                 .and_downcast::<AlbumCell>()
                 .expect("The child has to be an `AlbumCell`.");
             child.unbind();
-        }));
+        });
 
         // Set the factory of the list view
         self.imp().album_subview.set_factory(Some(&factory));
@@ -531,7 +527,6 @@ impl ArtistContentView {
 
     fn add_album(&self, album: Album, cache: Rc<Cache>) {
         self.imp().album_list.append(&album);
-        println!("add_album: calling ensure_cached_album_art");
         cache.ensure_cached_album_art(album.get_info(), false);
         self.imp().album_count.set_label(&self.imp().album_list.n_items().to_string());
     }

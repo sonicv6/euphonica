@@ -184,10 +184,10 @@ impl ArtistSongRow {
             .bind(self, "quality-grade", gtk::Widget::NONE);
     }
 
-    fn update_thumbnail(&self, info: Option<&AlbumInfo>, cache: Rc<Cache>) {
+    fn update_thumbnail(&self, info: Option<&AlbumInfo>, cache: Rc<Cache>, schedule: bool) {
         if let Some(album) = info {
             // Should already have been downloaded by the album view
-            if let Some(tex) = cache.load_cached_album_art(album, true, false) {
+            if let Some(tex) = cache.load_cached_album_art(album, true, schedule) {
                 self.imp().thumbnail.set_paintable(Some(&tex));
                 return;
             }
@@ -197,7 +197,7 @@ impl ArtistSongRow {
 
     pub fn bind(&self, song: &Song, cache: Rc<Cache>) {
         // Bind album art listener. Set once first (like sync_create)
-        self.update_thumbnail(song.get_album(), cache.clone());
+        self.update_thumbnail(song.get_album(), cache.clone(), true);
         let thumbnail_binding = cache.get_cache_state().connect_closure(
             "album-art-downloaded",
             false,
@@ -211,7 +211,7 @@ impl ArtistSongRow {
                 move |_: CacheState, folder_uri: String| {
                     if let Some(album) = song.get_album() {
                         if album.uri == folder_uri {
-                            this.update_thumbnail(Some(album), cache);
+                            this.update_thumbnail(Some(album), cache, false);
                         }
                     }
                 }

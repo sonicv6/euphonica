@@ -11,12 +11,7 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client,
-    search::{Term, Query, Window, Operation as QueryOperation},
-    song::Id,
-    Subsystem,
-    Idle,
-    Channel
+    client::Client, error::Error, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Subsystem
 };
 use image::DynamicImage;
 use uuid::Uuid;
@@ -75,6 +70,8 @@ pub enum MpdMessage {
     Crossfade(f64),
     ReplayGain(mpd::status::ReplayGain),
     Consume(bool),
+    GetSticker(String, String, String), // Type, URI, name
+    SetSticker(String, String, String, String), // Type, URI, name, value
 
     // Reserved for cache controller
     // folder-level URI, key doc & paths to write the hires & thumbnail versions
@@ -604,6 +601,8 @@ impl MpdWrapper {
                     &BoxedAnyObject::new(thumb),
                 ]
             ),
+            MpdMessage::GetSticker(typ, uri, name) => self.get_sticker(&typ, &uri, &name),
+            MpdMessage::SetSticker(typ, uri, name, value) => self.set_sticker(&typ, &uri, &name, &value),
             MpdMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
                 "album-art-not-available",
                 folder_uri
@@ -751,6 +750,45 @@ impl MpdWrapper {
             let _ = client.output(id, state);
         }
     }
+
+    fn get_sticker(&self, typ: &str, uri: &str, name: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let res = client.sticker(typ, uri, name);
+            if let Ok(sticker) = res {
+                self.state.emit_by_name::<()>("sticker-downloaded", &[
+                    &typ.to_value(),
+                    &uri.to_value(),
+                    &name.to_value(),
+                    &sticker.to_value()
+                ]);
+            }
+            else if let Err(error) = res {
+                match error {
+                    Error::Server(server_err) => {
+                        if server_err.detail.contains("disabled") {
+                            self.state.emit_by_name::<()>("sticker-db-disabled", &[]);
+                        }
+                        else if server_err.detail.contains("no such sticker") {
+                            self.state.emit_by_name::<()>("sticker-not-found", &[
+                                &typ.to_value(),
+                                &uri.to_value(),
+                                &name.to_value(),
+                            ]);
+                        }
+                    }
+                    _ => {
+                        // Not handled yet
+                    }
+                }
+            }
+        }
+    }
+
+    fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.set_sticker(typ, uri, name, value);
+        }
+    } 
 
     pub fn get_status(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {

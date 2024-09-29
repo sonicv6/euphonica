@@ -308,8 +308,8 @@ impl ArtistView {
         // once when adding this album to the ListStore for the GridView.
         let content_view = self.imp().content_view.get();
         content_view.bind(artist.clone());
-        library.init_artist(artist);
         self.imp().nav_view.push_by_tag("content");
+        library.init_artist(artist);
     }
 
     fn setup_gridview(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
@@ -319,10 +319,8 @@ impl ArtistView {
             closure_local!(
                 #[weak(rename_to = this)]
                 self,
-                #[weak]
-                cache,
                 move |_: ClientState, artist: Artist| {
-                    this.add_artist(artist, cache);
+                    this.add_artist(artist);
                 }
             )
         );
@@ -354,42 +352,44 @@ impl ArtistView {
         let factory = SignalListItemFactory::new();
 
         // Create an empty `ArtistCell` during setup
-        factory.connect_setup(move |_, list_item| {
-            let artist_cell = ArtistCell::new();
-            let item = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem");
-            item
-                .set_child(Some(&artist_cell));
-            item
-                .property_expression("item")
-                .chain_property::<Artist>("name")
-                .bind(&artist_cell, "name", Widget::NONE);
-        });
-
-        // Artist name has already been taken care of by the above property expression.
-        // Here we only need to start listening to the cache for artist images.
-        factory.connect_bind(clone!(
+        factory.connect_setup(clone!(
             #[weak]
             cache,
             move |_, list_item| {
-                // Get `Song` from `ListItem` (that is, the data side)
+                let item = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem");
+                let artist_cell = ArtistCell::new(&item, cache);
+                item
+                    .set_child(Some(&artist_cell));
+            }
+        ));
+
+        factory.connect_teardown(
+            |_, list_item| {
+                // Get `AlbumCell` from `ListItem` (the UI widget)
+                let child: Option<ArtistCell> = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .child()
+                    .and_downcast::<ArtistCell>();
+                if let Some(c) = child {
+                    c.teardown();
+                }
+            }
+        );
+
+        // Artist name has already been taken care of by the above property expression.
+        // Here we only need to start listening to the cache for artist images.
+        factory.connect_bind(
+            move |_, list_item| {
+                // Get `Artist` from `ListItem` (that is, the data side)
                 let item: Artist = list_item
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem")
                     .item()
                     .and_downcast::<Artist>()
                     .expect("The item has to be a common::Artist.");
-
-                // This artist cell is about to be displayed. Try to ensure that we
-                // have a local copy of this artist's avatar.
-                // Unlike album arts, artist avatars must be downloaded as part of
-                // artist metadata.
-                // This might incur an API call.
-                // cache.ensure_local_artist_meta(
-                //     item.get_mbid(),
-                //     Some(item.get_name())
-                // );
 
                 // Get `ArtistCell` from `ListItem` (the UI widget)
                 let child: ArtistCell = list_item
@@ -400,16 +400,14 @@ impl ArtistView {
                     .expect("The child has to be an `ArtistCell`.");
 
                 // Within this binding fn is where the cached album art texture gets used.
-                child.bind(&item, cache);
-            })
+                child.bind(&item);
+            }
         );
 
 
         // When cell goes out of sight, unbind from item to allow reuse with another.
         // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
-        factory.connect_unbind(clone!(
-            #[weak]
-            cache,
+        factory.connect_unbind(
             move |_, list_item| {
                 // Get `ArtistCell` from `ListItem` (the UI widget)
                 let child: ArtistCell = list_item
@@ -419,8 +417,8 @@ impl ArtistView {
                     .and_downcast::<ArtistCell>()
                     .expect("The child has to be an `ArtistCell`.");
                 // Un-listen to cache, so that we don't update album art for cells that are not in view
-                child.unbind(cache);
-            })
+                child.unbind();
+            }
         );
 
         // Set the factory of the list view
@@ -444,8 +442,7 @@ impl ArtistView {
         );
     }
 
-    fn add_artist(&self, artist: Artist, cache: Rc<Cache>) {
-        // cache.ensure_local_artist_meta(artist.get_info());
+    fn add_artist(&self, artist: Artist) {
         self.imp().artist_list.append(&artist);
         // self.imp().album_count.set_label(&self.imp().album_list.n_items().to_string());
     }
