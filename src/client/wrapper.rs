@@ -53,6 +53,7 @@ pub enum MpdMessage {
     Add(String), // Add by URI
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
+    DeleteId(u32),
     Clear, // Clear queue
     Prev,
     Next,
@@ -566,6 +567,7 @@ impl MpdWrapper {
             MpdMessage::Consume(state) => self.set_consume(state),
             MpdMessage::Play => self.pause(false),
             MpdMessage::PlayId(id) => self.play_at(id, true),
+            MpdMessage::DeleteId(id) => self.delete_at(id, true),
             MpdMessage::PlayPos(pos) => self.play_at(pos, false),
             MpdMessage::Pause => self.pause(true),
             MpdMessage::Prev => self.prev(),
@@ -891,12 +893,22 @@ impl MpdWrapper {
 
     pub fn play_at(self: Rc<Self>, id_or_pos: u32, is_id: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            // TODO: Make it stop/play base on toggle
             if is_id {
                 client.switch(Id(id_or_pos)).expect("Could not switch song");
             }
             else {
                 client.switch(id_or_pos).expect("Could not switch song");
+            }
+        }
+    }
+
+    pub fn delete_at(self: Rc<Self>, id_or_pos: u32, is_id: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if is_id {
+                client.delete(Id(id_or_pos)).expect("Could not delete song from queue");
+            }
+            else {
+                client.delete(id_or_pos).expect("Could not delete song from queue");
             }
         }
     }

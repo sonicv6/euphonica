@@ -10,7 +10,7 @@ use async_channel::Sender;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject};
 use gtk::gdk::Texture;
 use gtk::{gio, glib, prelude::*};
-use mpd::{status::{AudioFormat, State, Status}, ReplayGain};
+use mpd::{status::{AudioFormat, State, Status}, Id, ReplayGain};
 use std::{
     cell::{Cell, OnceCell, RefCell},
     rc::Rc,
@@ -757,6 +757,12 @@ impl Player {
 
     pub fn on_song_clicked(&self, song: Song) {
         if let Err(msg) = self.send(MpdMessage::PlayId(song.get_queue_id())) {
+            println!("{}", msg);
+        }
+    }
+
+    pub fn remove_song_id(&self, id: u32) {
+        if let Err(msg) = self.send(MpdMessage::DeleteId(id)) {
             println!("{}", msg);
         }
     }

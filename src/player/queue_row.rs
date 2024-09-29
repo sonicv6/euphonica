@@ -3,12 +3,7 @@ use std::{
     rc::Rc
 };
 use gtk::{
-    glib,
-    prelude::*,
-    subclass::prelude::*,
-    CompositeTemplate,
-    Label,
-    Image
+    glib::{self, clone}, prelude::*, subclass::prelude::*, CompositeTemplate, Image, Label
 };
 use glib::{
     closure_local,
@@ -24,16 +19,19 @@ use crate::{
     common::{AlbumInfo, Song}
 };
 
+use super::Player;
+
 // fn ease_in_out_sine(progress: f64) -> f64 {
 //     (1.0 - (progress * PI).cos()) / 2.0
 // }
 
 mod imp {
+    use std::cell::Cell;
+
     use glib::{
-        ParamSpec,
-        ParamSpecString,
-        ParamSpecBoolean
+        ParamSpec, ParamSpecBoolean, ParamSpecString, ParamSpecUInt
     };
+    use gtk::{Button, Revealer};
     use once_cell::sync::Lazy;
     use super::*;
 
@@ -48,10 +46,13 @@ mod imp {
         pub song_name: TemplateChild<Label>,
          #[template_child]
         pub album_name: TemplateChild<Label>,
-         #[template_child]
+        #[template_child]
         pub artist_name: TemplateChild<Label>,
         #[template_child]
-        pub playing_indicator: TemplateChild<Label>,
+        pub playing_indicator: TemplateChild<Revealer>,
+        #[template_child]
+        pub remove: TemplateChild<Button>,
+        pub queue_id: Cell<u32>,
         pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
         // pub marquee_tick_callback_id: RefCell<Option<TickCallbackId>>,
         // pub marquee_forward: Cell<bool>,
@@ -84,6 +85,7 @@ mod imp {
                     ParamSpecString::builder("artist").build(),
                     ParamSpecString::builder("album").build(),
                     ParamSpecBoolean::builder("is-playing").build(),
+                    ParamSpecUInt::builder("queue-id").build(),
                     // ParamSpecString::builder("duration").build(),
                     // ParamSpecString::builder("quality-grade").build()
                 ]
@@ -96,7 +98,8 @@ mod imp {
                 "name" => self.song_name.label().to_value(),
                 "artist" => self.artist_name.label().to_value(),
                 "album" => self.album_name.label().to_value(),
-                "is-playing" => self.playing_indicator.is_visible().to_value(),
+                "is-playing" => self.playing_indicator.is_child_revealed().to_value(),
+                "queue-id" => self.queue_id.get().to_value(),
                 // "duration" => self.duration.label().to_value(),
                 // "quality-grade" => self.quality_grade.icon_name().to_value(),
                 _ => unimplemented!(),
@@ -123,7 +126,12 @@ mod imp {
                 }
                 "is-playing" => {
                     if let Ok(p) = value.get::<bool>() {
-                        self.playing_indicator.set_visible(p);
+                        self.playing_indicator.set_reveal_child(p);
+                    }
+                }
+                "queue-id" => {
+                    if let Ok(id) = value.get::<u32>() {
+                        self.queue_id.replace(id);
                     }
                 }
                 // "duration" => {
@@ -161,14 +169,24 @@ glib::wrapper! {
 }
 
 impl QueueRow {
-    pub fn new(item: &gtk::ListItem) -> Self {
+    pub fn new(item: &gtk::ListItem, player: Player) -> Self {
         let res: Self = Object::builder().build();
-        res.setup(item);
+        res.setup(item, player);
         res
     }
 
     #[inline(always)]
-    pub fn setup(&self, item: &gtk::ListItem) {
+    pub fn setup(&self, item: &gtk::ListItem, player: Player) {
+        // Bind controls
+        self.imp().remove.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[weak]
+            player,
+            move |_| {
+                player.remove_song_id(this.imp().queue_id.get());
+            }
+        ));
         item
             .property_expression("item")
             .chain_property::<Song>("name")
@@ -196,6 +214,11 @@ impl QueueRow {
             .property_expression("item")
             .chain_property::<Song>("is-playing")
             .bind(self, "is-playing", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("queue-id")
+            .bind(self, "queue-id", gtk::Widget::NONE);
 
         // // Bind marquee controller only once here
         // let marquee = res.imp().marquee.get();

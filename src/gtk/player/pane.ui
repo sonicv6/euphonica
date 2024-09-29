@@ -128,6 +128,7 @@
                     <property name="overflow">hidden</property> <!-- Needed to clip image behind corners -->
                     <child>
                       <object class="GtkPicture" id="albumart">
+                        <property name="hexpand">true</property>
                       </object>
                     </child>
                   </object>
