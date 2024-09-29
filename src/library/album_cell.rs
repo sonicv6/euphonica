@@ -174,7 +174,7 @@ impl AlbumCell {
     }
 
     fn update_album_art(&self, info: &AlbumInfo) {
-        if let Some(tex) = self.imp().cache.get().unwrap().load_cached_album_art(info, false, true) {
+        if let Some(tex) = self.imp().cache.get().unwrap().load_cached_album_art(info, true, true) {
             self.imp().cover.set_paintable(Some(&tex));
         }
         else {

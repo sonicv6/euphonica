@@ -67,10 +67,10 @@
 			<default>false</default>
 		</key>
 		<key name="hires-image-size" type="u">
-			<default>256</default>
+			<default>1024</default>
 		</key>
 		<key name="thumbnail-image-size" type="u">
-			<default>64</default>
+			<default>128</default>
 		</key>
 	</schema>
 

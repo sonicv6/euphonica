@@ -403,7 +403,6 @@ impl Cache {
         }
         // If missed, try loading from disk into cache or fetch remotely
         if schedule {
-            println!("load_cached_album_art: calling ensure_cached_album_art with thumbnail={}", thumbnail);
             self.ensure_cached_album_art(album, thumbnail);
         }
         None

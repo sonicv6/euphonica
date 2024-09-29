@@ -183,10 +183,11 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {
 /// thumbnail-image-size in the gschema respectively.
 pub fn resize_image(dyn_img: DynamicImage) -> (DynamicImage, DynamicImage) {
     let settings = settings_manager().child("library");
-    let hires_size = settings.uint("hires-image-size");
+    // Avoid resizing to larger than the original image.
+    let hires_size = settings.uint("hires-image-size").min(dyn_img.width().max(dyn_img.height()));
     let thumbnail_size = settings.uint("thumbnail-image-size");
     (
-        dyn_img.resize(hires_size, hires_size, FilterType::CatmullRom),
+        dyn_img.resize(hires_size, hires_size, FilterType::Triangle),
         dyn_img.thumbnail(thumbnail_size, thumbnail_size)
     )
 }

@@ -45,3 +45,6 @@ features = [
 package = "libadwaita"
 version = "0.7"
 features = ["v1_5"]
+
+[profile.dev]
+debug = 1

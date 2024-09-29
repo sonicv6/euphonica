@@ -219,7 +219,7 @@ mod imp {
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
                 "album" => obj.album().to_value(),
-                "album-art" => obj.current_song_album_art().to_value(), // High-res version
+                "album-art" => obj.current_song_album_art(false).to_value(), // High-res version
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
                 "quality-grade" => obj.quality_grade().to_value(),
@@ -630,13 +630,13 @@ impl Player {
         None
     }
 
-    pub fn current_song_album_art(&self) -> Option<Texture> {
+    pub fn current_song_album_art(&self, thumbnail: bool) -> Option<Texture> {
         // Use high-resolution version
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if let Some(cache) = self.imp().cache.get() {
                 if let Some(album) = song.get_album() {
                     // Should have been scheduled by queue updates
-                    return cache.load_cached_album_art(album, false, false);
+                    return cache.load_cached_album_art(album, thumbnail, false);
                 }
             }
             return None;

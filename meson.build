@@ -8,7 +8,7 @@ i18n = import('i18n')
 gnome = import('gnome')
 fs = import('fs')
 
-if get_option('profile') == 'development'
+if get_option('profile') == 'dev'
   profile = '.Devel'
   if fs.is_dir('.git')
     vcs_tag = run_command('git', 'rev-parse', '--short', 'HEAD', check: true).stdout().strip()
