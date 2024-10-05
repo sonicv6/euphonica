@@ -1,8 +1,5 @@
 use std::{
-    borrow::Cow,
-    cell::RefCell,
-    rc::Rc,
-    path::PathBuf
+    borrow::Cow, cell::{Cell, RefCell}, path::PathBuf, rc::Rc
 };
 use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
@@ -373,7 +370,10 @@ pub struct MpdWrapper {
     bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
     bg_channel: Channel, // For waking up the child client
     bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
-    meta_sender: Sender<Metadata> // For sending album arts to cache controller
+    meta_sender: Sender<Metadata>, // For sending album arts to cache controller
+    // Stored here so we can use them to get queue diffs.
+    // It will be updated every time get_status() is called.
+    queue_version: Cell<u32>
 }
 
 impl MpdWrapper {
@@ -392,7 +392,8 @@ impl MpdWrapper {
             bg_handle: RefCell::new(None),  // Will be spawned later
             bg_channel: Channel::new(&ch_name).unwrap(),
             bg_sender: RefCell::new(None),
-            meta_sender
+            meta_sender,
+            queue_version: Cell::new(0)
         });
 
         // For future noob self: these are shallow
@@ -646,13 +647,12 @@ impl MpdWrapper {
             match subsystem {
                 Subsystem::Player | Subsystem::Options => {
                     // No need to get current song separately as we'll just pull it
-                    // from the queue
+                    // from the queue.
+                    // Delegate efficient queue updating to the player controller too.
                     self.get_status();
                 }
                 Subsystem::Queue => {
-                    // Retrieve entire queue for now, since there's no way to know
-                    // specifically what changed
-                    self.get_current_queue();
+                    self.get_queue_changes();
                 }
                 Subsystem::Output => {
                     self.get_outputs();
@@ -797,6 +797,7 @@ impl MpdWrapper {
     pub fn get_status(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
+                let _ = self.queue_version.replace(status.queue_version);
                 // Let each state update their respective properties
                 self.state.emit_boxed_result("status-changed", status);
             }
@@ -928,12 +929,24 @@ impl MpdWrapper {
 
     pub fn clear_queue(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            // TODO: Make it stop/play base on toggle
             let _ = client.clear();
             // TODO: handle error
         }
         else {
             // TODO: handle error
+        }
+    }
+
+    pub fn get_queue_changes(&self) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: move to background thread
+            if let Ok(mut changes) = client.changes(self.queue_version.get()) {
+                let songs: Vec<Song> = changes
+                    .iter_mut()
+                    .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
+                    .collect();
+                self.state.emit_boxed_result("queue-changed", songs);
+            }
         }
     }
 
@@ -951,7 +964,7 @@ impl MpdWrapper {
                     .iter_mut()
                     .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
                     .collect();
-                self.state.emit_boxed_result("queue-changed", songs);
+                self.state.emit_boxed_result("queue-replaced", songs);
             }
         }
     }

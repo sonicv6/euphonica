@@ -58,7 +58,7 @@
 
 						<property name="end-widget">
 							<object class="GtkLabel" id="queue_len">
-								<property name="label">4</property>
+								<property name="label">0</property>
 							</object>
 						</property>
 					</object>

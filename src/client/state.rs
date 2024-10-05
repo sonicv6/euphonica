@@ -157,6 +157,9 @@ mod imp {
                     Signal::builder("queue-changed")
                         .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
                         .build(),
+                    Signal::builder("queue-replaced")
+                        .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
+                        .build(),
                 ]
             })
         }
