@@ -54,6 +54,7 @@ pub enum MpdMessage {
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
     DeleteId(u32),
+    Swap(u32, u32), // Swap queue pos of two songs given by queue positions
     Clear, // Clear queue
     Prev,
     Next,
@@ -567,6 +568,7 @@ impl MpdWrapper {
             MpdMessage::Consume(state) => self.set_consume(state),
             MpdMessage::Play => self.pause(false),
             MpdMessage::PlayId(id) => self.play_at(id, true),
+            MpdMessage::Swap(pos1, pos2) => self.swap(pos1, pos2, false),
             MpdMessage::DeleteId(id) => self.delete_at(id, true),
             MpdMessage::PlayPos(pos) => self.play_at(pos, false),
             MpdMessage::Pause => self.pause(true),
@@ -898,6 +900,17 @@ impl MpdWrapper {
             }
             else {
                 client.switch(id_or_pos).expect("Could not switch song");
+            }
+        }
+    }
+
+    pub fn swap(self: Rc<Self>, id1: u32, id2: u32, is_id: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if is_id {
+                client.swap(Id(id1), Id(id2)).expect("Could not swap songs by ID");
+            }
+            else {
+                client.swap(id1, id2).expect("Could not swap songs by pos");
             }
         }
     }

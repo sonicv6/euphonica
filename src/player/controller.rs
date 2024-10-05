@@ -37,6 +37,11 @@ pub enum PlaybackFlow {
     RepeatSingle // Loops current song
 }
 
+pub enum SwapDirection {
+    Up,
+    Down
+}
+
 impl PlaybackFlow {
     pub fn from_status(st: &mpd::status::Status) -> Self {
         if st.repeat {
@@ -764,6 +769,25 @@ impl Player {
     pub fn remove_song_id(&self, id: u32) {
         if let Err(msg) = self.send(MpdMessage::DeleteId(id)) {
             println!("{}", msg);
+        }
+    }
+
+    pub fn swap_dir(&self, pos: u32, direction: SwapDirection) {
+        match direction {
+            SwapDirection::Up => {
+                if pos > 0 {
+                    if let Err(msg) = self.send(MpdMessage::Swap(pos, pos - 1)) {
+                        println!("{}", msg);
+                    }
+                }
+            }
+            SwapDirection::Down => {
+                if pos < self.imp().queue.n_items() - 1 {
+                    if let Err(msg) = self.send(MpdMessage::Swap(pos, pos + 1)) {
+                        println!("{}", msg);
+                    }
+                }
+            }
         }
     }
 

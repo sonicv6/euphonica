@@ -165,6 +165,7 @@ mod imp {
     #[derive(Default, Debug)]
     pub struct Song {
         pub info: OnceCell<SongInfo>,
+        pub pos: Cell<u32>,  // stored at the wrapper level to allow easy local updating
         pub is_playing: Cell<bool>
     }
 
@@ -176,7 +177,9 @@ mod imp {
         fn new() -> Self {
             Self {
                 info: OnceCell::new(),
-                is_playing: Cell::new(false)
+                pos: Cell::new(0),
+                is_playing: Cell::new(false),
+
             }
         }
     }
@@ -191,6 +194,7 @@ mod imp {
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecUInt64::builder("duration").read_only().build(),
                     ParamSpecUInt::builder("queue-id").build(),
+                    ParamSpecUInt::builder("queue-pos").build(),
                     ParamSpecBoolean::builder("is-queued").read_only().build(),
                     ParamSpecBoolean::builder("is-playing").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
@@ -214,6 +218,7 @@ mod imp {
                 "artist" => obj.get_artist_tag().to_value(),
                 "duration" => obj.get_duration().to_value(),
                 "queue-id" => obj.get_queue_id().to_value(),
+                "queue-pos" => self.pos.get().to_value(),
                 "is-queued" => obj.is_queued().to_value(),
                 "is-playing" => obj.is_playing().to_value(),
                 "album" => obj.get_album_title().to_value(),
@@ -285,6 +290,14 @@ impl Song {
             return id;
         }
         0
+    }
+
+    pub fn get_queue_pos(&self) -> u32 {
+        self.imp().pos.get()
+    }
+
+    pub fn set_queue_pos(&self, new: u32) {
+        let _ = self.imp().pos.replace(new);
     }
 
     pub fn is_queued(&self) -> bool {
@@ -515,8 +528,11 @@ impl From<mpd::song::Song> for SongInfo {
 
 impl From<mpd::song::Song> for Song {
     fn from(song: mpd::song::Song) -> Self {
-        let info = SongInfo::from(song);
         let res = glib::Object::new::<Self>();
+        if let Some(place) = song.place {
+            res.set_queue_pos(place.pos);
+        }
+        let info = SongInfo::from(song);
         let _ = res.imp().info.set(info);
         res
     }

@@ -19,7 +19,7 @@ use crate::{
     common::{AlbumInfo, Song}
 };
 
-use super::Player;
+use super::{controller::SwapDirection, Player};
 
 // fn ease_in_out_sine(progress: f64) -> f64 {
 //     (1.0 - (progress * PI).cos()) / 2.0
@@ -51,8 +51,13 @@ mod imp {
         #[template_child]
         pub playing_indicator: TemplateChild<Revealer>,
         #[template_child]
+        pub raise: TemplateChild<Button>,
+        #[template_child]
+        pub lower: TemplateChild<Button>,
+        #[template_child]
         pub remove: TemplateChild<Button>,
         pub queue_id: Cell<u32>,
+        pub queue_pos: Cell<u32>,
         pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
         // pub marquee_tick_callback_id: RefCell<Option<TickCallbackId>>,
         // pub marquee_forward: Cell<bool>,
@@ -86,6 +91,7 @@ mod imp {
                     ParamSpecString::builder("album").build(),
                     ParamSpecBoolean::builder("is-playing").build(),
                     ParamSpecUInt::builder("queue-id").build(),
+                    ParamSpecUInt::builder("queue-pos").build(),
                     // ParamSpecString::builder("duration").build(),
                     // ParamSpecString::builder("quality-grade").build()
                 ]
@@ -100,6 +106,7 @@ mod imp {
                 "album" => self.album_name.label().to_value(),
                 "is-playing" => self.playing_indicator.is_child_revealed().to_value(),
                 "queue-id" => self.queue_id.get().to_value(),
+                "queue-pos" => self.queue_pos.get().to_value(),
                 // "duration" => self.duration.label().to_value(),
                 // "quality-grade" => self.quality_grade.icon_name().to_value(),
                 _ => unimplemented!(),
@@ -132,6 +139,11 @@ mod imp {
                 "queue-id" => {
                     if let Ok(id) = value.get::<u32>() {
                         self.queue_id.replace(id);
+                    }
+                }
+                "queue-pos" => {
+                    if let Ok(pos) = value.get::<u32>() {
+                        self.queue_pos.replace(pos);
                     }
                 }
                 // "duration" => {
@@ -187,6 +199,27 @@ impl QueueRow {
                 player.remove_song_id(this.imp().queue_id.get());
             }
         ));
+
+        self.imp().raise.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[weak]
+            player,
+            move |_| {
+                player.swap_dir(this.imp().queue_pos.get(), SwapDirection::Up);
+            }
+        ));
+
+        self.imp().lower.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[weak]
+            player,
+            move |_| {
+                player.swap_dir(this.imp().queue_pos.get(), SwapDirection::Down);
+            }
+        ));
+
         item
             .property_expression("item")
             .chain_property::<Song>("name")
@@ -219,6 +252,10 @@ impl QueueRow {
             .property_expression("item")
             .chain_property::<Song>("queue-id")
             .bind(self, "queue-id", gtk::Widget::NONE);
+        item
+            .property_expression("item")
+            .chain_property::<Song>("queue-pos")
+            .bind(self, "queue-pos", gtk::Widget::NONE);
 
         // // Bind marquee controller only once here
         // let marquee = res.imp().marquee.get();
