@@ -51,6 +51,8 @@ mod imp {
         #[template_child]
         pub lower: TemplateChild<Button>,
         #[template_child]
+        pub quality_grade: TemplateChild<gtk::Image>,
+        #[template_child]
         pub remove: TemplateChild<Button>,
         pub queue_id: Cell<u32>,
         pub queue_pos: Cell<u32>,
@@ -89,7 +91,7 @@ mod imp {
                     ParamSpecUInt::builder("queue-id").build(),
                     ParamSpecUInt::builder("queue-pos").build(),
                     // ParamSpecString::builder("duration").build(),
-                    // ParamSpecString::builder("quality-grade").build()
+                    ParamSpecString::builder("quality-grade").build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -104,7 +106,7 @@ mod imp {
                 "queue-id" => self.queue_id.get().to_value(),
                 "queue-pos" => self.queue_pos.get().to_value(),
                 // "duration" => self.duration.label().to_value(),
-                // "quality-grade" => self.quality_grade.icon_name().to_value(),
+                "quality-grade" => self.quality_grade.icon_name().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -148,16 +150,16 @@ mod imp {
                 //         self.duration.set_label(dur);
                 //     }
                 // }
-                // "quality-grade" => {
-                //     if let Ok(icon) = value.get::<&str>() {
-                //         self.quality_grade.set_icon_name(Some(icon));
-                //         self.quality_grade.set_visible(true);
-                //     }
-                //     else {
-                //         self.quality_grade.set_icon_name(None);
-                //         self.quality_grade.set_visible(false);
-                //     }
-                // }
+                "quality-grade" => {
+                    if let Ok(icon) = value.get::<&str>() {
+                        self.quality_grade.set_icon_name(Some(icon));
+                        self.quality_grade.set_visible(true);
+                    }
+                    else {
+                        self.quality_grade.set_icon_name(None);
+                        self.quality_grade.set_visible(false);
+                    }
+                }
                 _ => unimplemented!(),
             }
         }
@@ -238,6 +240,11 @@ impl QueueRow {
         //         format_secs_as_duration(dur as f64)
         //     }))
         //     .bind(self, "duration", gtk::Widget::NONE);
+
+        item
+            .property_expression("item")
+            .chain_property::<Song>("quality-grade")
+            .bind(self, "quality-grade", gtk::Widget::NONE);
 
         item
             .property_expression("item")

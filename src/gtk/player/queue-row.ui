@@ -45,6 +45,9 @@
                 </style>
               </object>
             </child>
+            <child>
+							<object class="GtkImage" id="quality_grade"></object>
+						</child>
           </object>
         </child>
         <child>
