@@ -24,20 +24,21 @@ mod imp {
         pub speed: Cell<f64>, // in pixels per second.
         animation: OnceCell<TimedAnimation>,
         curr_offset: Cell<f64>,
-        child_width: Cell<i32>
+        child_width: Cell<i32>,
+        #[property(get, set)]
+        should_run: Cell<bool>
     }
     impl Marquee {
-        fn check_animation(&self) {
-            if self.child_width.get() > self.obj().width() {
+        pub fn check_animation(&self) {
+            if self.should_run.get() && self.child_width.get() > self.obj().width() {
                 let anim = self.animation.get().unwrap();
+                // println!("Child: {}, allocated: {}, should_run: {}", self.child_width.get(), self.obj().width(), self.should_run.get());
                 if anim.state() != adw::AnimationState::Playing {
                     let _ = self.curr_offset.replace(0.0);
-                    println!("Starting marquee!");
                     anim.play();
                 }
             }
             else {
-                println!("Stopping marquee!");
                 self.animation.get().unwrap().reset();
                 self.curr_offset.replace(0.0);
             }
@@ -110,7 +111,6 @@ mod imp {
             let preferred_size = child.preferred_size().1;
             let natural_width = preferred_size.width();
             let _ = self.child_width.replace(natural_width);
-            println!("Child: {}, allocated: {}", natural_width, width);
             self.check_animation();
 
             // Allocate space for the child widget
@@ -164,6 +164,11 @@ impl Marquee {
 
     pub fn label(&self) -> gtk::Label {
         self.imp().child.get()
+    }
+
+    pub fn set_should_run_and_check(&self, should_run: bool) {
+        self.set_should_run(should_run);
+        self.imp().check_animation();
     }
 }
 
