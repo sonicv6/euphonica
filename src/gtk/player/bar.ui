@@ -41,13 +41,11 @@
                 <property name="orientation">1</property>
                 <property name="spacing">6</property>
                 <child>
-                  <object class="GtkLabel" id="song_name">
-                    <property name="ellipsize">end</property>
-                    <property name="halign">start</property>
+                  <object class="EuphoniaMarquee" id="song_name">
                     <style>
                       <class name="heading" />
                     </style>
-                    <property name="label">Untitled Song</property>
+                    <property name="speed">20</property>
                   </object>
                 </child>
                 <child>
@@ -124,8 +122,10 @@
             <property name="margin-start">24</property>
             <property name="margin-end">24</property>
             <property name="spacing">12</property>
+            <property name="width-request">240</property>
             <child>
-              <object class="EuphoniaPlaybackControls" id="playback_controls"/>
+              <object class="EuphoniaPlaybackControls" id="playback_controls">
+              </object>
             </child>
             <child>
               <object class="GtkButton" id="goto_pane">

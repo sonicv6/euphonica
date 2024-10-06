@@ -181,7 +181,6 @@ mod imp {
         }
     }
 
-    // Trait shared by all widgets
     impl WidgetImpl for Seekbar {}
 }
 

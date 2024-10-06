@@ -26,8 +26,6 @@ mod imp {
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/playback-controls.ui")]
     pub struct PlaybackControls {
         #[template_child]
-        pub stack: TemplateChild<gtk::Stack>,
-        #[template_child]
         pub flow_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
@@ -113,7 +111,6 @@ impl PlaybackControls {
         let imp = self.imp();
         // Set up buttons
         let play_pause_symbol = imp.play_pause_symbol.get();
-        let stack = imp.stack.get();
         player
             .bind_property(
                 "playback-state",
@@ -128,27 +125,6 @@ impl PlaybackControls {
                         },
 	                    PlaybackState::Paused | PlaybackState::Stopped => {
 	                        Some("pause")
-	                    },
-	                }
-                }
-            )
-            .sync_create()
-            .build();
-
-        player
-            .bind_property(
-                "playback-state",
-                &stack,
-                "visible-child-name"
-            )
-            .transform_to(
-                |_, state: PlaybackState| {
-                    match state {
-	                    PlaybackState::Playing | PlaybackState::Paused => {
-	                        Some("playing")
-                        },
-	                    PlaybackState::Stopped => {
-	                        Some("stopped")
 	                    },
 	                }
                 }

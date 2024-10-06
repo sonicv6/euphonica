@@ -11,7 +11,7 @@ use mpd::output::Output;
 
 use crate::{
     utils::settings_manager,
-    common::QualityGrade
+    common::{QualityGrade, Marquee}
 };
 
 use super::{
@@ -36,7 +36,7 @@ mod imp {
         #[template_child]
         pub albumart: TemplateChild<gtk::Image>,
         #[template_child]
-        pub song_name: TemplateChild<gtk::Label>,
+        pub song_name: TemplateChild<Marquee>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
         #[template_child]
@@ -180,6 +180,24 @@ mod imp {
                 .sync_create()
                 .build();
 
+            obj
+                .bind_property(
+                    "collapsed",
+                    &self.playback_controls.get(),
+                    "width-request"
+                )
+                .transform_to(|_, collapsed: bool| {
+                    if collapsed {
+                        None
+                    }
+                    else {
+                        // When the seekbar is visible, prevent the controls from getting too narrow.
+                        Some(320)
+                    }
+                })
+                .sync_create()
+                .build();
+
             self.goto_pane.connect_clicked(clone!(
                 #[weak(rename_to = this)]
                 obj,
@@ -312,7 +330,7 @@ impl PlayerBar {
             .sync_create()
             .build();
 
-        let song_name = imp.song_name.get();
+        let song_name = imp.song_name.get().label();
         player
             .bind_property(
                 "title",
