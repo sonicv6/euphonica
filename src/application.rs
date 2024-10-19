@@ -100,6 +100,7 @@ mod imp {
             let obj = self.obj();
             obj.setup_gactions();
             obj.set_accels_for_action("app.quit", &["<primary>q"]);
+            obj.set_accels_for_action("app.fullscreen", &["F11"]);
         }
     }
 
@@ -168,6 +169,9 @@ impl EuphoniaApplication {
     }
 
     fn setup_gactions(&self) {
+        let toggle_fullscreen_action = gio::ActionEntry::builder("fullscreen")
+            .activate(move |app: &Self, _, _| app.toggle_fullscreen())
+            .build();
         let update_db_action = gio::ActionEntry::builder("update-db")
             .activate(move |app: &Self, _, _| app.update_db())
             .build();
@@ -181,11 +185,22 @@ impl EuphoniaApplication {
             .activate(move |app: &Self, _, _| app.show_preferences())
             .build();
         self.add_action_entries([
+            toggle_fullscreen_action,
             update_db_action,
             quit_action,
             about_action,
             preferences_action
         ]);
+    }
+
+    fn toggle_fullscreen(&self) {
+        let window = self.active_window().unwrap();
+        if window.is_fullscreen() {
+            window.unfullscreen();
+        }
+        else {
+            window.fullscreen();
+        }
     }
 
     fn update_db(&self) {
