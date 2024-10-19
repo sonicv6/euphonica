@@ -37,6 +37,7 @@
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
 	<gresource prefix="/org/euphonia/Euphonia/icons/scalable/actions/">
+		<file preprocess="xml-stripblanks" alias="settings-symbolic.svg">gtk/icons/settings-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="mixramp-off-symbolic.svg">gtk/icons/mixramp-off-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="mixramp-symbolic.svg">gtk/icons/mixramp-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="rg-off-symbolic.svg">gtk/icons/rg-off-symbolic.svg</file>

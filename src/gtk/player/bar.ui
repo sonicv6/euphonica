@@ -147,7 +147,6 @@
             <property name="spacing">12</property>
             <child>
               <object class="GtkBox" id="output_section">
-                <property name="spacing">6</property>
                 <property name="visible">false</property>
                 <child>
                   <object class="GtkButton" id="prev_output">

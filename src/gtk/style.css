@@ -44,6 +44,11 @@ windowhandle {
     padding: 12pt;
 }
 
+.player-pane {
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
 /* To achieve full-window blurred background effect, we must replace the default opaque colours used
  * by the nav sidebars' backgrounds by their shade_color equivalent.
  * Only do this when blurred background is enabled AND there is a song with an album art playing. */

@@ -32,7 +32,7 @@
     </object>
     <object class="GtkPopover" id="mixramp_popover">
       <property name="has-arrow">true</property>
-      <property name="name">crossfade_popover</property>
+      <property name="name">mixramp_popover</property>
       <property name="child">
         <object class="GtkGrid">
           <property name="row-spacing">6</property>
@@ -110,7 +110,7 @@
         <property name="child">
           <object class="GtkBox">
             <style>
-              <class name="padding-12"/>
+              <class name="player-pane"/>
             </style>
             <property name="orientation">vertical</property>
             <property name="spacing">12</property>
@@ -229,7 +229,6 @@
                 <property name="spacing">12</property>
                 <child>
                   <object class="GtkBox" id="output_section">
-                    <property name="spacing">6</property>
                     <property name="visible">false</property>
                     <child>
                       <object class="GtkButton" id="prev_output">

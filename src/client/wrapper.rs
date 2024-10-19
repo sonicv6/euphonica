@@ -751,6 +751,7 @@ impl MpdWrapper {
 
     fn set_output(&self, id: u32, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            println!("Setting output ID {} to {}", id, state);
             let _ = client.output(id, state);
         }
     }

@@ -463,19 +463,13 @@ impl PlayerPane {
     fn update_outputs(&self, player: Player, outputs: &[Output]) {
         let section = self.imp().output_section.get();
         let stack = self.imp().output_stack.get();
-        let old_widgets = self.imp().output_widgets.replace(Vec::with_capacity(0));
-        // Clear stack
-        for widget in old_widgets {
-            stack.remove(&widget);
-        }
-        if outputs.is_empty() {
+        let new_len = outputs.len();
+        if new_len == 0 {
             section.set_visible(false);
-            let _ = self.imp().output_count.replace(0);
         }
         else {
             section.set_visible(true);
-            // Handle buttons
-            if outputs.len() > 1 {
+            if new_len > 1 {
                 self.imp().prev_output.set_visible(true);
                 self.imp().next_output.set_visible(true);
             }
@@ -483,18 +477,42 @@ impl PlayerPane {
                 self.imp().prev_output.set_visible(false);
                 self.imp().next_output.set_visible(false);
             }
-            let new_widgets: Vec<MpdOutput> = outputs.iter().map(|v| {
-                MpdOutput::from_output(v, player.clone())
-            }).collect();
-            // Add new ones
-            for widget in &new_widgets {
-                stack.add_child(widget);
-            }
-            let _ = self.imp().output_count.replace(new_widgets.len());
-            let _ = self.imp().output_widgets.replace(new_widgets);
-            // Call this once to update button sensitivities & visible child
-            self.set_visible_output(self.imp().current_output.get() as i32);
         }
+        // Handle new/removed outputs.
+        // Pretty rare though...
+        {
+            let mut output_widgets = self.imp().output_widgets.borrow_mut();
+            let curr_len = output_widgets.len();
+            if curr_len >= new_len {
+                // Trim down
+                for w in &output_widgets[new_len..] {
+                    stack.remove(w);
+                }
+                output_widgets.truncate(new_len);
+                // Overwrite state of the remaining widgets
+                // Note that this does not re-populate the stack, so the visible
+                // child won't be changed.
+                for (w, o) in output_widgets.iter().zip(outputs) {
+                    w.update_state(o);
+                }
+            }
+            else {
+                // Need to add more widgets
+                // Override state of all current widgets. Personal reminder:
+                // zip() is auto-truncated to the shorter of the two iters.
+                for (w, o) in output_widgets.iter().zip(outputs) {
+                    w.update_state(o);
+                }
+                output_widgets.reserve_exact(new_len - curr_len);
+                for o in &outputs[curr_len..] {
+                    let w = MpdOutput::from_output(o, &player);
+                    stack.add_child(&w);
+                    output_widgets.push(w);
+                }
+            }
+        }
+        let _ = self.imp().output_count.replace(new_len);
+        self.set_visible_output(self.imp().current_output.get() as i32);
     }
 
     fn set_visible_output(&self, new_idx: i32) {
