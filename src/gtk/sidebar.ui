@@ -18,6 +18,7 @@
 				<property name="icon_name">music-artist-symbolic</property>
 			</object>
 		</child>
+		<!--
 		<child>
 			<object class="EuphoniaSidebarButton" id="folders_btn">
 				<property name="group">albums_btn</property>
@@ -25,9 +26,11 @@
 				<property name="icon_name">folder-symbolic</property>
 			</object>
 		</child>
+		-->
 		<child>
 			<object class="GtkSeparator"></object>
 		</child>
+		<!--
 		<child>
 			<object class="EuphoniaSidebarButton" id="playlist1_btn">
 				<property name="group">albums_btn</property>
@@ -45,6 +48,7 @@
 		<child>
 			<object class="GtkSeparator"></object>
 		</child>
+		-->
 		<child>
 			<object class="GtkToggleButton" id="queue_btn">
 				<property name="group">albums_btn</property>

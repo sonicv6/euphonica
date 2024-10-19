@@ -385,20 +385,32 @@ impl Player {
     /// change notifier already follows this convention (by sending the queue change
     /// notification before the player one).
     pub fn update_status(&self, status: &Status) {
-        let new_state = match status.state {
-            State::Play => PlaybackState::Playing,
-            State::Pause => PlaybackState::Paused,
-            State::Stop => PlaybackState::Stopped,
+        match status.state {
+            State::Play => {
+                let new_state = PlaybackState::Playing;
+                let old_state = self.imp().state.replace(new_state);
+                if old_state != new_state {
+                    self.maybe_start_polling();
+                    self.notify("playback-state");
+                }
+            },
+            State::Pause => {
+                let new_state = PlaybackState::Paused;
+                let old_state = self.imp().state.replace(new_state);
+                if old_state != new_state {
+                    self.stop_polling();
+                    self.notify("playback-state");
+                }
+            },
+            State::Stop => {
+                let new_state = PlaybackState::Stopped;
+                let old_state = self.imp().state.replace(new_state);
+                if old_state != new_state {
+                    self.stop_polling();
+                    self.notify("playback-state");
+                }
+            },
         };
-        if new_state == PlaybackState::Playing {
-            self.maybe_start_polling();
-        }
-
-        let old_state = self.imp().state.replace(new_state);
-        if old_state != new_state {
-            // These properties are affected by the "state" field.
-            self.notify("playback-state");
-        }
 
         let new_rg = status.replaygain.unwrap_or(ReplayGain::Off);
         let old_rg = self.imp().replaygain.replace(new_rg);
@@ -816,12 +828,10 @@ impl Player {
             let poller_handle = glib::MainContext::default().spawn_local(async move {
                 loop {
                     // Don't poll if not playing
-                    if this.imp().state.get() != PlaybackState::Playing {
-                        break;
-                    }
-                    // Skip poll if channel is full
-                    if !sender.is_full() {
-                        let _ = sender.send_blocking(MpdMessage::Status);
+                    if this.imp().state.get() == PlaybackState::Playing {
+                        if !sender.is_full() {
+                            let _ = sender.send_blocking(MpdMessage::Status);
+                        }
                     }
                     glib::timeout_future_seconds(1).await;
                 }
@@ -835,6 +845,7 @@ impl Player {
 
     /// Stop poller loop. Seekbar should call this when being interacted with.
     pub fn stop_polling(&self) {
+        println!("============== maybe_stop_polling");
         if let Some(handle) = self.imp().poller_handle.take() {
             handle.abort();
         }

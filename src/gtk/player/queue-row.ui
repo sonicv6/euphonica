@@ -37,6 +37,7 @@
         <child>
 
           <object class="GtkBox">
+            <property name="spacing">6</property>
             <child>
               <object class="EuphoniaMarquee" id="song_name">
                 <property name="speed">20</property>
@@ -46,8 +47,8 @@
               </object>
             </child>
             <child>
-							<object class="GtkImage" id="quality_grade"></object>
-						</child>
+              <object class="GtkImage" id="quality_grade"></object>
+            </child>
           </object>
         </child>
         <child>
