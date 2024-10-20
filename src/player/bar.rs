@@ -281,7 +281,7 @@ impl PlayerBar {
                 #[weak]
                 player,
                 move |knob: &VolumeKnob, _| {
-                    player.set_volume(knob.value().round() as i8);
+                    player.send_set_volume(knob.value().round() as i8);
                 }
             )
         );
@@ -293,11 +293,11 @@ impl PlayerBar {
                 player,
                 move |knob: &VolumeKnob, _| {
                     if knob.is_muted() {
-                        player.set_volume(0);
+                        player.send_set_volume(0);
                     }
                     else {
                         // Restore previous volume
-                        player.set_volume(knob.value().round() as i8);
+                        player.send_set_volume(knob.value().round() as i8);
                     }
                 }
             )

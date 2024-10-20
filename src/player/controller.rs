@@ -1,14 +1,24 @@
 extern crate mpd;
 use crate::{
+    application::EuphoniaApplication,
     cache::Cache,
     client::{ClientState, MpdMessage},
     common::{AlbumInfo, QualityGrade, Song},
-    utils::prettify_audio_format,
+    utils::{prettify_audio_format, settings_manager}
 };
+use async_lock::OnceCell as AsyncOnceCell;
+use mpris_server::{
+    zbus::{self, fdo},
+    LocalPlayerInterface, LocalRootInterface, LocalServer,
+    LoopStatus, Metadata as MprisMetadata, PlaybackRate,
+    PlaybackStatus as MprisPlaybackStatus,
+    Property, Signal as MprisSignal, Time, TrackId, Volume,
+};
+
 use adw::subclass::prelude::*;
 use async_channel::Sender;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject};
-use gtk::gdk::Texture;
+use gtk::{gdk::Texture, glib::clone};
 use gtk::{gio, glib, prelude::*};
 use mpd::{status::{AudioFormat, State, Status}, ReplayGain};
 use std::{
@@ -25,6 +35,16 @@ pub enum PlaybackState {
     Stopped,
     Playing,
     Paused,
+}
+
+impl From<PlaybackState> for MprisPlaybackStatus {
+    fn from(ps: PlaybackState) -> Self {
+        match ps {
+            PlaybackState::Stopped => Self::Stopped,
+            PlaybackState::Playing => Self::Playing,
+            PlaybackState::Paused => Self::Paused
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
@@ -91,6 +111,26 @@ impl PlaybackFlow {
     }
 }
 
+impl From<PlaybackFlow> for LoopStatus {
+    fn from(pf: PlaybackFlow) -> Self {
+        match pf {
+            PlaybackFlow::RepeatSingle => Self::Track,
+            PlaybackFlow::Repeat => Self::Playlist,
+            PlaybackFlow::Sequential | PlaybackFlow::Single => Self::None
+        }
+    }
+}
+
+impl From<LoopStatus> for PlaybackFlow {
+    fn from(ls: LoopStatus) -> Self {
+        match ls {
+            LoopStatus::Track => PlaybackFlow::RepeatSingle,
+            LoopStatus::Playlist => PlaybackFlow::Repeat,
+            LoopStatus::None => PlaybackFlow::Sequential
+        }
+    }
+}
+
 fn cycle_replaygain(curr: ReplayGain) -> ReplayGain {
     match curr {
         ReplayGain::Off => ReplayGain::Auto,
@@ -110,6 +150,8 @@ fn get_replaygain_icon_name(mode: ReplayGain) -> &'static str {
 }
 
 mod imp {
+    use crate::application::EuphoniaApplication;
+
     use super::*;
     use glib::{
         ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecObject, ParamSpecString, ParamSpecUInt, ParamSpecUInt64
@@ -143,7 +185,10 @@ mod imp {
         pub poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
         // Set this to true to pause polling even if PlaybackState is Playing.
         // Used by seekbar widgets.
-        pub poll_blocked: Cell<bool>
+        pub poll_blocked: Cell<bool>,
+        pub mpris_server: AsyncOnceCell<LocalServer<super::Player>>,
+        pub mpris_enabled: Cell<bool>,
+        pub app: OnceCell<EuphoniaApplication>
     }
 
     #[glib::object_subclass]
@@ -169,7 +214,10 @@ mod imp {
                 cache: OnceCell::new(),
                 volume: Cell::new(0),
                 poller_handle: RefCell::new(None),
-                poll_blocked: Cell::new(false)
+                poll_blocked: Cell::new(false),
+                mpris_server: AsyncOnceCell::new(),
+                mpris_enabled: Cell::new(false),
+                app: OnceCell::new()
             }
         }
     }
@@ -303,14 +351,27 @@ impl Default for Player {
 }
 
 impl Player {
+    /// Lazily get an MPRIS server. This will always be invoked near the start anyway
+    /// by the initial call to update_status().
+    async fn get_mpris(&self) -> zbus::Result<&LocalServer<Self>> {
+        self.imp().mpris_server.get_or_try_init(|| async {
+            let server = LocalServer::new("org.euphonia.Euphonia", self.clone())
+                .await?;
+            glib::spawn_future_local(server.run());
+            Ok(server)
+        }).await
+    }
+
     pub fn setup(
         &self,
+        application: EuphoniaApplication,
         client_sender: Sender<MpdMessage>,
         client_state: ClientState,
-        cache: Rc<Cache>,
+        cache: Rc<Cache>
     ) {
         let _ = self.imp().client_sender.set(client_sender);
         let _ = self.imp().cache.set(cache);
+        let _ = self.imp().app.set(application);
         // Connect to ClientState signals that announce completion of requests
         client_state.connect_closure(
             "status-changed",
@@ -357,6 +418,69 @@ impl Player {
                 }
             ),
         );
+
+        let settings = settings_manager().child("player");
+        let _ = self.imp().mpris_enabled.replace(settings.boolean("enable-mpris"));
+        settings.connect_changed(
+            Some("enable-mpris"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |settings, _| {
+                    let new_state = settings.boolean("enable-mpris");
+                    let _ = this.imp().mpris_enabled.replace(new_state);
+                    if !new_state {
+                        // Ping once to clear existing controls
+                        this.update_mpris_properties(vec![
+                            Property::Metadata(MprisMetadata::default()),
+                        ]);
+                    }
+                }
+            )
+        );
+    }
+
+    fn update_mpris_properties(&self, properties: Vec<Property>) {
+        glib::spawn_future_local(
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    match this.get_mpris().await {
+                        Ok(mpris) => {
+                            if let Err(err) = mpris.properties_changed(properties).await {
+                                println!("{:?}", err);
+                            }
+                        }
+                        Err(err) => {
+                            println!("No MPRIS server: {:?}", err);
+                        }
+                    }
+                }
+            ),
+        );
+    }
+
+    fn seek_mpris(&self, position: f64) {
+        glib::spawn_future_local(
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    match this.get_mpris().await {
+                        Ok(mpris) => {
+                            let pos_time = Time::from_millis((position * 1000.0).round() as i64);
+                            if let Err(err) = mpris.emit(MprisSignal::Seeked { position: pos_time }).await {
+                                println!("{:?}", err);
+                            }
+                        }
+                        Err(err) => {
+                            println!("No MPRIS server: {:?}", err);
+                        }
+                    }
+                }
+            ),
+        );
     }
 
     // Utility functions
@@ -385,6 +509,7 @@ impl Player {
     /// change notifier already follows this convention (by sending the queue change
     /// notification before the player one).
     pub fn update_status(&self, status: &Status) {
+        let mut mpris_changes: Vec<Property> = Vec::new();
         match status.state {
             State::Play => {
                 let new_state = PlaybackState::Playing;
@@ -392,6 +517,9 @@ impl Player {
                 if old_state != new_state {
                     self.maybe_start_polling();
                     self.notify("playback-state");
+                    if self.imp().mpris_enabled.get() {
+                        mpris_changes.push(Property::PlaybackStatus(MprisPlaybackStatus::Playing));
+                    }
                 }
             },
             State::Pause => {
@@ -400,6 +528,9 @@ impl Player {
                 if old_state != new_state {
                     self.stop_polling();
                     self.notify("playback-state");
+                    if self.imp().mpris_enabled.get() {
+                        mpris_changes.push(Property::PlaybackStatus(MprisPlaybackStatus::Paused));
+                    }
                 }
             },
             State::Stop => {
@@ -408,6 +539,9 @@ impl Player {
                 if old_state != new_state {
                     self.stop_polling();
                     self.notify("playback-state");
+                    if self.imp().mpris_enabled.get() {
+                        mpris_changes.push(Property::PlaybackStatus(MprisPlaybackStatus::Stopped));
+                    }
                 }
             },
         };
@@ -423,11 +557,17 @@ impl Player {
         let old_flow = self.imp().flow.replace(new_flow);
         if old_flow != new_flow {
             self.notify("playback-flow");
+            if self.imp().mpris_enabled.get() {
+                mpris_changes.push(Property::LoopStatus(new_flow.into()));
+            }
         }
 
         let old_rand = self.imp().random.replace(status.random);
         if old_rand != status.random {
             self.notify("random");
+            if self.imp().mpris_enabled.get() {
+                mpris_changes.push(Property::Shuffle(status.random));
+            }
         }
 
         let old_consume = self.imp().consume.replace(status.consume);
@@ -470,7 +610,11 @@ impl Player {
         }
 
         if let Some(new_position_dur) = status.elapsed {
-            self.set_position(new_position_dur.as_secs_f64());
+            let new = new_position_dur.as_secs_f64();
+            let old = self.set_position(new);
+            if new != old && self.imp().mpris_enabled.get() {
+                self.seek_mpris(new);
+            }
         } else {
             self.set_position(0.0);
         }
@@ -482,6 +626,9 @@ impl Player {
         let old_vol = self.imp().volume.replace(new_vol);
         if old_vol != new_vol {
             self.emit_by_name::<()>("volume-changed", &[&new_vol]);
+            if self.imp().mpris_enabled.get() {
+                mpris_changes.push(Property::Volume(new_vol as f64 / 100.0));
+            }
         }
 
         // Update playing status of songs in the queue
@@ -521,6 +668,13 @@ impl Player {
                     self.notify("album");
                     self.notify("album-art");
                 }
+
+                // Update MPRIS side
+                if self.imp().mpris_enabled.get() {
+                    mpris_changes.push(Property::Metadata(new_song.get_mpris_metadata(
+                        self.imp().cache.get().unwrap().clone())
+                    ));
+                }
             }
             else if let Some(song) = self.imp().current_song.borrow().as_ref() {
                 // Just update pos. It's cheap so no need to check.
@@ -536,6 +690,14 @@ impl Player {
                 self.notify("album-art");
                 self.notify("duration");
                 let _ = self.imp().current_song.take();
+                // Update MPRIS side
+                if self.imp().mpris_enabled.get() {
+                    mpris_changes.push(Property::Metadata(
+                        MprisMetadata::builder()
+                            .trackid(TrackId::NO_TRACK)
+                            .build()
+                    ));
+                }
             }
         }
 
@@ -547,6 +709,8 @@ impl Player {
         if old_len > new_len {
             self.imp().queue.splice(new_len, old_len - new_len, &[] as &[Song; 0]);
         }
+
+        self.update_mpris_properties(mpris_changes);
     }
 
     /// Update the queue, optionally with diffs or an entirely new queue.
@@ -559,6 +723,8 @@ impl Player {
     /// before update_status() (by MPD's idle change notifier) and as such has no way to know the
     /// new queue length. The update_status() function will instead truncate the queue to the new
     /// length for us once called.
+    ///
+    /// If an MPRIS server is running, it will also emit property change signals.
     pub fn update_queue(&self, songs: &[Song], replace: bool) {
         let queue = &self.imp().queue;
         if replace {
@@ -735,21 +901,31 @@ impl Player {
     }
 
     /// Set new position. Only sets the property (does not send a seek command to MPD yet).
+    /// Returns the old position.
     /// To apply this new position, call seek().
-    pub fn set_position(&self, new: f64) {
+    pub fn set_position(&self, new: f64) -> f64 {
         let old = self.imp().position.replace(new);
         if new != old {
             self.notify("position");
         }
+        old
     }
 
     /// Seek to current position. Called when the seekbar is released.
-    pub fn seek(&self) {
+    pub fn send_seek(&self) {
         self.send(MpdMessage::SeekCur(self.position())).ok();
     }
 
     pub fn queue(&self) -> gio::ListStore {
         self.imp().queue.clone()
+    }
+
+    fn send_play(&self) {
+        self.send(MpdMessage::Play).ok();
+    }
+
+    fn send_pause(&self) {
+        self.send(MpdMessage::Pause).ok();
     }
 
     pub fn toggle_playback(&self) {
@@ -769,10 +945,10 @@ impl Player {
                 }
             }
             PlaybackState::Playing => {
-                self.send(MpdMessage::Pause).ok();
+                self.send_pause();
             }
             PlaybackState::Paused => {
-                self.send(MpdMessage::Play).ok();
+                self.send_play();
             }
         }
     }
@@ -789,7 +965,7 @@ impl Player {
         self.send(MpdMessage::Clear).ok();
     }
 
-    pub fn set_volume(&self, val: i8) {
+    pub fn send_set_volume(&self, val: i8) {
         let old_vol = self.imp().volume.replace(val);
         if old_vol != val {
             self.send(MpdMessage::Volume(val)).ok();
@@ -845,7 +1021,6 @@ impl Player {
 
     /// Stop poller loop. Seekbar should call this when being interacted with.
     pub fn stop_polling(&self) {
-        println!("============== maybe_stop_polling");
         if let Some(handle) = self.imp().poller_handle.take() {
             handle.abort();
         }
@@ -857,5 +1032,211 @@ impl Player {
 
     pub fn unblock_polling(&self) {
         let _ = self.imp().poll_blocked.replace(false);
+    }
+}
+
+
+impl LocalRootInterface for Player {
+    async fn raise(&self) -> fdo::Result<()> {
+        self.imp().app.get().unwrap().raise_window();
+        Ok(())
+    }
+
+    async fn quit(&self) -> fdo::Result<()> {
+        self.imp().app.get().unwrap().quit();
+        Ok(())
+    }
+
+    async fn can_quit(&self) -> fdo::Result<bool> {
+        Ok(true)
+    }
+
+    async fn fullscreen(&self) -> fdo::Result<bool> {
+        Ok(self.imp().app.get().unwrap().is_fullscreen())
+    }
+
+    async fn set_fullscreen(&self, fullscreen: bool) -> zbus::Result<()> {
+        // Very funny, why is this returning a zbus result instead of fdo?
+        self.imp().app.get().unwrap().set_fullscreen(fullscreen);
+        Ok(())
+    }
+
+    async fn can_set_fullscreen(&self) -> fdo::Result<bool> {
+        Ok(true)
+    }
+
+    async fn can_raise(&self) -> fdo::Result<bool> {
+        Ok(true)
+    }
+
+    async fn has_track_list(&self) -> fdo::Result<bool> {
+        // TODO
+        Ok(false)
+    }
+
+    async fn identity(&self) -> fdo::Result<String> {
+        Ok("Euphonia".to_string())
+    }
+
+    async fn desktop_entry(&self) -> fdo::Result<String> {
+        Ok("org.euphonia.Euphonia".to_string())
+    }
+
+    async fn supported_uri_schemes(&self) -> fdo::Result<Vec<String>> {
+        Ok(vec![])
+    }
+
+    async fn supported_mime_types(&self) -> fdo::Result<Vec<String>> {
+        Ok(vec![])
+    }
+}
+
+impl LocalPlayerInterface for Player {
+    async fn next(&self) -> fdo::Result<()> {
+        self.next_song();
+        Ok(())
+    }
+
+    async fn previous(&self) -> fdo::Result<()> {
+        self.prev_song();
+        Ok(())
+    }
+
+    async fn play(&self) -> fdo::Result<()> {
+        self.send_play();
+        Ok(())
+    }
+
+    async fn pause(&self) -> fdo::Result<()> {
+        self.send_pause();
+        Ok(())
+    }
+
+    async fn play_pause(&self) -> fdo::Result<()> {
+        self.toggle_playback();
+        Ok(())
+    }
+
+    async fn stop(&self) -> fdo::Result<()> {
+        let _ = self.send(MpdMessage::Stop);
+        Ok(())
+    }
+
+    async fn seek(&self, offset: Time) -> fdo::Result<()> {
+        let curr_pos = self.imp().position.get();
+        let new_pos = curr_pos + (offset.as_millis() as f64 / 1000.0);
+        let _ = self.imp().position.replace(new_pos);
+        self.send_seek();
+        Ok(())
+    }
+
+    /// Use MPD's queue ID to construct track_id in this format:
+    /// /org/euphonia/Euphonia/<queue_id>
+    async fn set_position(&self, track_id: TrackId, position: Time) -> fdo::Result<()> {
+        if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            if track_id.as_str().split("/").last().unwrap() == &song.get_queue_id().to_string() {
+                let _ = self.imp().position.replace(position.as_millis() as f64 / 1000.0);
+                self.send_seek();
+                return Ok(());
+            }
+            return Err(fdo::Error::Failed("Song has already changed".to_owned()));
+        }
+        return Err(fdo::Error::Failed("No song is being played".to_owned()));
+    }
+
+    async fn open_uri(&self, _uri: String) -> fdo::Result<()> {
+        Err(fdo::Error::NotSupported("Euphonia currently does not support playing local files via MPD".to_owned()))
+    }
+
+    async fn playback_status(&self) -> fdo::Result<MprisPlaybackStatus> {
+        Ok(self.imp().state.get().into())
+    }
+
+    async fn loop_status(&self) -> fdo::Result<LoopStatus> {
+        Ok(self.imp().flow.get().into())
+    }
+
+    async fn set_loop_status(&self, loop_status: LoopStatus) -> zbus::Result<()> {
+        let flow: PlaybackFlow = loop_status.into();
+        let _ = self.send(MpdMessage::SetPlaybackFlow(flow));
+        Ok(())
+    }
+
+    async fn rate(&self) -> fdo::Result<PlaybackRate> {
+        Ok(PlaybackRate::from(1.0))
+    }
+
+    async fn set_rate(&self, _rate: PlaybackRate) -> zbus::Result<()> {
+        Err(zbus::Error::from(fdo::Error::NotSupported(
+            "Euphonia currently does not support changing playback rate".to_owned())
+        ))
+    }
+
+    async fn shuffle(&self) -> fdo::Result<bool> {
+        Ok(self.imp().random.get())
+    }
+
+    async fn set_shuffle(&self, shuffle: bool) -> zbus::Result<()> {
+        self.set_random(shuffle);
+        Ok(())
+    }
+
+    async fn metadata(&self) -> fdo::Result<MprisMetadata> {
+        println!("MPRIS requested metadata");
+        if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            Ok(song.get_mpris_metadata(self.imp().cache.get().unwrap().clone()))
+        }
+        else {
+            Ok(
+                MprisMetadata::builder()
+                    .trackid(TrackId::NO_TRACK)
+                    .build()
+            )
+        }
+    }
+
+    async fn volume(&self) -> fdo::Result<Volume> {
+        Ok(self.imp().volume.get() as f64 / 100.0)
+    }
+
+    async fn set_volume(&self, volume: Volume) -> zbus::Result<()> {
+        self.send_set_volume((volume * 100.0).round() as i8);
+        Ok(())
+    }
+
+    async fn position(&self) -> fdo::Result<Time> {
+        Ok(Time::from_millis((self.imp().position.get() * 1000.0).round() as i64))
+    }
+
+    async fn minimum_rate(&self) -> fdo::Result<PlaybackRate> {
+        Ok(PlaybackRate::from(1.0))
+    }
+
+    async fn maximum_rate(&self) -> fdo::Result<PlaybackRate> {
+        Ok(PlaybackRate::from(1.0))
+    }
+
+    async fn can_go_next(&self) -> fdo::Result<bool> {
+        Ok(self.imp().mpris_enabled.get())
+    }
+
+    async fn can_go_previous(&self) -> fdo::Result<bool> {
+        Ok(self.imp().mpris_enabled.get())
+    }
+
+    async fn can_play(&self) -> fdo::Result<bool> {
+        Ok(self.imp().mpris_enabled.get())
+    }
+
+    async fn can_pause(&self) -> fdo::Result<bool> {
+        Ok(self.imp().mpris_enabled.get())
+    }
+
+    async fn can_seek(&self) -> fdo::Result<bool> {
+        Ok(self.imp().mpris_enabled.get())
+    }
+
+    async fn can_control(&self) -> fdo::Result<bool> {
+        Ok(self.imp().mpris_enabled.get())
     }
 }

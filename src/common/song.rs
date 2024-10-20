@@ -1,16 +1,15 @@
+use mpris_server::{zbus::zvariant::ObjectPath, Time};
 use time::{Date, Month};
 use core::time::Duration;
 use std::{
-    path::Path,
-    cell::{Cell, OnceCell},
-    ffi::OsStr
+    cell::{Cell, OnceCell}, ffi::OsStr, path::Path, rc::Rc
 };
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use mpd::status::AudioFormat;
 
-use crate::utils::strip_filename_linux;
+use crate::{cache::Cache, meta_providers::Metadata, utils::strip_filename_linux};
 
 use super::{
     ArtistInfo,
@@ -346,6 +345,41 @@ impl Song {
 
     pub fn get_mbid(&self) -> Option<&str> {
         self.get_info().mbid.as_deref()
+    }
+
+    pub fn get_mpris_metadata(&self, cache: Rc<Cache>) -> mpris_server::Metadata {
+        let mut meta = mpris_server::Metadata::builder()
+            .title(self.get_name())
+            .trackid(
+                ObjectPath::from_string_unchecked(
+                    format!("/org/euphonia/Euphonia/{}", self.get_queue_id())
+                )
+            )
+            .length(Time::from_millis(self.get_duration() as i64))
+            .build();
+        if let Some(album) = self.get_album() {
+            meta.set_album(Some(&album.title));
+            if album.artists.len() > 0 {
+                meta.set_album_artist(Some(
+                    album.artists.iter().map(|a| a.name.as_ref()).collect::<Vec<&str>>()
+                ));
+            }
+        }
+        let artists = self.get_artists();
+        if artists.len() > 0 {
+            meta.set_artist(Some(
+                artists.iter().map(|a| a.name.as_ref()).collect::<Vec<&str>>()
+            ))
+        }
+
+        // Album art, if available
+        let thumbnail_path = cache.get_path_for(&Metadata::AlbumArt(self.get_uri().to_owned(), true));
+
+        if thumbnail_path.exists() {
+            meta.set_art_url(Some(thumbnail_path.into_os_string().into_string().unwrap()));
+        }
+        // TODO: disc & track num
+        meta
     }
 }
 

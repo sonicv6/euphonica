@@ -131,6 +131,9 @@
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.player" path="/org/euphonia/Euphonia/player/">
+		<key name="enable-mpris" type="b">
+			<default>true</default>
+		</key>
 		<key name="use-album-art-as-bg" type="b">
 			<default>true</default>
 		</key>

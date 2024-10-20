@@ -227,7 +227,7 @@ impl PlaybackControls {
                 player,
                 move |_: Seekbar| {
                     player.unblock_polling();
-                    player.seek();
+                    player.send_seek();
                     // Player will start polling again on next status update,
                     // which should be triggered by us seeking.
                 }

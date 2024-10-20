@@ -47,6 +47,7 @@ pub enum MpdMessage {
     Random(bool),
     Play,
     Pause,
+    Stop,
     Add(String), // Add by URI
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
@@ -573,6 +574,7 @@ impl MpdWrapper {
             MpdMessage::DeleteId(id) => self.delete_at(id, true),
             MpdMessage::PlayPos(pos) => self.play_at(pos, false),
             MpdMessage::Pause => self.pause(true),
+            MpdMessage::Stop => self.stop(),
             MpdMessage::Prev => self.prev(),
             MpdMessage::Next => self.next(),
             MpdMessage::Clear => self.clear_queue(),
@@ -873,6 +875,13 @@ impl MpdWrapper {
             let _ = client.pause(is_pause);
         }
     }
+
+    pub fn stop(self: Rc<Self>) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.stop();
+        }
+    }
+
     pub fn prev(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
