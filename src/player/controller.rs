@@ -1182,7 +1182,6 @@ impl LocalPlayerInterface for Player {
     }
 
     async fn metadata(&self) -> fdo::Result<MprisMetadata> {
-        println!("MPRIS requested metadata");
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             Ok(song.get_mpris_metadata(self.imp().cache.get().unwrap().clone()))
         }

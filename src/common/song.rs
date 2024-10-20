@@ -373,10 +373,12 @@ impl Song {
         }
 
         // Album art, if available
-        let thumbnail_path = cache.get_path_for(&Metadata::AlbumArt(self.get_uri().to_owned(), true));
-
+        let thumbnail_path = cache.get_path_for(
+            &Metadata::AlbumArt(strip_filename_linux(self.get_uri()).to_owned(), true)
+        );
         if thumbnail_path.exists() {
-            meta.set_art_url(Some(thumbnail_path.into_os_string().into_string().unwrap()));
+            let path_string = "file://".to_owned() + &thumbnail_path.into_os_string().into_string().unwrap();
+            meta.set_art_url(Some(path_string));
         }
         // TODO: disc & track num
         meta

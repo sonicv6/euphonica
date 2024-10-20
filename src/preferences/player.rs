@@ -30,6 +30,8 @@ mod imp {
         pub vol_knob_unit: TemplateChild<adw::ComboRow>,
         #[template_child]
         pub vol_knob_sensitivity: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub enable_mpris: TemplateChild<adw::SwitchRow>,
     }
 
     #[glib::object_subclass]
@@ -148,6 +150,15 @@ impl PlayerPreferences {
                 "vol-knob-sensitivity",
                 &vol_knob_sensitivity,
                 "value"
+            )
+            .build();
+
+        let enable_mpris = self.imp().enable_mpris.get();
+        player_settings
+            .bind(
+                "enable-mpris",
+                &enable_mpris,
+                "active"
             )
             .build();
     }
