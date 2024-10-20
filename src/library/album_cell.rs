@@ -1,10 +1,9 @@
 use std::{
-    cell::RefCell,
+    cell::{RefCell, OnceCell},
     rc::Rc
 };
 use gtk::{
     glib,
-    gdk,
     prelude::*,
     subclass::prelude::*,
     CompositeTemplate,
@@ -14,7 +13,6 @@ use gtk::{
 use glib::{
     closure_local,
     Object,
-    Binding,
     signal::SignalHandlerId
 };
 
@@ -22,15 +20,13 @@ use crate::{
     cache::{
         placeholders::ALBUMART_PLACEHOLDER, Cache, CacheState
     }, common::{
-        Album, AlbumInfo, QualityGrade
+        Album, AlbumInfo
     }
 };
 
 mod imp {
     use glib::{
-        ParamSpec,
-        ParamSpecString,
-        ParamSpecEnum
+        ParamSpec, ParamSpecString
     };
     use once_cell::sync::Lazy;
     use super::*;
@@ -46,8 +42,10 @@ mod imp {
         pub artist: TemplateChild<Label>,
         #[template_child]
         pub quality_grade: TemplateChild<Image>,
+        pub album: RefCell<Option<Album>>,
         // Vector holding the bindings to properties of the Album GObject
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub cache: OnceCell<Rc<Cache>>
     }
 
     // The central trait for subclassing a GObject
@@ -133,9 +131,27 @@ glib::wrapper! {
 }
 
 impl AlbumCell {
-    pub fn new(item: &gtk::ListItem) -> Self {
+    pub fn new(item: &gtk::ListItem, cache: Rc<Cache>) -> Self {
         let res: Self = Object::builder().build();
+        res.imp().cache.set(cache).expect("AlbumCell cannot bind to cache");
         res.setup(item);
+        let _ = res.imp().cover_signal_id.replace(
+            Some(res.imp().cache.get().unwrap().get_cache_state().connect_closure(
+                "album-art-downloaded",
+                false,
+                closure_local!(
+                    #[weak(rename_to = this)]
+                    res,
+                    move |_: CacheState, folder_uri: String| {
+                        if let Some(album) = this.imp().album.borrow().as_ref() {
+                            if album.get_uri() == &folder_uri {
+                                this.update_album_art(album.get_info());
+                            }
+                        }
+                    }
+                )
+            ))
+        );
         res
     }
 
@@ -157,8 +173,8 @@ impl AlbumCell {
             .bind(self, "quality-grade", gtk::Widget::NONE);
     }
 
-    fn update_album_art(&self, info: &AlbumInfo, cache: Rc<Cache>) {
-        if let Some(tex) = cache.load_local_album_art(info, false) {
+    fn update_album_art(&self, info: &AlbumInfo) {
+        if let Some(tex) = self.imp().cache.get().unwrap().load_cached_album_art(info, true, true) {
             self.imp().cover.set_paintable(Some(&tex));
         }
         else {
@@ -166,34 +182,21 @@ impl AlbumCell {
         }
     }
 
-    pub fn bind(&self, album: &Album, cache: Rc<Cache>) {
+    pub fn bind(&self, album: &Album) {
         // The string properties are bound using property expressions in setup().
         // Here we only need to manually bind to the cache controller to fetch album art.
         // Set once first (like sync_create)
-        self.update_album_art(album.get_info(), cache.clone());
-        let cover_binding = cache.get_cache_state().connect_closure(
-            "album-art-downloaded",
-            false,
-            closure_local!(
-                #[weak(rename_to = this)]
-                self,
-                #[strong]
-                album,
-                #[weak]
-                cache,
-                move |_: CacheState, folder_uri: String| {
-                    if album.get_uri() == folder_uri {
-                        this.update_album_art(album.get_info(), cache)
-                    }
-                }
-            )
-        );
-        self.imp().cover_signal_id.replace(Some(cover_binding));
+        self.update_album_art(album.get_info());
+        let _ = self.imp().album.replace(Some(album.clone()));
     }
 
-    pub fn unbind(&self, cache: Rc<Cache>) {
+    pub fn unbind(&self) {
+        self.imp().album.replace(None).unwrap();
+    }
+
+    pub fn teardown(&self) {
         if let Some(id) = self.imp().cover_signal_id.take() {
-            cache.get_cache_state().disconnect(id);
+            self.imp().cache.get().unwrap().get_cache_state().disconnect(id);
         }
     }
 }

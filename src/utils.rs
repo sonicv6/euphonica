@@ -183,10 +183,11 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {
 /// thumbnail-image-size in the gschema respectively.
 pub fn resize_image(dyn_img: DynamicImage) -> (DynamicImage, DynamicImage) {
     let settings = settings_manager().child("library");
-    let hires_size = settings.uint("hires-image-size");
+    // Avoid resizing to larger than the original image.
+    let hires_size = settings.uint("hires-image-size").min(dyn_img.width().max(dyn_img.height()));
     let thumbnail_size = settings.uint("thumbnail-image-size");
     (
-        dyn_img.resize(hires_size, hires_size, FilterType::CatmullRom),
+        dyn_img.resize(hires_size, hires_size, FilterType::Triangle),
         dyn_img.thumbnail(thumbnail_size, thumbnail_size)
     )
 }
@@ -211,7 +212,7 @@ pub fn build_aho_corasick_automaton(phrases: &[&str]) -> Option<AhoCorasick> {
         None
     }
     else {
-        println!("[AhoCorasick] Configured to detect the following: {:?}", phrases);
+        // println!("[AhoCorasick] Configured to detect the following: {:?}", phrases);
         Some(AhoCorasick::new(phrases).unwrap())
     }
 }
@@ -237,28 +238,28 @@ fn build_artist_delim_exceptions_automaton() -> Option<AhoCorasick> {
 }
 
 pub static ARTIST_DELIM_AUTOMATON: Lazy<RwLock<Option<AhoCorasick>>> = Lazy::new(|| {
-    println!("Initialising Aho-Corasick automaton for artist tag delimiters...");
+    // println!("Initialising Aho-Corasick automaton for artist tag delimiters...");
     let opt_automaton = build_artist_delim_automaton();
     RwLock::new(opt_automaton)
 });
 
 pub fn rebuild_artist_delim_automaton() {
     if let Ok(mut automaton) = ARTIST_DELIM_AUTOMATON.write() {
-        println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
+        // println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
         let new = build_artist_delim_automaton();
         *automaton = new;
     }
 }
 
 pub static ARTIST_DELIM_EXCEPTION_AUTOMATON: Lazy<RwLock<Option<AhoCorasick>>> = Lazy::new(|| {
-    println!("Initialising Aho-Corasick automaton for artist tag delimiter exceptions...");
+    // println!("Initialising Aho-Corasick automaton for artist tag delimiter exceptions...");
     let opt_automaton = build_artist_delim_exceptions_automaton();
     RwLock::new(opt_automaton)
 });
 
 pub fn rebuild_artist_delim_exception_automaton() {
     if let Ok(mut automaton) = ARTIST_DELIM_EXCEPTION_AUTOMATON.write() {
-        println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
+        // println!("Rebuilding Aho-Corasick automaton for artist tag delimiters...");
         let new = build_artist_delim_exceptions_automaton();
         *automaton = new;
     }

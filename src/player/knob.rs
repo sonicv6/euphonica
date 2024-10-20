@@ -289,7 +289,8 @@ impl VolumeKnob {
                         fg.green() as f64,
                         fg.blue() as f64,
                     );
-                    cr.set_line_width(5.0);
+                    // Match seekbar thickness
+                    cr.set_line_width(4.0);
                     cr.set_line_cap(LineCap::Round);
                     // Starting
                     // At 0 => 5pi/4

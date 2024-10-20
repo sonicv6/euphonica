@@ -157,7 +157,7 @@ impl AlbumContentView {
         let wiki_text = self.imp().wiki_text.get();
         let wiki_link = self.imp().wiki_link.get();
         let wiki_attrib = self.imp().wiki_attrib.get();
-        if let Some(meta) = cache.load_local_album_meta(
+        if let Some(meta) = cache.load_cached_album_meta(
             album.get_info()
         ) {
             if let Some(wiki) = meta.wiki {
@@ -341,7 +341,7 @@ impl AlbumContentView {
     /// On false, we will want to call cache.ensure_local_album_art()
     fn update_cover(&self, info: &AlbumInfo) -> bool {
         if let Some(cache) = self.imp().cache.get() {
-            if let Some(tex) = cache.load_local_album_art(info, false) {
+            if let Some(tex) = cache.load_cached_album_art(info, false, true) {
                 self.imp().cover.set_paintable(Some(&tex));
                 return true;
             }
@@ -374,6 +374,7 @@ impl AlbumContentView {
         // Save binding
         bindings.push(artist_binding);
 
+        println!("[AlbumContentView] Updating meta");
         self.update_meta(&album);
         let release_date_binding = album
             .bind_property("release_date", &release_date_label, "label")
@@ -409,11 +410,8 @@ impl AlbumContentView {
         bindings.push(release_date_viz_binding);
 
         let info = album.get_info();
-        if !self.update_cover(info) {
-            if let Some(cache) = self.imp().cache.get() {
-                cache.ensure_local_album_art(info);
-            }
-        }
+        println!("[AlbumContentView] Updating cover");
+        self.update_cover(info);
 
         // Save reference to album object
         let sel_model = gtk::NoSelection::new(Some(self.imp().song_list.clone()));

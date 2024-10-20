@@ -67,10 +67,10 @@
 			<default>false</default>
 		</key>
 		<key name="hires-image-size" type="u">
-			<default>256</default>
+			<default>1024</default>
 		</key>
 		<key name="thumbnail-image-size" type="u">
-			<default>64</default>
+			<default>128</default>
 		</key>
 	</schema>
 
@@ -131,6 +131,9 @@
 	</schema>
 
 	<schema id="org.euphonia.Euphonia.player" path="/org/euphonia/Euphonia/player/">
+		<key name="enable-mpris" type="b">
+			<default>true</default>
+		</key>
 		<key name="use-album-art-as-bg" type="b">
 			<default>true</default>
 		</key>

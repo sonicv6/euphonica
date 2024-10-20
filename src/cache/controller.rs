@@ -15,19 +15,17 @@ extern crate fasthash;
 extern crate bson;
 extern crate polodb_core;
 use async_channel::{Sender, Receiver};
+use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
 use std::{
-    cell::OnceCell, fmt, fs::create_dir_all, path::PathBuf, rc::Rc, sync::{Arc, RwLock}, thread, time::Duration
+    cell::OnceCell, fmt, fs::create_dir_all, path::PathBuf, rc::Rc, sync::{Arc, RwLock}
 };
 use gtk::{
     glib,
     gio,
     gdk::Texture
 };
-use gio::{
-    prelude::*,
-    Settings
-};
+use gio::prelude::*;
 use glib::clone;
 use fasthash::murmur2;
 
@@ -60,20 +58,30 @@ enum CacheTask {
     ArtistMeta(bson::Document, PathBuf, PathBuf)
 }
 
+// In-memory image cache. Declared here to ease usage between threads as Stretto
+// is already internally-mutable.
+// gdk::Textures are GObjects, which by themselves are boxed reference-counted.
+// This means that even if a texture is evicted from this cache, as long as there
+// is a widget on screen still using it, it will not actually leave RAM.
+// This cache merely holds an additional reference to each texture to keep them
+// around when no widget using them are being displayed, so as to reduce disk
+// thrashing while quickly scrolling through like a million albums.
+// This cache's keys are uri:<folder-level URI>s (for album arts) or artist:<name>
+// (for avatars).
+fn init_image_cache() -> stretto::Cache<(String, bool), Texture> {
+    // TODO: figure out max cost based on user-selectable RAM limit
+    // TODO: figure out cost of textures based on user-selectable resolution
+    // let setting = settings_manager();
+    stretto::Cache::new(327680, 32768).unwrap()
+}
+
+static IMAGE_CACHE: Lazy<stretto::Cache<(String, bool), Texture>> = Lazy::new(|| {
+    init_image_cache()
+});
+
 pub struct Cache {
     albumart_path: PathBuf,
     avatar_path: PathBuf,
-    // In-memory image cache.
-    // gdk::Textures are GObjects, which by themselves are boxed reference-counted.
-    // This means that even if a texture is evicted from this cache, as long as there
-    // is a widget on screen still using it, it will not actually leave RAM.
-    // This cache merely holds an additional reference to each texture to keep them
-    // around when no widget using them are being displayed, so as to reduce disk
-    // thrashing while quickly scrolling through like a million albums.
-    //
-    // This cache's keys are uri:<folder-level URI>s (for album arts) or artist:<name>
-    // (for avatars).
-    image_cache: stretto::Cache<(String, bool), Texture>,
     // Embedded document database for caching responses from metadata providers.
     // Think MongoDB x SQLite x Rust.
     doc_cache: Arc<RwLock<polodb_core::Database>>,
@@ -81,8 +89,7 @@ pub struct Cache {
     fg_sender: Sender<Metadata>,
     bg_sender: Sender<CacheTask>,
     meta_providers: Arc<RwLock<MetadataChain>>,
-    state: CacheState,
-    settings: Settings
+    state: CacheState
 }
 
 impl fmt::Debug for Cache {
@@ -129,8 +136,6 @@ impl Cache {
         create_dir_all(&avatar_path)
             .expect("ERROR: cannot create albumart cache folder");
 
-        // TODO: figure out max cost based on user-selectable RAM limit
-        // TODO: figure out cost of textures based on user-selectable resolution
         let mut doc_path = app_cache_path.clone();
 
         let providers = init_meta_provider_chain();
@@ -139,7 +144,6 @@ impl Cache {
         let cache = Self {
             albumart_path,
             avatar_path,
-            image_cache: stretto::Cache::new(10240, 1024).unwrap(),
             doc_cache: Arc::new(RwLock::new(
                 polodb_core::Database::open_file(doc_path).expect("ERROR: cannot create a metadata database")
             )),
@@ -147,8 +151,7 @@ impl Cache {
             mpd_sender: OnceCell::new(),
             fg_sender: fg_sender.clone(),
             bg_sender,
-            state: CacheState::default(),
-            settings: settings_manager().child("client")
+            state: CacheState::default()
         };
         let res = Rc::new(cache);
 
@@ -157,7 +160,6 @@ impl Cache {
     }
     /// Re-initialise list of providers when priority order is changed
     pub fn reinit_meta_providers(&self) {
-        println!("Reinitialising metadata providers...");
         let mut curr_providers = self.meta_providers.write().unwrap();
         *curr_providers = init_meta_provider_chain();
     }
@@ -186,7 +188,6 @@ impl Cache {
                 // See Receiver::next doc for why this is needed.
                 let mut receiver = std::pin::pin!(bg_receiver);
 
-                let settings = settings_manager().child("metaprovider");
                 while let Some(request) = receiver.next().await {
                     match request {
                         CacheTask::AlbumMeta(folder_uri, key) => {
@@ -198,19 +199,33 @@ impl Cache {
                                 #[strong]
                                 providers,
                                 move || {
-                                    let res = providers.read().unwrap().get_album_meta(key.clone(), None);
-                                    if let Some(album) = res {
-                                        let _ = doc_cache.write().unwrap().collection::<models::AlbumMeta>("album").insert_one(album);
-                                        let _ = fg_sender.send_blocking(Metadata::AlbumMeta(folder_uri));
-                                    }
-                                    else {
-                                        // Push an empty AlbumMeta to block further calls for this album.
-                                        println!("No album meta could be found for {}. Pushing empty document...", &folder_uri);
-                                        let _ = doc_cache.write().unwrap().collection::<models::AlbumMeta>("album").insert_one(
-                                            models::AlbumMeta::from_key(&key)
-                                        );
-                                    }
-                                    sleep_after_request();
+                                    // Check whether there is one already
+                                    let existing = doc_cache
+                                        .read()
+                                        .unwrap()
+                                        .collection::<models::AlbumMeta>("album")
+                                        .find_one(key.clone());
+                                    if let Ok(None) = existing {
+                                            let res = providers.read().unwrap().get_album_meta(key.clone(), None);
+                                            if let Some(album) = res {
+                                                let _ = doc_cache
+                                                    .write()
+                                                    .unwrap()
+                                                    .collection::<models::AlbumMeta>("album")
+                                                    .insert_one(album);
+                                                let _ = fg_sender.send_blocking(Metadata::AlbumMeta(folder_uri));
+                                            }
+                                            else {
+                                                // Push an empty AlbumMeta to block further calls for this album.
+                                                println!("No album meta could be found for {}. Pushing empty document...", &folder_uri);
+                                                let _ = doc_cache
+                                                    .write()
+                                                    .unwrap()
+                                                    .collection::<models::AlbumMeta>("album")
+                                                    .insert_one(models::AlbumMeta::from_key(&key));
+                                            }
+                                            sleep_after_request();
+                                        }
                                 }
                             )).await;
                         },
@@ -223,42 +238,50 @@ impl Cache {
                                 #[strong]
                                 providers,
                                 move || {
-                                    // Guaranteed to have this field so just unwrap it
-                                    let name = key.get("name").unwrap().as_str().unwrap().to_owned();
-                                    let res = providers.read().unwrap().get_artist_meta(key.clone(), None);
-                                    if let Some(artist) = res {
-                                        // Try to download artist avatar too
-                                        let res = get_best_image(&artist.image);
-                                        if res.is_ok() {
-                                            let (hires, thumbnail) = resize_image(res.unwrap());
-                                            if !path.exists() || !thumbnail_path.exists() {
-                                                if let (Ok(_), Ok(_)) = (
-                                                    hires.save(path),
-                                                    thumbnail.save(thumbnail_path)
-                                                ) {
-                                                    let _ = fg_sender.send_blocking(Metadata::ArtistAvatar(name.clone(), false));
+                                    // Check whether there is one already
+                                    let existing = doc_cache
+                                        .read()
+                                        .unwrap()
+                                        .collection::<models::ArtistMeta>("artist")
+                                        .find_one(key.clone());
+                                    if let Ok(None) = existing {
+                                            // Guaranteed to have this field so just unwrap it
+                                            let name = key.get("name").unwrap().as_str().unwrap().to_owned();
+                                            let res = providers.read().unwrap().get_artist_meta(key.clone(), None);
+                                            if let Some(artist) = res {
+                                                // Try to download artist avatar too
+                                                let res = get_best_image(&artist.image);
+                                                if res.is_ok() {
+                                                    let (hires, thumbnail) = resize_image(res.unwrap());
+                                                    if !path.exists() || !thumbnail_path.exists() {
+                                                        if let (Ok(_), Ok(_)) = (
+                                                            hires.save(path),
+                                                            thumbnail.save(thumbnail_path)
+                                                        ) {
+                                                            let _ = fg_sender.send_blocking(Metadata::ArtistAvatar(name.clone(), false));
+                                                        }
+                                                    }
                                                 }
+                                                else {
+                                                    println!("[Cache] Failed to download artist avatar: {:?}", res.err());
+                                                }
+                                                let _ = doc_cache.write().unwrap().collection::<models::ArtistMeta>("artist").insert_one(artist);
+                                                let _ = fg_sender.send_blocking(Metadata::ArtistMeta(name));
                                             }
-                                        }
-                                        else {
-                                            println!("[Cache] Failed to download artist avatar: {:?}", res.err());
-                                        }
-                                        let _ = doc_cache.write().unwrap().collection::<models::ArtistMeta>("artist").insert_one(artist);
-                                        let _ = fg_sender.send_blocking(Metadata::ArtistMeta(name));
-                                    }
 
-                                    else {
-                                        // Push an empty ArtistMeta to block further calls for this album.
-                                        println!("No artist meta could be found for {:?}. Pushing empty document...", &key);
-                                        let _ = doc_cache.write().unwrap().collection::<models::ArtistMeta>("artist").insert_one(
-                                            models::ArtistMeta::from_key(&key)
-                                        );
-                                    }
-                                    sleep_after_request();
+                                            else {
+                                                // Push an empty ArtistMeta to block further calls for this album.
+                                                println!("No artist meta could be found for {:?}. Pushing empty document...", &key);
+                                                let _ = doc_cache.write().unwrap().collection::<models::ArtistMeta>("artist").insert_one(
+                                                    models::ArtistMeta::from_key(&key)
+                                                );
+                                            }
+                                            sleep_after_request();
+                                        }
                                 }
                             )).await;
                         },
-                        CacheTask::AlbumArt(folder_uri, key, path, thumbnail_path) => {
+                        CacheTask::AlbumArt(folder_uri, bson_key, path, thumbnail_path) => {
                             let _ = gio::spawn_blocking(clone!(
                                 #[strong]
                                 fg_sender,
@@ -269,7 +292,7 @@ impl Cache {
                                         .read()
                                         .unwrap()
                                         .collection::<models::AlbumMeta>("album")
-                                        .find_one(key) {
+                                        .find_one(bson_key) {
                                             let res = get_best_image(&meta.image);
                                             if res.is_ok() {
                                                 let (hires, thumbnail) = resize_image(res.unwrap());
@@ -317,8 +340,8 @@ impl Cache {
                     }
                     Metadata::AlbumArtNotAvailable(folder_uri, key) => {
                         println!("MPD does not have album art for {}, fetching remotely...", &folder_uri);
-                        let path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), false));
-                        let thumbnail_path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), true));
+                        let path = self.get_path_for(&Metadata::AlbumArt(folder_uri.clone(), false));
+                        let thumbnail_path = self.get_path_for(&Metadata::AlbumArt(folder_uri.clone(), true));
                         let _ = this.bg_sender.send_blocking(
                             CacheTask::AlbumArt(folder_uri, key, path, thumbnail_path)
                         );
@@ -335,15 +358,15 @@ impl Cache {
         self.state.clone()
     }
 
-    pub fn get_path_for(&self, content_type: Metadata) -> PathBuf {
+    pub fn get_path_for(&self, content_type: &Metadata) -> PathBuf {
         match content_type {
             // Returns the full-resolution path.
             // Do not include filename in URI.
             Metadata::AlbumArt(folder_uri, thumbnail) => {
-                let hashed = murmur2::hash64(folder_uri).to_string();
+                let hashed = murmur2::hash64(&folder_uri).to_string();
 
                 let mut path = self.albumart_path.clone();
-                if thumbnail {
+                if *thumbnail {
                     path.push(hashed + "_thumb.png");
                 }
                 else {
@@ -352,10 +375,10 @@ impl Cache {
                 path
             },
             Metadata::ArtistAvatar(name, thumbnail) => {
-                let hashed = murmur2::hash64(name).to_string();
+                let hashed = murmur2::hash64(&name).to_string();
 
                 let mut path = self.avatar_path.clone();
-                if thumbnail {
+                if *thumbnail {
                     path.push(hashed + "_thumb.png");
                 }
                 else {
@@ -367,27 +390,20 @@ impl Cache {
         }
     }
 
-    pub fn load_local_album_art(&self, album: &AlbumInfo, thumbnail: bool) -> Option<Texture> {
-        // This is a public method to allow other controllers to get album arts for
+    pub fn load_cached_album_art(&self, album: &AlbumInfo, thumbnail: bool, schedule: bool) -> Option<Texture> {
+        // This is a public method to allow other controllers to get cached album arts for
         // specific songs/albums directly if possible.
         // Without this, they can only get the textures via signals, which have overheads.
-        // First try to get from cache
         let folder_uri = album.uri.to_owned();
         let key = (format!("uri:{}", &folder_uri), thumbnail);
-        if let Some(tex) = self.image_cache.get(&key) {
+        if let Some(tex) = IMAGE_CACHE.get(&key) {
             // println!("Cache hit:  {} (thumbnail: {})", folder_uri, thumbnail);
             // Cloning GObjects is cheap since they're just references
             return Some(tex.value().clone());
         }
-        // If missed, try loading from disk into cache
-        // println!("Cache  miss: {} (thumbnail: {})", folder_uri, thumbnail);
-        let path = self.get_path_for(Metadata::AlbumArt(folder_uri, thumbnail));
-        if path.exists() {
-            if let Ok(tex) = Texture::from_filename(path) {
-                self.image_cache.insert(key, tex.clone(), if thumbnail {1} else {16});
-                self.image_cache.wait().unwrap();
-                return Some(tex);
-            }
+        // If missed, try loading from disk into cache or fetch remotely
+        if schedule {
+            self.ensure_cached_album_art(album, thumbnail);
         }
         None
     }
@@ -395,47 +411,63 @@ impl Cache {
     /// Convenience method to check whether album art for a given album is locally available,
     /// and if not, queue its downloading from MPD.
     /// If MPD doesn't have one locally, we'll try fetching from all the enabled metadata providers.
-    pub fn ensure_local_album_art(&self, album: &AlbumInfo) {
+    pub fn ensure_cached_album_art(&self, album: &AlbumInfo, thumbnail: bool) {
         let folder_uri = album.uri.to_owned();
-        let thumbnail_path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), true));
-        let path = self.get_path_for(Metadata::AlbumArt(folder_uri.clone(), false));
-        if !path.exists() || !thumbnail_path.exists() {
-            if self.settings.boolean("mpd-download-album-art") {
-                if let Some(sender) = self.mpd_sender.get() {
-                    // Queue download from MPD if enabled
-                    // Place request with MpdWrapper
-                    if let Ok(key) = self.get_album_key(album) {
-                        let _ = sender.send_blocking(MpdMessage::AlbumArt(
-                            folder_uri.to_string(),
-                            key,
-                            path,
-                            thumbnail_path
-                        ));
+        let stretto_key = (format!("uri:{}", &folder_uri), thumbnail);
+        if let Some(_) = IMAGE_CACHE.get(&stretto_key) {
+            // Already cached. Simply notify UI.
+            self.state.emit_with_param("album-art-downloaded", &folder_uri);
+            return;
+        }
+        let thumbnail_path = self.get_path_for(&Metadata::AlbumArt(folder_uri.clone(), true));
+        let path = self.get_path_for(&Metadata::AlbumArt(folder_uri.clone(), false));
+        let bg_sender = self.bg_sender.clone();
+        let fg_sender = self.fg_sender.clone();
+        if let (Some(sender), Ok(bson_key)) = (self.mpd_sender.get().cloned(), self.get_album_key(album)) {
+            gio::spawn_blocking(move || {
+                let settings = settings_manager().child("client");
+                // First, try to load from disk. Do this using the threadpool to avoid blocking UI.
+                let path_to_use = if thumbnail {&thumbnail_path} else {&path};
+                if path_to_use.exists() {
+                    if let Ok(tex) = Texture::from_filename(&path_to_use) {
+                        IMAGE_CACHE.insert(stretto_key, tex.clone(), if thumbnail {1} else {16});
+                        IMAGE_CACHE.wait().unwrap();
+                        let _ = fg_sender.send_blocking(Metadata::AlbumArt(folder_uri, thumbnail));
                     }
                 }
-            }
-            else {
-                // Hop straight to remote providers. For this we'll need to have album metas ready,
-                // so schedule that first.
-                self.ensure_local_album_meta(album);
-                if let Ok(key) = self.get_album_key(album) {
-                    let _ = self.bg_sender.send_blocking(CacheTask::AlbumArt(folder_uri, key, path, thumbnail_path));
+                // That failed, so try downloading it
+                else if settings.boolean("mpd-download-album-art") {
+                    let _ = sender.send_blocking(MpdMessage::AlbumArt(
+                        folder_uri.to_string(),
+                        bson_key,
+                        path,
+                        thumbnail_path
+                    ));
                 }
-            }
+                else {
+                    // Hop straight to remote providers. For this we'll need to have album metas ready,
+                    // so schedule that first.
+                    let _ = bg_sender.send_blocking(CacheTask::AlbumMeta(folder_uri.clone(), bson_key.clone()));
+                    let _ = bg_sender.send_blocking(CacheTask::AlbumArt(folder_uri, bson_key, path, thumbnail_path));
+                }
+            });
         }
     }
 
     // TODO: GUI for downloading album arts from external providers.
-    /// Batched version of ensure_local_album_art.
+    /// Batched version of ensure_cached_album_art.
     /// The list of folder-level URIs will be deduplicated internally to avoid fetching the same
     /// album art multiple times. This is useful for fetching album arts of songs in the queue,
     /// for example.
-    pub fn ensure_local_album_arts(&self, albums: &[&AlbumInfo]) {
+    /// From MPD, this method only supports downloading thumbnails. Remote sources always provide
+    /// both sizes.
+    pub fn ensure_cached_album_arts(&self, albums: &[&AlbumInfo]) {
         let mut seen = FxHashSet::default();
         for album in albums.iter() {
             let folder_uri = &album.uri;
             if seen.insert(folder_uri.to_owned()) {
-                self.ensure_local_album_art(album);
+                // println!("ensure_cached_album_arts ({}): calling ensure_cached_album_art", &folder_uri);
+                self.ensure_cached_album_art(album, false);
             }
         }
     }
@@ -457,7 +489,7 @@ impl Cache {
         else if title.is_some() && artist.is_some() {
             Ok(bson::doc! {
                 "name": title.unwrap().to_string(),
-                "artist": artist.unwrap()
+                "artist": artist.unwrap().to_string()
             })
         }
         else {
@@ -465,12 +497,13 @@ impl Cache {
         }
     }
 
-    pub fn load_local_album_meta(
+    pub fn load_cached_album_meta(
         &self,
         album: &AlbumInfo,
     ) -> Option<models::AlbumMeta> {
         // Check whether we have this album cached
         if let Ok(key) = self.get_album_key(album) {
+            println!("Key is valid");
             let result = self.doc_cache.read().unwrap().collection::<models::AlbumMeta>("album").find_one(key);
             if let Ok(res) = result {
                 if let Some(info) = res {
@@ -487,7 +520,7 @@ impl Cache {
         None
     }
 
-    pub fn ensure_local_album_meta(
+    pub fn ensure_cached_album_meta(
         &self,
         album: &AlbumInfo,
     ) {
@@ -498,10 +531,7 @@ impl Cache {
             let result = self.doc_cache.read().unwrap().collection::<models::AlbumMeta>("album").find_one(key.clone());
             if let Ok(response) = result {
                 if response.is_none() {
-                    self.bg_sender.send_blocking(CacheTask::AlbumMeta(folder_uri.to_owned(), key));
-                }
-                else {
-                    println!("Album info already cached, won't download again");
+                    self.bg_sender.send_blocking(CacheTask::AlbumMeta(folder_uri.to_owned(), key)).expect("Cache child thread: unable to notify main thread of task completion");
                 }
             }
             else {
@@ -531,7 +561,7 @@ impl Cache {
         }
     }
 
-    pub fn load_local_artist_meta(
+    pub fn load_cached_artist_meta(
         &self,
         artist: &ArtistInfo
     ) -> Option<ArtistMeta> {
@@ -552,7 +582,7 @@ impl Cache {
         None
     }
 
-    pub fn ensure_local_artist_meta(
+    pub fn ensure_cached_artist_meta(
         &self,
         artist: &ArtistInfo
     ) {
@@ -560,13 +590,10 @@ impl Cache {
         if let Ok(key) = self.get_artist_key(artist) {
             let result = self.doc_cache.read().unwrap().collection::<ArtistMeta>("artist").find_one(key.clone());
             if let Ok(response) = result {
+                let path = self.get_path_for(&Metadata::ArtistAvatar(artist.name.to_owned(), false));
+                let thumbnail_path = self.get_path_for(&Metadata::ArtistAvatar(artist.name.to_owned(), true));
                 if response.is_none() {
-                    let path = self.get_path_for(Metadata::ArtistAvatar(artist.name.to_owned(), false));
-                    let thumbnail_path = self.get_path_for(Metadata::ArtistAvatar(artist.name.to_owned(), true));
                     let _ = self.bg_sender.send_blocking(CacheTask::ArtistMeta(key, path, thumbnail_path));
-                }
-                else {
-                    println!("Artist info already cached, won't download again");
                 }
             }
             else {
@@ -578,31 +605,34 @@ impl Cache {
     /// Public method to allow other controllers to get artist avatars for
     /// directly if possible.
     /// Without this, they can only get the textures via signals, which have overhead.
-    /// To queue downloading artist avatars, simply use ensure_local_artist_meta, which
+    /// To queue downloading artist avatars, simply use ensure_cached_artist_meta, which
     /// will also download artist avatars if the provider is configured to do so.
-    pub fn load_local_artist_avatar(
+    pub fn load_cached_artist_avatar(
         &self,
         artist: &ArtistInfo,
         thumbnail: bool
     ) -> Option<Texture> {
         // First try to get from cache
         let name = &artist.name;
-        let cache_key = (format!("artist:{}", name), thumbnail);
-        if let Some(tex) = self.image_cache.get(&cache_key) {
-            // println!("Cache hit:  {} (thumbnail: {})", folder_uri, thumbnail);
+        let stretto_key = (format!("artist:{}", name), thumbnail);
+        if let Some(tex) = IMAGE_CACHE.get(&stretto_key) {
             // Cloning GObjects is cheap since they're just references
             return Some(tex.value().clone());
         }
-        // If missed, try loading from disk into cache
-        // println!("Cache  miss: {} (thumbnail: {})", folder_uri, thumbnail);
-        let path = self.get_path_for(Metadata::ArtistAvatar(name.to_owned(), thumbnail));
-        if path.exists() {
-            if let Ok(tex) = Texture::from_filename(path) {
-                self.image_cache.insert(cache_key, tex.clone(), if thumbnail {1} else {16});
-                self.image_cache.wait().unwrap();
-                return Some(tex);
+        let fg_sender = self.fg_sender.clone();
+        let content_type = Metadata::ArtistAvatar(name.to_owned(), thumbnail);
+        let path = self.get_path_for(&content_type);
+        // If missed, try loading from disk
+        gio::spawn_blocking(move || {
+            // Try to load from disk. Do this using the threadpool to avoid blocking UI.
+            if path.exists() {
+                if let Ok(tex) = Texture::from_filename(&path) {
+                    IMAGE_CACHE.insert(stretto_key, tex.clone(), if thumbnail {1} else {16});
+                    IMAGE_CACHE.wait().unwrap();
+                    let _ = fg_sender.send_blocking(content_type);
+                }
             }
-        }
+        });
         None
     }
 }

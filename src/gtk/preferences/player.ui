@@ -7,8 +7,7 @@
     <property name="icon-name">play-symbolic</property>
     <child>
       <object class="AdwPreferencesGroup">
-        <property name="title" translatable="true">Player Bar</property>
-        <property name="description" translatable="true">The always-visible controls at the bottom.</property>
+        <property name="title" translatable="true">Background</property>
         <child>
           <object class="AdwSwitchRow" id="use_album_art_as_bg">
             <property name="title" translatable="true">Use album art as background</property>
@@ -92,6 +91,19 @@
                 <property name="step-increment">0.1</property>
               </object>
             </property>
+          </object>
+        </child>
+      </object>
+    </child>
+
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">MPRIS</property>
+        <property name="description" translatable="true">Euphonia can be controlled from your shell or other applications via the MPRIS protocol.</property>
+        <child>
+          <object class="AdwSwitchRow" id="enable_mpris">
+            <property name="title" translatable="true">Enable MPRIS integration</property>
+            <property name="subtitle" translatable="true">Requires a relaunch.</property>
           </object>
         </child>
       </object>

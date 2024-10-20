@@ -8,7 +8,7 @@ use glib::{
 };
 
 use super::{
-    PlaybackState, Player, Seekbar
+    PlaybackFlow, PlaybackState, Player, Seekbar
 };
 
 // All playback controls are grouped in this custom widget since we'll need to draw
@@ -26,7 +26,7 @@ mod imp {
     #[template(resource = "/org/euphonia/Euphonia/gtk/player/playback-controls.ui")]
     pub struct PlaybackControls {
         #[template_child]
-        pub stack: TemplateChild<gtk::Stack>,
+        pub flow_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub play_pause_btn: TemplateChild<gtk::Button>,
         #[template_child]
@@ -35,6 +35,8 @@ mod imp {
         pub prev_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub next_btn: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub random_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub seekbar: TemplateChild<Seekbar>,
         #[property(get, set)]
@@ -109,7 +111,6 @@ impl PlaybackControls {
         let imp = self.imp();
         // Set up buttons
         let play_pause_symbol = imp.play_pause_symbol.get();
-        let stack = imp.stack.get();
         player
             .bind_property(
                 "playback-state",
@@ -131,27 +132,33 @@ impl PlaybackControls {
             .sync_create()
             .build();
 
+        let flow_btn = imp.flow_btn.get();
         player
             .bind_property(
-                "playback-state",
-                &stack,
-                "visible-child-name"
+                "playback-flow",
+                &flow_btn,
+                "icon-name"
             )
-            .transform_to(
-                |_, state: PlaybackState| {
-                    match state {
-	                    PlaybackState::Playing | PlaybackState::Paused => {
-	                        Some("playing")
-                        },
-	                    PlaybackState::Stopped => {
-	                        Some("stopped")
-	                    },
-	                }
-                }
-            )
+            .transform_to(|_, flow: PlaybackFlow| { Some(flow.icon_name()) })
             .sync_create()
             .build();
-
+        player
+            .bind_property(
+                "playback-flow",
+                &flow_btn,
+                "tooltip-text"
+            )
+            // TODO: translatable
+            .transform_to(|_, flow: PlaybackFlow| { Some(format!("Playback Mode: {}", flow.description())) })
+            .sync_create()
+            .build();
+        flow_btn.connect_clicked(clone!(
+            #[weak]
+            player,
+            move |_| {
+                player.cycle_playback_flow();
+            }
+        ));
         self.imp().prev_btn.connect_clicked(
             clone!(
                 #[strong]
@@ -179,6 +186,16 @@ impl PlaybackControls {
                 }
             )
         );
+        let shuffle_btn = imp.random_btn.get();
+        shuffle_btn
+            .bind_property(
+                "active",
+                &player,
+                "random"
+            )
+            .bidirectional()
+            .sync_create()
+            .build();
 
         self.setup_seekbar(player);
     }
@@ -210,7 +227,7 @@ impl PlaybackControls {
                 player,
                 move |_: Seekbar| {
                     player.unblock_polling();
-                    player.seek();
+                    player.send_seek();
                     // Player will start polling again on next status update,
                     // which should be triggered by us seeking.
                 }

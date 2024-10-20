@@ -1,8 +1,5 @@
 use std::{
-    borrow::Cow,
-    cell::RefCell,
-    rc::Rc,
-    path::PathBuf
+    borrow::Cow, cell::{Cell, RefCell}, path::PathBuf, rc::Rc
 };
 use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
@@ -11,20 +8,13 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client,
-    search::{Term, Query, Window, Operation as QueryOperation},
-    song::Id,
-    Subsystem,
-    Idle,
-    Channel
+    client::Client, error::Error, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Subsystem
 };
 use image::DynamicImage;
 use uuid::Uuid;
 
 use crate::{
-    utils,
-    common::{Album, AlbumInfo, Song, SongInfo, ArtistInfo, Artist},
-    meta_providers::Metadata
+    common::{Album, AlbumInfo, Artist, ArtistInfo, Song, SongInfo}, meta_providers::Metadata, player::PlaybackFlow, utils
 };
 
 use super::state::{ClientState, ConnectionState};
@@ -53,23 +43,35 @@ pub enum MpdMessage {
     Connect, // Host and port are always read from gsettings
     Update, // Update DB
     Output(u32, bool), // Set output state. Specify target ID and state to set to.
-	Play,
+    SetPlaybackFlow(PlaybackFlow),
+    Random(bool),
+    Play,
     Pause,
+    Stop,
     Add(String), // Add by URI
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
+    DeleteId(u32),
+    Swap(u32, u32), // Swap queue pos of two songs given by queue positions
     Clear, // Clear queue
     Prev,
     Next,
-	Status,
-	SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
+    Status,
+    SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
     FindAdd(Query<'static>),
-	Queue, // Get songs in current queue
+    Queue, // Get songs in current queue
     Albums, // Get albums. Will return one by one
     Artists(bool), // Get artists. Will return one by one. If bool flag is true, will parse AlbumArtist tag.
     AlbumContent(String), // Get list of songs with given album tag
     ArtistContent(String), // Get songs and albums of artist with given name
     Volume(i8),
+    MixRampDb(f32),
+    MixRampDelay(f64),
+    Crossfade(f64),
+    ReplayGain(mpd::status::ReplayGain),
+    Consume(bool),
+    GetSticker(String, String, String), // Type, URI, name
+    SetSticker(String, String, String, String), // Type, URI, name, value
 
     // Reserved for cache controller
     // folder-level URI, key doc & paths to write the hires & thumbnail versions
@@ -369,7 +371,10 @@ pub struct MpdWrapper {
     bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
     bg_channel: Channel, // For waking up the child client
     bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
-    meta_sender: Sender<Metadata> // For sending album arts to cache controller
+    meta_sender: Sender<Metadata>, // For sending album arts to cache controller
+    // Stored here so we can use them to get queue diffs.
+    // It will be updated every time get_status() is called.
+    queue_version: Cell<u32>
 }
 
 impl MpdWrapper {
@@ -388,7 +393,8 @@ impl MpdWrapper {
             bg_handle: RefCell::new(None),  // Will be spawned later
             bg_channel: Channel::new(&ch_name).unwrap(),
             bg_sender: RefCell::new(None),
-            meta_sender
+            meta_sender,
+            queue_version: Cell::new(0)
         });
 
         // For future noob self: these are shallow
@@ -553,12 +559,22 @@ impl MpdWrapper {
             MpdMessage::Update => self.queue_task(BackgroundTask::Update),
             MpdMessage::Output(id, state) => self.set_output(id, state),
             MpdMessage::Volume(vol) => self.volume(vol),
+            MpdMessage::Crossfade(fade) => self.set_crossfade(fade),
+            MpdMessage::MixRampDb(db) => self.set_mixramp_db(db),
+            MpdMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
             MpdMessage::Status => self.get_status(),
             MpdMessage::Add(uri) => self.add(uri.as_ref()),
+            MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
+            MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
+            MpdMessage::Random(state) => self.set_random(state),
+            MpdMessage::Consume(state) => self.set_consume(state),
             MpdMessage::Play => self.pause(false),
             MpdMessage::PlayId(id) => self.play_at(id, true),
+            MpdMessage::Swap(pos1, pos2) => self.swap(pos1, pos2, false),
+            MpdMessage::DeleteId(id) => self.delete_at(id, true),
             MpdMessage::PlayPos(pos) => self.play_at(pos, false),
             MpdMessage::Pause => self.pause(true),
+            MpdMessage::Stop => self.stop(),
             MpdMessage::Prev => self.prev(),
             MpdMessage::Next => self.next(),
             MpdMessage::Clear => self.clear_queue(),
@@ -592,6 +608,8 @@ impl MpdWrapper {
                     &BoxedAnyObject::new(thumb),
                 ]
             ),
+            MpdMessage::GetSticker(typ, uri, name) => self.get_sticker(&typ, &uri, &name),
+            MpdMessage::SetSticker(typ, uri, name, value) => self.set_sticker(&typ, &uri, &name, &value),
             MpdMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
                 "album-art-not-available",
                 folder_uri
@@ -629,15 +647,14 @@ impl MpdWrapper {
     async fn handle_idle_changes(&self, changes: Vec<Subsystem>) {
         for subsystem in changes {
             match subsystem {
-                Subsystem::Player => {
+                Subsystem::Player | Subsystem::Options => {
                     // No need to get current song separately as we'll just pull it
-                    // from the queue
+                    // from the queue.
+                    // Delegate efficient queue updating to the player controller too.
                     self.get_status();
                 }
                 Subsystem::Queue => {
-                    // Retrieve entire queue for now, since there's no way to know
-                    // specifically what changed
-                    self.get_current_queue();
+                    self.get_queue_changes();
                 }
                 Subsystem::Output => {
                     self.get_outputs();
@@ -736,13 +753,54 @@ impl MpdWrapper {
 
     fn set_output(&self, id: u32, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            println!("Setting output ID {} to {}", id, state);
             let _ = client.output(id, state);
         }
     }
 
+    fn get_sticker(&self, typ: &str, uri: &str, name: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let res = client.sticker(typ, uri, name);
+            if let Ok(sticker) = res {
+                self.state.emit_by_name::<()>("sticker-downloaded", &[
+                    &typ.to_value(),
+                    &uri.to_value(),
+                    &name.to_value(),
+                    &sticker.to_value()
+                ]);
+            }
+            else if let Err(error) = res {
+                match error {
+                    Error::Server(server_err) => {
+                        if server_err.detail.contains("disabled") {
+                            self.state.emit_by_name::<()>("sticker-db-disabled", &[]);
+                        }
+                        else if server_err.detail.contains("no such sticker") {
+                            self.state.emit_by_name::<()>("sticker-not-found", &[
+                                &typ.to_value(),
+                                &uri.to_value(),
+                                &name.to_value(),
+                            ]);
+                        }
+                    }
+                    _ => {
+                        // Not handled yet
+                    }
+                }
+            }
+        }
+    }
+
+    fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.set_sticker(typ, uri, name, value);
+        }
+    } 
+
     pub fn get_status(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
+                let _ = self.queue_version.replace(status.queue_version);
                 // Let each state update their respective properties
                 self.state.emit_boxed_result("status-changed", status);
             }
@@ -753,16 +811,77 @@ impl MpdWrapper {
         }
     }
 
-    pub fn pause(self: Rc<Self>, is_pause: bool) {
+    pub fn set_playback_flow(&self, flow: PlaybackFlow) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            // TODO: Make it stop/play base on toggle
-            let _ = client.pause(is_pause);
-            // TODO: handle error
-        }
-        else {
-            // TODO: handle error
+            match flow {
+                PlaybackFlow::Sequential => {
+                    let _ = client.repeat(false);
+                    let _ = client.single(false);
+                }
+                PlaybackFlow::Repeat => {
+                    let _ = client.repeat(true);
+                    let _ = client.single(false);
+                }
+                PlaybackFlow::Single => {
+                    let _ = client.repeat(false);
+                    let _ = client.single(true);
+                }
+                PlaybackFlow::RepeatSingle => {
+                    let _ = client.repeat(true);
+                    let _ = client.single(true);
+                }
+            }
         }
     }
+
+    pub fn set_crossfade(&self, fade: f64) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.crossfade(fade as i64);
+        }
+    }
+
+    pub fn set_replaygain(&self, mode: mpd::status::ReplayGain) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.replaygain(mode);
+        }
+    }
+
+    pub fn set_mixramp_db(&self, db: f32) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.mixrampdb(db);
+        }
+    }
+
+    pub fn set_mixramp_delay(&self, delay: f64) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.mixrampdelay(delay);
+        }
+    }
+
+    pub fn set_random(&self, state: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.random(state);
+        }
+    }
+
+    pub fn set_consume(&self, state: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.consume(state);
+        }
+    }
+
+    pub fn pause(self: Rc<Self>, is_pause: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.pause(is_pause);
+        }
+    }
+
+    pub fn stop(self: Rc<Self>) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let _ = client.stop();
+        }
+    }
+
     pub fn prev(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
@@ -787,7 +906,6 @@ impl MpdWrapper {
 
     pub fn play_at(self: Rc<Self>, id_or_pos: u32, is_id: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            // TODO: Make it stop/play base on toggle
             if is_id {
                 client.switch(Id(id_or_pos)).expect("Could not switch song");
             }
@@ -797,14 +915,48 @@ impl MpdWrapper {
         }
     }
 
+    pub fn swap(self: Rc<Self>, id1: u32, id2: u32, is_id: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if is_id {
+                client.swap(Id(id1), Id(id2)).expect("Could not swap songs by ID");
+            }
+            else {
+                client.swap(id1, id2).expect("Could not swap songs by pos");
+            }
+        }
+    }
+
+    pub fn delete_at(self: Rc<Self>, id_or_pos: u32, is_id: bool) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if is_id {
+                client.delete(Id(id_or_pos)).expect("Could not delete song from queue");
+            }
+            else {
+                client.delete(id_or_pos).expect("Could not delete song from queue");
+            }
+        }
+    }
+
     pub fn clear_queue(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            // TODO: Make it stop/play base on toggle
             let _ = client.clear();
             // TODO: handle error
         }
         else {
             // TODO: handle error
+        }
+    }
+
+    pub fn get_queue_changes(&self) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            // TODO: move to background thread
+            if let Ok(mut changes) = client.changes(self.queue_version.get()) {
+                let songs: Vec<Song> = changes
+                    .iter_mut()
+                    .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
+                    .collect();
+                self.state.emit_boxed_result("queue-changed", songs);
+            }
         }
     }
 
@@ -822,7 +974,7 @@ impl MpdWrapper {
                     .iter_mut()
                     .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
                     .collect();
-                self.state.emit_boxed_result("queue-changed", songs);
+                self.state.emit_boxed_result("queue-replaced", songs);
             }
         }
     }

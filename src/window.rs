@@ -354,7 +354,8 @@ impl EuphoniaWindow {
     /// Update blurred background, if enabled
     fn update_background(&self) {
         if let Some(player) = self.imp().player.get() {
-            let tex: Option<gdk::Texture> = player.current_song_album_art();
+            // Blur the thumbnail version (lower original resolution, less work)
+            let tex: Option<gdk::Texture> = player.current_song_album_art(true);
             let imp = self.imp();
             let bg_paintable = imp.bg_paintable.clone();
             if imp.use_album_art_bg.get() && tex.is_some() {

@@ -88,6 +88,23 @@ mod imp {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
             SIGNALS.get_or_init(|| {
                 vec![
+                    Signal::builder("sticker-downloaded")
+                        .param_types([
+                            String::static_type(),         // Type
+                            String::static_type(),         // URI
+                            String::static_type(),         // name
+                            String::static_type()          // value
+                        ])
+                        .build(),
+                    Signal::builder("sticker-not-found")
+                        .param_types([
+                            String::static_type(),         // Type
+                            String::static_type(),         // URI
+                            String::static_type(),         // name
+                        ])
+                        .build(),
+                    Signal::builder("sticker-db-disabled")
+                        .build(),
                     Signal::builder("album-art-downloaded")
                         .param_types([
                             String::static_type(),         // folder URI
@@ -138,6 +155,9 @@ mod imp {
                         .param_types([BoxedAnyObject::static_type()])
                         .build(),
                     Signal::builder("queue-changed")
+                        .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
+                        .build(),
+                    Signal::builder("queue-replaced")
                         .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
                         .build(),
                 ]

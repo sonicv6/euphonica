@@ -63,7 +63,7 @@ mod imp {
         // items.
         // If search term is now shorter, only check non-matching items to see
         // if they now match.
-        pub last_search_len: Cell<usize>,
+        pub last_search_len: Cell<usize>
     }
 
     impl Default for AlbumView {
@@ -418,10 +418,8 @@ impl AlbumView {
             closure_local!(
                 #[strong(rename_to = this)]
                 self,
-                #[weak]
-                cache,
                 move |_: ClientState, album: Album| {
-                    this.add_album(album, cache);
+                    this.add_album(album);
                 }
             )
         );
@@ -453,13 +451,33 @@ impl AlbumView {
         let factory = SignalListItemFactory::new();
 
         // Create an empty `AlbumCell` during setup
-        factory.connect_setup(move |_, list_item| {
-            let item = list_item
-                .downcast_ref::<ListItem>()
-                .expect("Needs to be ListItem");
-            let album_cell = AlbumCell::new(&item);
-            item.set_child(Some(&album_cell));
-        });
+        factory.connect_setup(
+            clone!(
+                #[weak]
+                cache,
+                move |_, list_item| {
+                    let item = list_item
+                        .downcast_ref::<ListItem>()
+                        .expect("Needs to be ListItem");
+                    let album_cell = AlbumCell::new(&item, cache);
+                    item.set_child(Some(&album_cell));
+                }
+            )
+        );
+
+        factory.connect_teardown(
+            move |_, list_item| {
+                // Get `AlbumCell` from `ListItem` (the UI widget)
+                let child: Option<AlbumCell> = list_item
+                    .downcast_ref::<ListItem>()
+                    .expect("Needs to be ListItem")
+                    .child()
+                    .and_downcast::<AlbumCell>();
+                if let Some(c) = child {
+                    c.teardown();
+                }
+            }
+        );
 
         // Tell factory how to bind `AlbumCell` to one of our Album GObjects.
         // If this cell is being bound to an album, that means it might be displayed.
@@ -467,11 +485,9 @@ impl AlbumView {
         // album art downloads. This ensures we will never have to iterate through
         // the entire grid to update album arts (only visible or nearly visible cells
         // will be updated, thus yielding a constant update cost).
-        factory.connect_bind(clone!(
-            #[weak]
-            cache,
+        factory.connect_bind(
             move |_, list_item| {
-                // Get `Song` from `ListItem` (that is, the data side)
+                // Get `Album` from `ListItem` (that is, the data side)
                 let item: Album = list_item
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem")
@@ -479,12 +495,6 @@ impl AlbumView {
                     .and_downcast::<Album>()
                     .expect("The item has to be a common::Album.");
 
-                // This album cell is about to be displayed. Try to ensure that we
-                // have a local copy of its album art from MPD.
-                // No need to dedupe since we're guaranteed that the same album never
-                // appears twice in the GridView anyway.
-                cache.ensure_local_album_art(item.get_info());
-
                 // Get `AlbumCell` from `ListItem` (the UI widget)
                 let child: AlbumCell = list_item
                     .downcast_ref::<ListItem>()
@@ -492,18 +502,14 @@ impl AlbumView {
                     .child()
                     .and_downcast::<AlbumCell>()
                     .expect("The child has to be an `AlbumCell`.");
-
-                // Within this binding fn is where the cached album art texture gets used.
-                child.bind(&item, cache);
-            })
+                child.bind(&item);
+            }
         );
 
 
         // When cell goes out of sight, unbind from item to allow reuse with another.
         // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
-        factory.connect_unbind(clone!(
-            #[weak]
-            cache,
+        factory.connect_unbind(
             move |_, list_item| {
                 // Get `AlbumCell` from `ListItem` (the UI widget)
                 let child: AlbumCell = list_item
@@ -512,9 +518,8 @@ impl AlbumView {
                     .child()
                     .and_downcast::<AlbumCell>()
                     .expect("The child has to be an `AlbumCell`.");
-                // Un-listen to cache, so that we don't update album art for cells that are not in view
-                child.unbind(cache);
-            })
+                child.unbind();
+            }
         );
 
         // Set the factory of the list view
@@ -538,7 +543,7 @@ impl AlbumView {
         );
     }
 
-    fn add_album(&self, album: Album, cache: Rc<Cache>) {
+    fn add_album(&self, album: Album) {
         self.imp().album_list.append(&album);
         // self.imp().album_count.set_label(&self.imp().album_list.n_items().to_string());
     }

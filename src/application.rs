@@ -72,26 +72,24 @@ mod imp {
 
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(meta_sender.clone());
-            let client_sender = client.clone().get_sender();
-            let client_state = client.clone().get_client_state();
+            let sender = client.clone().get_sender();
 
             // Create controllers
             // These two are GObjects (already refcounted by GLib)
             let player = Player::default();
             let library = Library::default();
-            cache.set_mpd_sender(client_sender.clone());
-            player.setup(client_sender.clone(), client_state.clone(), cache.clone());
-            library.setup(client_sender.clone(), cache.clone());
+            cache.set_mpd_sender(sender.clone());
 
             Self {
                 player,
                 library,
                 client,
                 cache,
-                sender: client_sender,
+                sender,
                 cache_path
             }
         }
+
     }
 
     impl ObjectImpl for EuphoniaApplication {
@@ -100,6 +98,15 @@ mod imp {
             let obj = self.obj();
             obj.setup_gactions();
             obj.set_accels_for_action("app.quit", &["<primary>q"]);
+            obj.set_accels_for_action("app.fullscreen", &["F11"]);
+
+            self.library.setup(self.sender.clone(), self.cache.clone());
+            self.player.setup(
+                self.obj().clone(),
+                self.sender.clone(),
+                self.client.clone().get_client_state(),
+                self.cache.clone()
+            );
         }
     }
 
@@ -168,6 +175,9 @@ impl EuphoniaApplication {
     }
 
     fn setup_gactions(&self) {
+        let toggle_fullscreen_action = gio::ActionEntry::builder("fullscreen")
+            .activate(move |app: &Self, _, _| app.toggle_fullscreen())
+            .build();
         let update_db_action = gio::ActionEntry::builder("update-db")
             .activate(move |app: &Self, _, _| app.update_db())
             .build();
@@ -181,11 +191,36 @@ impl EuphoniaApplication {
             .activate(move |app: &Self, _, _| app.show_preferences())
             .build();
         self.add_action_entries([
+            toggle_fullscreen_action,
             update_db_action,
             quit_action,
             about_action,
             preferences_action
         ]);
+    }
+
+    fn toggle_fullscreen(&self) {
+        let window = self.active_window().unwrap();
+        self.set_fullscreen(!window.is_fullscreen());
+    }
+
+    pub fn is_fullscreen(&self) -> bool {
+        self.active_window().unwrap().is_fullscreen()
+    }
+
+    pub fn set_fullscreen(&self, state: bool) {
+        let window = self.active_window().unwrap();
+        if state {
+            window.fullscreen();
+        }
+        else {
+            window.unfullscreen();
+        }
+    }
+
+    pub fn raise_window(&self) {
+        let window = self.active_window().unwrap();
+        window.present();
     }
 
     fn update_db(&self) {

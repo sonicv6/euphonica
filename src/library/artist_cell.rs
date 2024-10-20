@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{OnceCell, RefCell},
     rc::Rc
 };
 use gtk::{
@@ -36,7 +36,9 @@ mod imp {
         pub avatar: TemplateChild<adw::Avatar>,  // Use high-resolution version
         #[template_child]
         pub name: TemplateChild<gtk::Label>,
-        pub avatar_signal_id: RefCell<Option<SignalHandlerId>>
+        pub avatar_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub cache: OnceCell<Rc<Cache>>,
+        pub artist: RefCell<Option<Artist>>,
     }
 
     // The central trait for subclassing a GObject
@@ -101,20 +103,42 @@ glib::wrapper! {
     @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
 }
 
-impl Default for ArtistCell {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ArtistCell {
-    pub fn new() -> Self {
-        Object::builder().build()
+    pub fn new(item: &gtk::ListItem, cache: Rc<Cache>) -> Self {
+        let res: Self = Object::builder().build();
+        res.imp().cache.set(cache).expect("ArtistCell cannot bind to cache");
+        res.setup(item);
+        let _ = res.imp().avatar_signal_id.replace(
+            Some(res.imp().cache.get().unwrap().get_cache_state().connect_closure(
+                "artist-avatar-downloaded",
+                false,
+                closure_local!(
+                    #[weak(rename_to = this)]
+                    res,
+                    move |_: CacheState, name: String| {
+                        if let Some(artist) = this.imp().artist.borrow().as_ref() {
+                            if artist.get_name() == &name {
+                                this.update_artist_avatar(artist.get_info());
+                            }
+                        }
+                    }
+                )
+            ))
+        );
+        res
     }
 
-    fn update_artist_avatar(&self, info: &ArtistInfo, cache: Rc<Cache>) {
+    #[inline(always)]
+    pub fn setup(&self, item: &gtk::ListItem) {
+        item
+            .property_expression("item")
+            .chain_property::<Artist>("name")
+            .bind(self, "name", gtk::Widget::NONE);
+    }
+
+    fn update_artist_avatar(&self, info: &ArtistInfo) {
         self.imp().avatar.set_custom_image(
-            cache.load_local_artist_avatar(info, false).as_ref()
+            self.imp().cache.get().unwrap().load_cached_artist_avatar(info, false).as_ref()
         );
     }
 
@@ -127,35 +151,20 @@ impl ArtistCell {
         self.imp().avatar.set_text(Some(name));
     }
 
-    pub fn bind(&self, artist: &Artist, cache: Rc<Cache>) {
+    pub fn bind(&self, artist: &Artist) {
+        let _ = self.imp().artist.replace(Some(artist.clone()));
         // Get state
         // Set once first (like sync_create)
-        self.update_artist_avatar(artist.get_info(), cache.clone());
-        let avatar_binding = cache.get_cache_state().connect_closure(
-            "artist-avatar-downloaded",
-            false,
-            closure_local!(
-                #[weak(rename_to = this)]
-                self,
-                #[strong]
-                artist,
-                #[weak]
-                cache,
-                move |_: CacheState, tag: String| {
-                    if artist.get_name() == tag {
-                        this.update_artist_avatar(artist.get_info(), cache)
-                    }
-                }
-            )
-        );
-        self.imp().avatar_signal_id.replace(Some(avatar_binding));
+        self.update_artist_avatar(artist.get_info());
     }
 
-    pub fn unbind(&self, cache: Rc<Cache>) {
-        // Stop listening to cache (not displaying anything right now)
+    pub fn unbind(&self) {
+        self.imp().artist.replace(None).unwrap();
+    }
+
+    pub fn teardown(&self) {
         if let Some(id) = self.imp().avatar_signal_id.take() {
-            cache.get_cache_state().disconnect(id);
+            self.imp().cache.get().unwrap().get_cache_state().disconnect(id);
         }
-        // self.imp().avatar.set_text(None);
     }
 }
