@@ -15,6 +15,7 @@ An MPD frontend with delusions of grandeur.
 - Album wikis & artist bios are supported too
 - All externally-acquired metadata are cached locally & persisted on disk to avoid needless API calls
 - Volume knob with dBFS readout support ('cuz why not?)
+- User-friendly configuration UI & GSettings backend
 - Written in Rust so my dumb code can still be quick :)
 
 ## Build
