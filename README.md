@@ -1,3 +1,4 @@
+![Euphonia icon](data/icons/hicolor/scalable/apps/org.euphonia.Euphonia.svg)
 # Euphonia
 
 An MPD frontend with delusions of grandeur.
@@ -15,8 +16,28 @@ An MPD frontend with delusions of grandeur.
 - Album wikis & artist bios are supported too
 - All externally-acquired metadata are cached locally & persisted on disk to avoid needless API calls
 - Volume knob with dBFS readout support ('cuz why not?)
+- MPRIS support (can be disabled if you're running `mpdris2` instead)
 - User-friendly configuration UI & GSettings backend
 - Written in Rust so my dumb code can still be quick :)
+
+## Screenshots
+
+- Album View in dark mode[^1]
+  ![Album View in dark mode](data/screenshots/album-view-dark.png)
+
+- Queue View in light mode[^1]
+  ![Queue View in light mode](data/screenshots/queue-view-light.png)
+
+- Artist bio as fetched from Last.fm[^2]
+  ![Queue View in light mode](data/screenshots/artist-bio-dark.png)
+
+- Album wiki as fetched from Last.fm[^1][^2]
+  ![Queue View in light mode](data/screenshots/album-wiki-dark.png)
+
+
+
+[^1]: Actual album arts have been replaced with random pictures from [Pexels](https://www.pexels.com/). All credits go to the original photographers.
+[^2]: Artist bios and album wikis are user-contributed and licensed by Last.fm under CC-BY-SA.
 
 ## Build
 
@@ -48,3 +69,4 @@ Flatpak & AUR releases are also planned.
 - Browse by genre
 - Realtime lyrics fetching
 - Library management operations such as tag editing (will require access to the files themselves) 
+- An "All tracks" page with advanced, freeform querying to take full advantage of MPD v0.21+'s new query syntax
