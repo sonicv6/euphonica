@@ -24,6 +24,10 @@ use crate::{
 };
 
 mod imp {
+    use std::sync::OnceLock;
+
+    use glib::subclass::Signal;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
@@ -150,6 +154,10 @@ impl ArtistView {
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
         });
+    }
+
+    pub fn get_content_view(&self) -> ArtistContentView {
+        self.imp().content_view.get()
     }
 
     fn setup_sort(&self) {

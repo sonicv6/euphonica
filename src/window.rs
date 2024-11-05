@@ -28,12 +28,7 @@ use gtk::{
 };
 use glib::signal::SignalHandlerId;
 use crate::{
-    application::EuphoniaApplication,
-    client::ConnectionState,
-    library::{AlbumView, ArtistView},
-    player::{PlayerBar, QueueView},
-    sidebar::Sidebar,
-    utils
+    application::EuphoniaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
 };
 
 mod imp {
@@ -324,6 +319,18 @@ impl EuphoniaWindow {
             )
         );
 
+        win.imp().artist_view.get_content_view().connect_closure(
+            "album-clicked",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                win,
+                move |_: ArtistContentView, album: Album| {
+                    this.goto_album(&album);
+                }
+            )
+        );
+
         win.bind_state();
         win.setup_signals();
         win
@@ -349,6 +356,15 @@ impl EuphoniaWindow {
         self.imp().stack.set_visible_child_name("queue");
         self.imp().split_view.set_show_content(true);
         self.imp().queue_view.set_show_content(true);
+    }
+
+    pub fn goto_album(&self, album: &Album) {
+        self.imp().album_view.on_album_clicked(album);
+        // self.imp().stack.set_visible_child_name("albums");
+        self.imp().sidebar.set_view("albums");
+        if !self.imp().split_view.shows_content() {
+            self.imp().split_view.set_show_content(true);
+        }
     }
 
     /// Update blurred background, if enabled

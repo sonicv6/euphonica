@@ -224,14 +224,11 @@ impl QueueView {
 
         // Setup click action
         self.imp().queue.connect_activate(move |queue, position| {
-            // Get `IntegerObject` from model
             let model = queue.model().expect("The model has to exist.");
             let song = model
                 .item(position)
                 .and_downcast::<Song>()
                 .expect("The item has to be a `common::Song`.");
-
-            // Increase "number" of `IntegerObject`
             player.on_song_clicked(song);
         });
     }

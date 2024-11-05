@@ -93,7 +93,7 @@ impl Library {
     /// Get all the information available about an album & its contents (won't block;
     /// UI will get notified of result later if one does arrive late).
     /// TODO: implement provider daisy-chaining on the cache side
-    pub fn init_album(&self, album: Album) {
+    pub fn init_album(&self, album: &Album) {
         if let Some(cache) = self.imp().cache.get() {
             cache.ensure_cached_album_meta(album.get_info());
         }

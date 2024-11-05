@@ -146,4 +146,14 @@ impl Sidebar {
               .transform_to(|_, size: u32| {Some(size.to_string())})
               .build();
     }
+
+    pub fn set_view(&self, view_name: &str) {
+        // TODO: something less dumb than this
+        match view_name {
+            "albums" => self.imp().albums_btn.set_active(true),
+            "artists" => self.imp().artists_btn.set_active(true),
+            "queue" => self.imp().queue_btn.set_active(true),
+            _ => unimplemented!()
+        };
+    }
 }

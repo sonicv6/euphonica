@@ -24,6 +24,8 @@ use crate::{
 };
 
 mod imp {
+    use std::cell::OnceCell;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
@@ -63,7 +65,8 @@ mod imp {
         // items.
         // If search term is now shorter, only check non-matching items to see
         // if they now match.
-        pub last_search_len: Cell<usize>
+        pub last_search_len: Cell<usize>,
+        pub library: OnceCell<Library>
     }
 
     impl Default for AlbumView {
@@ -90,7 +93,8 @@ mod imp {
                 // items.
                 // If search term is now shorter, only check non-matching items to see
                 // if they now match.
-                last_search_len: Cell::new(0)
+                last_search_len: Cell::new(0),
+                library: OnceCell::new()
            }
         }
     }
@@ -148,7 +152,8 @@ impl AlbumView {
     pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
         self.setup_sort();
         self.setup_search();
-        self.setup_gridview(library.clone(), client_state.clone(), cache.clone());
+        self.imp().library.set(library.clone()).expect("Cannot init AlbumView with Library");
+        self.setup_gridview(client_state.clone(), cache.clone());
 
         let content_view = self.imp().content_view.get();
         content_view.setup(library.clone(), client_state, cache);
@@ -391,7 +396,7 @@ impl AlbumView {
         );
     }
 
-    fn on_album_clicked(&self, album: Album, library: Library) {
+    pub fn on_album_clicked(&self, album: &Album) {
         // - Upon receiving click signal, get the list item at the indicated activate index.
         // - Extract album from that list item.
         // - Bind AlbumContentView to that album. This will cause the AlbumContentView to start listening
@@ -407,11 +412,11 @@ impl AlbumView {
         // once when adding this album to the ListStore for the GridView.
         let content_view = self.imp().content_view.get();
         content_view.bind(album.clone());
-        library.init_album(album);
+        self.imp().library.get().expect("AlbumView is incorrectly set up (no Library reference)").init_album(album);
         self.imp().nav_view.push_by_tag("content");
     }
 
-    fn setup_gridview(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+    fn setup_gridview(&self, client_state: ClientState, cache: Rc<Cache>) {
         client_state.connect_closure(
             "album-basic-info-downloaded",
             false,
@@ -529,8 +534,6 @@ impl AlbumView {
         self.imp().grid_view.connect_activate(clone!(
             #[weak(rename_to = this)]
             self,
-            #[weak]
-            library,
             move |grid_view, position| {
                 let model = grid_view.model().expect("The model has to exist.");
                 let album = model
@@ -538,7 +541,7 @@ impl AlbumView {
                     .and_downcast::<Album>()
                     .expect("The item has to be a `common::Album`.");
                 println!("Clicked on {:?}", &album);
-                this.on_album_clicked(album, library);
+                this.on_album_clicked(&album);
             })
         );
     }

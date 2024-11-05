@@ -32,6 +32,10 @@ use crate::{
 };
 
 mod imp {
+    use std::sync::OnceLock;
+
+    use glib::subclass::Signal;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
@@ -140,6 +144,17 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+        }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("album-clicked")
+                        .param_types([Album::static_type()])
+                        .build()
+                ]
+            })
         }
     }
 
@@ -430,8 +445,20 @@ impl ArtistContentView {
 
         // Set the factory of the list view
         self.imp().album_subview.set_factory(Some(&factory));
-        let sel_model = gtk::NoSelection::new(Some(self.imp().album_list.clone()));
+        let sel_model = gtk::SingleSelection::new(Some(self.imp().album_list.clone()));
         self.imp().album_subview.set_model(Some(&sel_model));
+        self.imp().album_subview.connect_activate(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |view, position| {
+            let model = view.model().expect("The model has to exist.");
+            let album = model
+                .item(position)
+                .and_downcast::<Album>()
+                .expect("The item has to be a `common::Album`.");
+
+            this.emit_by_name::<()>("album-clicked", &[&album.to_value()]);
+        }));
 
         // Hook up buttons
         let replace_queue_btn = self.imp().replace_queue.get();
