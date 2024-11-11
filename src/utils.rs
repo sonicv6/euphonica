@@ -6,9 +6,7 @@ use std::{
 };
 use aho_corasick::AhoCorasick;
 use image::{
-    DynamicImage,
-    imageops::FilterType,
-    io::Reader as ImageReader
+    imageops::FilterType, io::Reader as ImageReader, DynamicImage, RgbImage
 };
 use rustc_hash::FxHashSet;
 use gtk::gio;
@@ -175,20 +173,20 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {
     None
 }
 
-/// Automatically resize image based on user settings.
+/// Automatically resize & based on user settings, then convert to RGB8.
 /// All providers should use this function on their child threads to resize applicable images
 /// before returning the images to the main thread.
 /// Two images will be returned: a high-resolution version and a thumbnail version.
 /// Their major axis's resolution is determined by the keys hires-image-size and
 /// thumbnail-image-size in the gschema respectively.
-pub fn resize_image(dyn_img: DynamicImage) -> (DynamicImage, DynamicImage) {
+pub fn resize_convert_image(dyn_img: DynamicImage) -> (RgbImage, RgbImage) {
     let settings = settings_manager().child("library");
     // Avoid resizing to larger than the original image.
     let hires_size = settings.uint("hires-image-size").min(dyn_img.width().max(dyn_img.height()));
     let thumbnail_size = settings.uint("thumbnail-image-size");
     (
-        dyn_img.resize(hires_size, hires_size, FilterType::Triangle),
-        dyn_img.thumbnail(thumbnail_size, thumbnail_size)
+        dyn_img.resize(hires_size, hires_size, FilterType::Triangle).into_rgb8(),
+        dyn_img.thumbnail(thumbnail_size, thumbnail_size).into_rgb8()
     )
 }
 

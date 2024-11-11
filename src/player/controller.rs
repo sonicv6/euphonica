@@ -858,7 +858,7 @@ impl Player {
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if let Some(cache) = self.imp().cache.get() {
                 if let Some(album) = song.get_album() {
-                    // Should have been scheduled by queue updates
+                    // Should have been scheduled by queue updates.
                     return cache.load_cached_album_art(album, thumbnail, false);
                 }
             }

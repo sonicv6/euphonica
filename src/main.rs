@@ -23,6 +23,7 @@ mod cache;
 mod player;
 mod config;
 mod window;
+mod background;
 mod client;
 mod meta_providers;
 mod library;

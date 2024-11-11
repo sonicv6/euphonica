@@ -39,7 +39,7 @@ use crate::{
         Metadata,
         MetadataChain
     },
-    utils::{resize_image, settings_manager}
+    utils::{resize_convert_image, settings_manager}
 };
 use crate::meta_providers::{
     models::ArtistMeta,
@@ -252,7 +252,7 @@ impl Cache {
                                                 // Try to download artist avatar too
                                                 let res = get_best_image(&artist.image);
                                                 if res.is_ok() {
-                                                    let (hires, thumbnail) = resize_image(res.unwrap());
+                                                    let (hires, thumbnail) = resize_convert_image(res.unwrap());
                                                     if !path.exists() || !thumbnail_path.exists() {
                                                         if let (Ok(_), Ok(_)) = (
                                                             hires.save(path),
@@ -295,7 +295,7 @@ impl Cache {
                                         .find_one(bson_key) {
                                             let res = get_best_image(&meta.image);
                                             if res.is_ok() {
-                                                let (hires, thumbnail) = resize_image(res.unwrap());
+                                                let (hires, thumbnail) = resize_convert_image(res.unwrap());
                                                 if !path.exists() || !thumbnail_path.exists() {
                                                     if let (Ok(_), Ok(_)) = (
                                                         hires.save(path),
