@@ -63,6 +63,11 @@ Euphonia is developed on, and so far has only been tested on Arch Linux (btw).
   ```
 Flatpak & AUR releases are also planned.
 
+## Known issues
+
+- On systems with NVIDIA GPUs, the blurred background effect may become laggy at large window sizes even if using small blur radii. This seems to be a problem with the new `vulkan` GSK renderer (default since GTK 4.15).
+  - A temporary workaround is to force usage of the `ngl` (recommended) or `gl` renderer. For example, you can launch Euphonia as `GSK_RENDERER=ngl euphonia`. 
+
 ## TODO
 - Password support
 - Browse by folder
