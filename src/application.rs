@@ -34,7 +34,7 @@ use crate::{
     cache::Cache,
     config::{VERSION, APPLICATION_USER_AGENT},
     preferences::Preferences,
-    EuphoniaWindow
+    EuphonicaWindow
 };
 
 use adw::prelude::*;
@@ -43,7 +43,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug)]
-    pub struct EuphoniaApplication {
+    pub struct EuphonicaApplication {
         pub player: Player,
         pub library: Library,
         pub cache: Rc<Cache>,
@@ -54,15 +54,15 @@ mod imp {
     }
 
     #[glib::object_subclass]
-    impl ObjectSubclass for EuphoniaApplication {
-        const NAME: &'static str = "EuphoniaApplication";
-        type Type = super::EuphoniaApplication;
+    impl ObjectSubclass for EuphonicaApplication {
+        const NAME: &'static str = "EuphonicaApplication";
+        type Type = super::EuphonicaApplication;
         type ParentType = adw::Application;
 
         fn new() -> Self {
             // Create cache folder. This is where the cached album arts go.
             let mut cache_path: PathBuf = glib::user_cache_dir();
-            cache_path.push("euphonia");
+            cache_path.push("euphonica");
             println!("Cache path: {}", cache_path.to_str().unwrap());
             create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
@@ -92,7 +92,7 @@ mod imp {
 
     }
 
-    impl ObjectImpl for EuphoniaApplication {
+    impl ObjectImpl for EuphonicaApplication {
         fn constructed(&self) {
             self.parent_constructed();
             let obj = self.obj();
@@ -110,7 +110,7 @@ mod imp {
         }
     }
 
-    impl ApplicationImpl for EuphoniaApplication {
+    impl ApplicationImpl for EuphonicaApplication {
         // We connect to the activate callback to create a window when the application
         // has been launched. Additionally, this callback notifies us when the user
         // tries to launch a "second instance" of the application. When they try
@@ -121,7 +121,7 @@ mod imp {
             let window = if let Some(window) = application.active_window() {
                 window
             } else {
-                let window = EuphoniaWindow::new(&*application);
+                let window = EuphonicaWindow::new(&*application);
                 window.upcast()
             };
 
@@ -134,17 +134,17 @@ mod imp {
         }
     }
 
-    impl GtkApplicationImpl for EuphoniaApplication {}
-    impl AdwApplicationImpl for EuphoniaApplication {}
+    impl GtkApplicationImpl for EuphonicaApplication {}
+    impl AdwApplicationImpl for EuphonicaApplication {}
 }
 
 glib::wrapper! {
-    pub struct EuphoniaApplication(ObjectSubclass<imp::EuphoniaApplication>)
+    pub struct EuphonicaApplication(ObjectSubclass<imp::EuphonicaApplication>)
         @extends gio::Application, gtk::Application, adw::Application,
         @implements gio::ActionGroup, gio::ActionMap;
 }
 
-impl EuphoniaApplication {
+impl EuphonicaApplication {
     pub fn new(application_id: &str, flags: &gio::ApplicationFlags) -> Self {
         // TODO: Find a better place to put these
         musicbrainz_rs::config::set_user_agent(APPLICATION_USER_AGENT);
@@ -231,8 +231,8 @@ impl EuphoniaApplication {
     fn show_about(&self) {
         let window = self.active_window().unwrap();
         let about = adw::AboutDialog::builder()
-            .application_name("Euphonia")
-            .application_icon("org.euphonia.Euphonia")
+            .application_name("Euphonica")
+            .application_icon("org.euphonica.Euphonica")
             .developer_name("htkhiem2000")
             .version(VERSION)
             .developers(vec!["htkhiem2000"])

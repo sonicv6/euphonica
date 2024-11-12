@@ -34,7 +34,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/queue-row.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/queue-row.ui")]
     pub struct QueueRow {
         #[template_child]
         pub thumbnail: TemplateChild<Image>,
@@ -66,7 +66,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for QueueRow {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaQueueRow";
+        const NAME: &'static str = "EuphonicaQueueRow";
         type Type = super::QueueRow;
         type ParentType = gtk::Box;
 

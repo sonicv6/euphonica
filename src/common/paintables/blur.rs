@@ -9,7 +9,7 @@ use gtk::{
 };
 
 // Background paintable implementation.
-// Euphonia can optionally use the currently-playing track's album art as its
+// Euphonica can optionally use the currently-playing track's album art as its
 // background. This is always scaled to fill the whole window and can be further
 // blurred. When the next song has a different album art, a fade animation will
 // be played.
@@ -21,7 +21,7 @@ use gtk::{
 // To make this easier to implement, we implement all the blurring and caching in
 // this separate GdkPaintable.
 mod imp {
-    use glib::Properties;
+    use glib::{closure_local, Properties};
 
     use super::*;
 
@@ -43,7 +43,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for BlurPaintable {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaBlurPaintable";
+        const NAME: &'static str = "EuphonicaBlurPaintable";
         type Type = super::BlurPaintable;
         type Interfaces = (gdk::Paintable,);
 
@@ -128,31 +128,33 @@ mod imp {
                 let bg_width = paintable.intrinsic_width() as f32;
                 let bg_height = paintable.intrinsic_height() as f32;
                 // Scale a bit more to hide the semitransparent blurred edges
-                let scale_x = width / (bg_width - blur_radius);
-                let scale_y = height / (bg_height - blur_radius);
+                let scale_x = width / (bg_width - 2.0 * blur_radius);
+                let scale_y = height / (bg_height - 2.0 * blur_radius);
                 let scale_max = scale_x.max(scale_y);  // Scale by this much to completely fill the requested area
 
                 // Figure out where to position the upper left corner of the content paintable such that
                 // when scaled (keeping the upper left corner static) it would fill the whole drawing area.
-                // One of these should be equal to the corresponding dimension of the drawing area, that is,
-                // one of the deltas should be zero.
                 let view_width = bg_width * scale_max;
                 let view_height = bg_height * scale_max;
                 let delta_x = (width - view_width) * 0.5;
                 let delta_y = (height - view_height) * 0.5;
-                snapshot.translate(&graphene::Point::new(
-                    delta_x,
-                    delta_y
-                ));
                 if blur_radius > 0.0 {
                     snapshot.push_blur(blur_radius.into());
                 }
                 // To further optimise performance, clip areas that are outside the viewport (plus some margins
                 // for the blur radius) before blurring.
                 snapshot.push_clip(&graphene::Rect::new(
-                    delta_x, delta_y, width + blur_radius, height + blur_radius
+                    -blur_radius, -blur_radius, width + blur_radius * 2.0, height + blur_radius * 2.0
                 ));
-                paintable.snapshot(&snapshot, width.into(), height.into());
+                snapshot.translate(&graphene::Point::new(
+                    delta_x,
+                    delta_y
+                ));
+                paintable.snapshot(&snapshot, view_width.into(), view_height.into());
+                snapshot.translate(&graphene::Point::new(
+                    -delta_x,
+                    -delta_y
+                ));
                 // Clip
                 snapshot.pop();
                 // Blur
@@ -163,7 +165,6 @@ mod imp {
                 if let Some(rendered) = snapshot.to_paintable(Some(&graphene::Size::new(width, height))) {
                     self.cached.replace(Some(rendered.current_image()));
                 }
-
             }
             else {
                 // Content image has been removed => remove blurred version too.

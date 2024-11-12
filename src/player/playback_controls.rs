@@ -23,7 +23,7 @@ mod imp {
 
     #[derive(Default, Properties, CompositeTemplate)]
     #[properties(wrapper_type = super::PlaybackControls)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/playback-controls.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/playback-controls.ui")]
     pub struct PlaybackControls {
         #[template_child]
         pub flow_btn: TemplateChild<gtk::Button>,
@@ -49,7 +49,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for PlaybackControls {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaPlaybackControls";
+        const NAME: &'static str = "EuphonicaPlaybackControls";
         type Type = super::PlaybackControls;
         type ParentType = gtk::Box;
 

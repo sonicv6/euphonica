@@ -2,17 +2,17 @@
 <interface>
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
-	<template class="EuphoniaSidebar" parent="GtkBox">
+	<template class="EuphonicaSidebar" parent="GtkBox">
 		<property name="spacing">6</property>
 		<property name="orientation">vertical</property>
 		<child>
-			<object class="EuphoniaSidebarButton" id="albums_btn">
+			<object class="EuphonicaSidebarButton" id="albums_btn">
 				<property name="label" translatable="true">Albums</property>
 				<property name="icon_name">library-music-symbolic</property>
 			</object>
 		</child>
 		<child>
-			<object class="EuphoniaSidebarButton" id="artists_btn">
+			<object class="EuphonicaSidebarButton" id="artists_btn">
 				<property name="group">albums_btn</property>
 				<property name="label" translatable="true">Artists</property>
 				<property name="icon_name">music-artist-symbolic</property>
@@ -20,7 +20,7 @@
 		</child>
 		<!--
 		<child>
-			<object class="EuphoniaSidebarButton" id="folders_btn">
+			<object class="EuphonicaSidebarButton" id="folders_btn">
 				<property name="group">albums_btn</property>
 				<property name="label" translatable="true">Folders</property>
 				<property name="icon_name">folder-symbolic</property>
@@ -32,14 +32,14 @@
 		</child>
 		<!--
 		<child>
-			<object class="EuphoniaSidebarButton" id="playlist1_btn">
+			<object class="EuphonicaSidebarButton" id="playlist1_btn">
 				<property name="group">albums_btn</property>
 				<property name="label" translatable="true">Playlist 1</property>
 				<property name="icon_name">folder-symbolic</property>
 			</object>
 		</child>
 		<child>
-			<object class="EuphoniaSidebarButton" id="playlist2_btn">
+			<object class="EuphonicaSidebarButton" id="playlist2_btn">
 				<property name="group">albums_btn</property>
 				<property name="label" translatable="true">Playlist 2</property>
 				<property name="icon_name">folder-symbolic</property>

@@ -32,7 +32,7 @@ mod imp {
 
     #[derive(Debug, Properties, Default, CompositeTemplate)]
     #[properties(wrapper_type = super::QueueView)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/queue-view.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/queue-view.ui")]
     pub struct QueueView {
         #[template_child]
         pub queue_pane_view: TemplateChild<adw::NavigationSplitView>,
@@ -54,7 +54,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for QueueView {
-        const NAME: &'static str = "EuphoniaQueueView";
+        const NAME: &'static str = "EuphonicaQueueView";
         type Type = super::QueueView;
         type ParentType = gtk::Widget;
 

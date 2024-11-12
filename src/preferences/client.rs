@@ -18,7 +18,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/preferences/client.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/client.ui")]
     pub struct ClientPreferences {
         #[template_child]
         pub mpd_host: TemplateChild<adw::EntryRow>,
@@ -34,7 +34,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for ClientPreferences {
-        const NAME: &'static str = "EuphoniaClientPreferences";
+        const NAME: &'static str = "EuphonicaClientPreferences";
         type Type = super::ClientPreferences;
         type ParentType = adw::PreferencesPage;
 

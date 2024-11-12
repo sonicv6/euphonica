@@ -1,144 +1,87 @@
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use gtk::{
-    glib,
-    gdk,
-    gdk::subclass::paintable::*,
-    graphene,
-    prelude::*,
-    subclass::prelude::*
+    gdk::{self, subclass::paintable::*}, prelude::*, subclass::prelude::*, glib
 };
 
-// A Paintable for fading between textures. They are always scaled & cropped
-// to both maintain their aspect ratio and to fill the widest dimension of
-// this Paintable (equal to GTK_CONTENT_FIT_COVER in GtkPictures).
-// To fade between textures of different aspect ratios, we stick to the new
-// texture's coordinate system and figure out the scale at which to draw the
-// old texture such that there is no visible shift when switching to the
-// new texture but standing at fade == 0.0 (i.e. the old texture is still
-// displayed at the same position and scale as before).
-// The new texture is always drawn first at 100% opacity, optionally followed
-// by the old texture (being faded out) to avoid the short dip in opacity half-
-// way through the transition.
-// Adopted with modifications from Nanling Zheng's implementation for Gapless.
-// The original implementation was in Vala and can be found at
-// https://gitlab.gnome.org/neithern/g4music/-/blob/master/src/ui/paintables.vala.
-// Both the original implementation and this one are licensed under GPLv3.
+use crate::common::paintables::BlurPaintable;
+
+// Background paintable implementation.
+// Euphonica can optionally use the currently-playing track's album art as its
+// background. This is always scaled to fill the whole window and can be further
+// blurred. When the next song has a different album art, a fade animation will
+// be played.
 mod imp {
+    use glib::Properties;
+
+    use crate::common::paintables::BlurPaintable;
+
     use super::*;
 
-    #[derive(Default)]
+    #[derive(Default, Properties)]
+    #[properties(wrapper_type = super::FadePaintable)]
     pub struct FadePaintable {
-        pub current: RefCell<Option<gdk::Paintable>>,
-        pub previous: RefCell<Option<gdk::Paintable>>,
+        pub current: BlurPaintable,
+        pub previous: BlurPaintable,
         // 0 = previous, 0.5 = halfway, 1.0 = current
-        pub fade: Cell<f64>
+        pub fade: Cell<f64>,
+        // Kept here so snapshot() does not have to query GSettings on every frame
+        #[property(get, set)]
+        pub transition_duration: Cell<f64>,
     }
 
     #[glib::object_subclass]
     impl ObjectSubclass for FadePaintable {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaFadePaintable";
+        const NAME: &'static str = "EuphonicaFadePaintable";
         type Type = super::FadePaintable;
         type Interfaces = (gdk::Paintable,);
-
-        fn new() -> Self {
-            Self {
-                current: RefCell::new(None),
-                previous: RefCell::new(None),
-                fade: Cell::new(0.0)
-            }
-        }
     }
 
+    #[glib::derived_properties]
     impl ObjectImpl for FadePaintable {}
 
     impl PaintableImpl for FadePaintable {
         fn current_image(&self) -> gdk::Paintable {
-            if let Some(tex) = self.current.borrow().as_ref() {
-                tex.current_image()
-            } else {
-                self.obj().clone().upcast::<gdk::Paintable>()
-            }
+            self.current.current_image()
         }
 
         fn intrinsic_width(&self) -> i32 {
-            if let Some(current) = self.current.borrow().as_ref() {
-                current.intrinsic_width()
-            }
-            else {1}
+            self.current.intrinsic_width()
         }
 
         fn intrinsic_height(&self) -> i32 {
-            if let Some(current) = self.current.borrow().as_ref() {
-                current.intrinsic_height()
-            }
-            else {1}
+            self.current.intrinsic_height()
         }
 
         fn intrinsic_aspect_ratio(&self) -> f64 {
-            if let Some(current) = self.current.borrow().as_ref() {
-                current.intrinsic_aspect_ratio()
-            }
-            else {1.0}
+            self.current.intrinsic_aspect_ratio()
         }
 
         fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
+            // "Fade" is defined as the progress of the transition from the previous to the current texture.
+            // A value of 0.0 indicates that only the previous texture is visible, while 1.0 means only the
+            // current texture is visible.
+            // Fading procedure:
+            // 1. Check if there's a current texture. If there is:
+            //     1a. If there is no previous texture and fade != 1.0, then we're fading in from nothing.
+            //     Draw the current picture at fade opacity.
+            //     1b. Else (there is a previous texture and/or fade is at 1.0), just draw at full opacity.
+            // 2. Check if there's a previous texture. If there is and fade < 1.0, draw it at 1-fade opacity.
             let fade = self.fade.get();
-            // Check if there's a current texture.
-            if let Some(curr) = self.current.borrow().as_ref() {
-                if fade < 1.0 && self.previous.borrow().as_ref().is_none() {
-                    // If there is one, but nothing previously and fade is != 1,
-                    // then we're fading in from nothing.
+            if self.current.has_content() {
+                if self.previous.has_content() && fade < 1.0 {
                     snapshot.push_opacity(fade);
-                    curr.snapshot(snapshot, width, height);
+                    self.current.snapshot(snapshot, width, height);
                     snapshot.pop();
                 }
                 else {
-                    // Draw at full opacity (skip the opacity node).
-                    curr.snapshot(snapshot, width, height);
+                    self.current.snapshot(snapshot, width, height);
                 }
             }
-            if fade < 1.0 {
-                let delta_x: f64;
-                let delta_y: f64;
-                if let Some(prev) = self.previous.borrow().as_ref() {
-                    // Previous texture is still visible
-                    let prev_ratio = prev.intrinsic_aspect_ratio();
-                    let different_ratios = prev_ratio != self.intrinsic_aspect_ratio();
-                    // Relative to current texture size
-                    let prev_width: f64;
-                    let prev_height: f64;
-                    if different_ratios {
-                        let curr_max_side = width.max(height);
-                        if prev_ratio < 1.0 {
-                            prev_height = curr_max_side;
-                            prev_width = prev_height * prev_ratio;
-                        }
-                        else {
-                            prev_width = curr_max_side;
-                            prev_height = prev_width / prev_ratio;
-                        }
-                        // Move origin to the scaled prev texture's upper left corner
-                        delta_x = (width - prev_width) / 2.0;
-                        delta_y = (height - prev_height) / 2.0;
-                        snapshot.translate(&graphene::Point::new(
-                            delta_x as f32,
-                            delta_y as f32
-                        ));
-                    }
-                    else {
-                        delta_x = 0.0;
-                        delta_y = 0.0;
-                    }
-                    // Fade previous out
-                    snapshot.push_opacity(1.0 - fade);
-                    prev.snapshot(snapshot, width, height);
-                    snapshot.pop();
-                    snapshot.translate(&graphene::Point::new(
-                            -delta_x as f32,
-                            -delta_y as f32
-                    ));
-                }
+            if self.previous.has_content() && fade < 1.0 {
+                snapshot.push_opacity(1.0 - fade);
+                self.previous.snapshot(snapshot, width, height);
+                snapshot.pop();
             }
         }
     }
@@ -149,6 +92,14 @@ glib::wrapper! {
 }
 
 impl FadePaintable {
+    pub fn current(&self) -> &BlurPaintable {
+        &self.imp().current
+    }
+
+    pub fn previous(&self) -> &BlurPaintable {
+        &self.imp().previous
+    }
+
     pub fn get_fade(&self) -> f64 {
         self.imp().fade.get()
     }
@@ -162,12 +113,9 @@ impl FadePaintable {
     }
 
     pub fn set_new_paintable(&self, new: Option<gdk::Paintable>) {
-        if let Some(tex) = self.imp().current.take() {
-            let _ = self.imp().previous.replace(Some(tex));
-        }
-        self.imp().current.replace(new);
-        self.imp().fade.replace(0.0);
-        self.invalidate_contents();
+        self.imp().previous.set_content(self.imp().current.content());
+        self.imp().current.set_content(new);
+        self.set_fade(0.0);
     }
 }
 

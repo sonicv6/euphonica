@@ -13,7 +13,7 @@ mod imp {
 
     #[derive(Debug, Properties, Default, CompositeTemplate)]
     #[properties(wrapper_type = super::Sidebar)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/sidebar.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/sidebar.ui")]
     pub struct Sidebar {
         #[template_child]
         pub albums_btn: TemplateChild<SidebarButton>,
@@ -29,7 +29,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Sidebar {
-        const NAME: &'static str = "EuphoniaSidebar";
+        const NAME: &'static str = "EuphonicaSidebar";
         type Type = super::Sidebar;
         type ParentType = gtk::Box;
 

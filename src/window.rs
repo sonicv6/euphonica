@@ -24,11 +24,11 @@ use adw::{
     subclass::prelude::*
 };
 use gtk::{
-    gdk, gio, glib::{self, clone, closure_local, ParamSpec}
+    gdk, gio, glib::{self, clone, closure_local}
 };
 use glib::signal::SignalHandlerId;
 use crate::{
-    application::EuphoniaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
+    application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
 };
 
 mod imp {
@@ -37,14 +37,14 @@ mod imp {
     use glib::Properties;
     use utils::settings_manager;
 
-    use crate::{background::BackgroundPaintable, player::Player};
+    use crate::{common::paintables::FadePaintable, player::Player};
 
     use super::*;
 
     #[derive(Debug, Default, Properties, gtk::CompositeTemplate)]
-    #[properties(wrapper_type = super::EuphoniaWindow)]
-    #[template(resource = "/org/euphonia/Euphonia/window.ui")]
-    pub struct EuphoniaWindow {
+    #[properties(wrapper_type = super::EuphonicaWindow)]
+    #[template(resource = "/org/euphonica/Euphonica/window.ui")]
+    pub struct EuphonicaWindow {
         // Top level widgets
         #[template_child]
         pub split_view: TemplateChild<adw::NavigationSplitView>,
@@ -86,14 +86,14 @@ mod imp {
         pub use_album_art_bg: Cell<bool>,
         #[property(get, set)]
         pub opacity: Cell<f64>,
-        pub bg_paintable: BackgroundPaintable,
+        pub bg_paintable: FadePaintable,
         pub player: OnceCell<Player>
     }
 
     #[glib::object_subclass]
-    impl ObjectSubclass for EuphoniaWindow {
-        const NAME: &'static str = "EuphoniaWindow";
-        type Type = super::EuphoniaWindow;
+    impl ObjectSubclass for EuphonicaWindow {
+        const NAME: &'static str = "EuphonicaWindow";
+        type Type = super::EuphonicaWindow;
         type ParentType = adw::ApplicationWindow;
 
         fn class_init(klass: &mut Self::Class) {
@@ -107,7 +107,7 @@ mod imp {
     }
 
     #[glib::derived_properties]
-    impl ObjectImpl for EuphoniaWindow {
+    impl ObjectImpl for EuphonicaWindow {
         fn constructed(&self) {
             self.parent_constructed();
             let settings = settings_manager().child("player");
@@ -201,7 +201,7 @@ mod imp {
             );
         }
     }
-    impl WidgetImpl for EuphoniaWindow {
+    impl WidgetImpl for EuphonicaWindow {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let widget = self.obj();
             // GPU-accelerated, statically-cached blur
@@ -223,19 +223,19 @@ mod imp {
             self.parent_snapshot(snapshot);
         }
     }
-    impl WindowImpl for EuphoniaWindow {}
-    impl ApplicationWindowImpl for EuphoniaWindow {}
-    impl AdwApplicationWindowImpl for EuphoniaWindow {}
+    impl WindowImpl for EuphonicaWindow {}
+    impl ApplicationWindowImpl for EuphonicaWindow {}
+    impl AdwApplicationWindowImpl for EuphonicaWindow {}
 }
 
 glib::wrapper! {
-    pub struct EuphoniaWindow(ObjectSubclass<imp::EuphoniaWindow>)
+    pub struct EuphonicaWindow(ObjectSubclass<imp::EuphonicaWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
     adw::ApplicationWindow,
     @implements gio::ActionGroup, gio::ActionMap;
 }
 
-impl EuphoniaWindow {
+impl EuphonicaWindow {
     pub fn new<P: glib::object::IsA<gtk::Application>>(application: &P) -> Self {
         let win: Self =  glib::Object::builder()
             .property("application", application)
@@ -388,10 +388,10 @@ impl EuphoniaWindow {
         self.set_default_size(width, height);
     }
 
-    fn downcast_application(&self) -> EuphoniaApplication {
+    fn downcast_application(&self) -> EuphonicaApplication {
         self.application()
             .unwrap()
-            .downcast::<crate::application::EuphoniaApplication>()
+            .downcast::<crate::application::EuphonicaApplication>()
             .unwrap()
     }
 

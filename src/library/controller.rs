@@ -49,7 +49,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Library {
-        const NAME: &'static str = "EuphoniaLibrary";
+        const NAME: &'static str = "EuphonicaLibrary";
         type Type = super::Library;
 
         fn new() -> Self {

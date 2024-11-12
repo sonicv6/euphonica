@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <requires lib="gtk" version="4.0"/>
-  <template class="EuphoniaArtistView" parent="GtkWidget">
+  <template class="EuphonicaArtistView" parent="GtkWidget">
     <child>
       <object class="AdwNavigationView" id="nav_view">
         <child>
@@ -83,7 +83,7 @@
             <property name="tag">content</property>
             <property name="title">Artist Info</property>
             <child>
-              <object class="EuphoniaArtistContentView" id="content_view"></object>
+              <object class="EuphonicaArtistContentView" id="content_view"></object>
             </child>
           </object>
         </child>

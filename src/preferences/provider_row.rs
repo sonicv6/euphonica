@@ -25,7 +25,7 @@ mod imp {
 
     #[derive(Properties, Default, CompositeTemplate)]
     #[properties(wrapper_type = super::ProviderRow)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/preferences/provider-row.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/provider-row.ui")]
     pub struct ProviderRow {
         #[template_child]
         pub enabled: TemplateChild<gtk::Switch>,
@@ -43,7 +43,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for ProviderRow {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaProviderRow";
+        const NAME: &'static str = "EuphonicaProviderRow";
         type Type = super::ProviderRow;
         type ParentType = adw::ActionRow;
 

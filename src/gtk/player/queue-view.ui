@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <requires lib="gtk" version="4.0" />
-  <template class="EuphoniaQueueView" parent="GtkWidget">
+  <template class="EuphonicaQueueView" parent="GtkWidget">
     <child>
       <object class="AdwNavigationSplitView" id="queue_pane_view">
         <style>
@@ -20,7 +20,7 @@
                   <object class="AdwHeaderBar"/>
                 </child>
                 <property name="content">
-                  <object class="EuphoniaPlayerPane" id="player_pane"/>
+                  <object class="EuphonicaPlayerPane" id="player_pane"/>
                 </property>
               </object>
             </property>

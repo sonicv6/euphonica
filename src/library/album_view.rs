@@ -29,7 +29,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-view.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/album-view.ui")]
     pub struct AlbumView {
         #[template_child]
         pub nav_view: TemplateChild<adw::NavigationView>,
@@ -101,7 +101,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for AlbumView {
-        const NAME: &'static str = "EuphoniaAlbumView";
+        const NAME: &'static str = "EuphonicaAlbumView";
         type Type = super::AlbumView;
         type ParentType = gtk::Widget;
 
@@ -233,7 +233,7 @@ impl AlbumView {
 
                     // Vary behaviour depending on sort menu
                     match state.enum_("sort-by") {
-                        // Refer to the org.euphonia.Euphonia.sortby enum the gschema
+                        // Refer to the org.euphonica.Euphonica.sortby enum the gschema
                         3 => {
                             // Album title
                             g_cmp_str_options(

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<template class="EuphoniaArtistSongRow" parent="GtkBox">
+	<template class="EuphonicaArtistSongRow" parent="GtkBox">
 		<style>
 			<class name="padding-6"/>
 		</style>
@@ -15,7 +15,7 @@
 				<child>
 					<object class="GtkImage" id="thumbnail">
 						<property name="pixel-size">36</property>
-						<property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
+						<property name="resource">/org/euphonica/Euphonica/albumart-placeholder.png</property>
 					</object>
 				</child>
 			</object>

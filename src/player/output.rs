@@ -24,7 +24,7 @@ mod imp {
 
     #[derive(Properties, Default, CompositeTemplate)]
     #[properties(wrapper_type = super::MpdOutput)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/output.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/output.ui")]
     pub struct MpdOutput {
         #[template_child]
         pub toggle_btn: TemplateChild<gtk::Button>,
@@ -44,7 +44,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for MpdOutput {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaMpdOutput";
+        const NAME: &'static str = "EuphonicaMpdOutput";
         type Type = super::MpdOutput;
         type ParentType = gtk::Box;
 

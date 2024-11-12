@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<template class="EuphoniaArtistCell" parent="GtkBox">
+	<template class="EuphonicaArtistCell" parent="GtkBox">
 		<property name="halign">3</property>
 		<property name="valign">1</property>
 		<property name="margin-top">6</property>

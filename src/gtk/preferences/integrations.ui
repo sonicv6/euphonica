@@ -2,7 +2,7 @@
 <interface>
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
-	<template class="EuphoniaIntegrationsPreferences" parent="AdwPreferencesPage">
+	<template class="EuphonicaIntegrationsPreferences" parent="AdwPreferencesPage">
     <property name="title" translatable="true">Integrations</property>
 		<property name="icon-name">globe-symbolic</property>
 
@@ -28,7 +28,7 @@
 		<child>
 			<object class="AdwPreferencesGroup">
 				<property name="title" translatable="true">MusicBrainz</property>
-				<property name="description" translatable="true">MusicBrainz provides detailed information on releases (albums) and artists. Euphonia also supports fetching artist avatars as long as they are Wikimedia links listed as a "picture" relation.</property>
+				<property name="description" translatable="true">MusicBrainz provides detailed information on releases (albums) and artists. Euphonica also supports fetching artist avatars as long as they are Wikimedia links listed as a "picture" relation.</property>
         <child>
 					<object class="AdwSwitchRow" id="musicbrainz_download_album_art">
 						<property name="title" translatable="true">Download album arts</property>

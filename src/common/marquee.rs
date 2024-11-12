@@ -16,7 +16,7 @@ mod imp {
 
     #[derive(Default, CompositeTemplate, Properties)]
     #[properties(wrapper_type = super::Marquee)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/marquee.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/marquee.ui")]
     pub struct Marquee {
         #[template_child]
         pub child: TemplateChild<gtk::Label>,
@@ -48,7 +48,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for Marquee {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaMarquee";
+        const NAME: &'static str = "EuphonicaMarquee";
         type Type = super::Marquee;
         type ParentType = gtk::Widget;
 

@@ -31,7 +31,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for CacheState {
-        const NAME: &'static str = "EuphoniaCacheState";
+        const NAME: &'static str = "EuphonicaCacheState";
         type Type = super::CacheState;
     }
 

@@ -2,7 +2,7 @@
 <interface>
   <requires lib="gtk" version="4.0" />
   <requires lib="Adw" version="1.0" />
-  <template class="EuphoniaPlayerPreferences" parent="AdwPreferencesPage">
+  <template class="EuphonicaPlayerPreferences" parent="AdwPreferencesPage">
     <property name="title" translatable="true">Player</property>
     <property name="icon-name">play-symbolic</property>
     <child>
@@ -99,7 +99,7 @@
     <child>
       <object class="AdwPreferencesGroup">
         <property name="title" translatable="true">MPRIS</property>
-        <property name="description" translatable="true">Euphonia can be controlled from your shell or other applications via the MPRIS protocol.</property>
+        <property name="description" translatable="true">Euphonica can be controlled from your shell or other applications via the MPRIS protocol.</property>
         <child>
           <object class="AdwSwitchRow" id="enable_mpris">
             <property name="title" translatable="true">Enable MPRIS integration</property>

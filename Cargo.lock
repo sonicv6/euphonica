@@ -792,7 +792,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "euphonia"
+name = "euphonica"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",

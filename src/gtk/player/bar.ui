@@ -2,7 +2,7 @@
 <interface>
   <requires lib="gtk" version="4.0" />
   <requires lib="Adw" version="1.0" />
-  <template class="EuphoniaPlayerBar" parent="GtkBox">
+  <template class="EuphonicaPlayerBar" parent="GtkBox">
 		<style>
 			<class name="sidebar-shade"/>
 		</style>
@@ -28,7 +28,7 @@
                 <child>
                   <object class="GtkImage" id="albumart">
                     <property name="pixel-size">96</property>
-                    <property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
+                    <property name="resource">/org/euphonica/Euphonica/albumart-placeholder.png</property>
                   </object>
                 </child>
               </object>
@@ -41,7 +41,7 @@
                 <property name="orientation">1</property>
                 <property name="spacing">6</property>
                 <child>
-                  <object class="EuphoniaMarquee" id="song_name">
+                  <object class="EuphonicaMarquee" id="song_name">
                     <property name="should-run">true</property>
                     <style>
                       <class name="heading" />
@@ -125,7 +125,7 @@
             <property name="spacing">12</property>
             <property name="width-request">240</property>
             <child>
-              <object class="EuphoniaPlaybackControls" id="playback_controls">
+              <object class="EuphonicaPlaybackControls" id="playback_controls">
               </object>
             </child>
             <child>
@@ -180,7 +180,7 @@
               </object>
             </child>
             <child>
-              <object class="EuphoniaVolumeKnob" id="vol_knob"/>
+              <object class="EuphonicaVolumeKnob" id="vol_knob"/>
             </child>
           </object>
         </property>

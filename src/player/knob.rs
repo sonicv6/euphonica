@@ -33,7 +33,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/volume-knob.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/volume-knob.ui")]
     pub struct VolumeKnob {
         #[template_child]
         pub draw_area: TemplateChild<gtk::DrawingArea>,
@@ -58,7 +58,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for VolumeKnob {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaVolumeKnob";
+        const NAME: &'static str = "EuphonicaVolumeKnob";
         type Type = super::VolumeKnob;
         type ParentType = gtk::Box;
 

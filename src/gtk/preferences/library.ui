@@ -2,7 +2,7 @@
 <interface>
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
-	<template class="EuphoniaLibraryPreferences" parent="AdwPreferencesPage">
+	<template class="EuphonicaLibraryPreferences" parent="AdwPreferencesPage">
         <property name="title" translatable="true">Library</property>
 		<property name="icon-name">library-music-symbolic</property>
 		<child>

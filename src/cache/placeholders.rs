@@ -3,5 +3,5 @@ use gtk::gdk::Texture;
 
 pub static ALBUMART_PLACEHOLDER: Lazy<Texture> = Lazy::new(|| {
     println!("Loading placeholder texture...");
-    Texture::from_resource("/org/euphonia/Euphonia/albumart-placeholder.png")
+    Texture::from_resource("/org/euphonica/Euphonica/albumart-placeholder.png")
 });

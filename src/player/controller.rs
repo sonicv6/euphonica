@@ -1,6 +1,6 @@
 extern crate mpd;
 use crate::{
-    application::EuphoniaApplication,
+    application::EuphonicaApplication,
     cache::Cache,
     client::{ClientState, MpdMessage},
     common::{AlbumInfo, QualityGrade, Song},
@@ -29,7 +29,7 @@ use std::{
 };
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
-#[enum_type(name = "EuphoniaPlaybackState")]
+#[enum_type(name = "EuphonicaPlaybackState")]
 pub enum PlaybackState {
     #[default]
     Stopped,
@@ -48,7 +48,7 @@ impl From<PlaybackState> for MprisPlaybackStatus {
 }
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
-#[enum_type(name = "EuphoniaPlaybackFlow")]
+#[enum_type(name = "EuphonicaPlaybackFlow")]
 pub enum PlaybackFlow {
     #[default]
     Sequential,  // Plays through the queue once
@@ -150,7 +150,7 @@ fn get_replaygain_icon_name(mode: ReplayGain) -> &'static str {
 }
 
 mod imp {
-    use crate::application::EuphoniaApplication;
+    use crate::application::EuphonicaApplication;
 
     use super::*;
     use glib::{
@@ -188,12 +188,12 @@ mod imp {
         pub poll_blocked: Cell<bool>,
         pub mpris_server: AsyncOnceCell<LocalServer<super::Player>>,
         pub mpris_enabled: Cell<bool>,
-        pub app: OnceCell<EuphoniaApplication>
+        pub app: OnceCell<EuphonicaApplication>
     }
 
     #[glib::object_subclass]
     impl ObjectSubclass for Player {
-        const NAME: &'static str = "EuphoniaPlayer";
+        const NAME: &'static str = "EuphonicaPlayer";
         type Type = super::Player;
 
         fn new() -> Self {
@@ -355,7 +355,7 @@ impl Player {
     /// by the initial call to update_status().
     async fn get_mpris(&self) -> zbus::Result<&LocalServer<Self>> {
         self.imp().mpris_server.get_or_try_init(|| async {
-            let server = LocalServer::new("org.euphonia.Euphonia", self.clone())
+            let server = LocalServer::new("org.euphonica.Euphonica", self.clone())
                 .await?;
             glib::spawn_future_local(server.run());
             Ok(server)
@@ -364,7 +364,7 @@ impl Player {
 
     pub fn setup(
         &self,
-        application: EuphoniaApplication,
+        application: EuphonicaApplication,
         client_sender: Sender<MpdMessage>,
         client_state: ClientState,
         cache: Rc<Cache>
@@ -1075,11 +1075,11 @@ impl LocalRootInterface for Player {
     }
 
     async fn identity(&self) -> fdo::Result<String> {
-        Ok("Euphonia".to_string())
+        Ok("Euphonica".to_string())
     }
 
     async fn desktop_entry(&self) -> fdo::Result<String> {
-        Ok("org.euphonia.Euphonia".to_string())
+        Ok("org.euphonica.Euphonica".to_string())
     }
 
     async fn supported_uri_schemes(&self) -> fdo::Result<Vec<String>> {
@@ -1131,7 +1131,7 @@ impl LocalPlayerInterface for Player {
     }
 
     /// Use MPD's queue ID to construct track_id in this format:
-    /// /org/euphonia/Euphonia/<queue_id>
+    /// /org/euphonica/Euphonica/<queue_id>
     async fn set_position(&self, track_id: TrackId, position: Time) -> fdo::Result<()> {
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if track_id.as_str().split("/").last().unwrap() == &song.get_queue_id().to_string() {
@@ -1145,7 +1145,7 @@ impl LocalPlayerInterface for Player {
     }
 
     async fn open_uri(&self, _uri: String) -> fdo::Result<()> {
-        Err(fdo::Error::NotSupported("Euphonia currently does not support playing local files via MPD".to_owned()))
+        Err(fdo::Error::NotSupported("Euphonica currently does not support playing local files via MPD".to_owned()))
     }
 
     async fn playback_status(&self) -> fdo::Result<MprisPlaybackStatus> {
@@ -1168,7 +1168,7 @@ impl LocalPlayerInterface for Player {
 
     async fn set_rate(&self, _rate: PlaybackRate) -> zbus::Result<()> {
         Err(zbus::Error::from(fdo::Error::NotSupported(
-            "Euphonia currently does not support changing playback rate".to_owned())
+            "Euphonica currently does not support changing playback rate".to_owned())
         ))
     }
 
