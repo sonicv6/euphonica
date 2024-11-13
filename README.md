@@ -22,6 +22,8 @@ An MPD frontend with delusions of grandeur.
 
 ## Screenshots
 
+TODO: Update to reflect the recent name change :)
+
 - Album View in dark mode[^1]
   ![Album View in dark mode](data/screenshots/album-view-dark.png)
 
