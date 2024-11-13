@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<template class="EuphoniaMpdOutput" parent="GtkBox">
+	<template class="EuphonicaMpdOutput" parent="GtkBox">
 		<style>
 			<class name="linked"/>
 		</style>

@@ -16,7 +16,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/preferences/player.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/player.ui")]
     pub struct PlayerPreferences {
         #[template_child]
         pub use_album_art_as_bg: TemplateChild<adw::SwitchRow>,
@@ -36,7 +36,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for PlayerPreferences {
-        const NAME: &'static str = "EuphoniaPlayerPreferences";
+        const NAME: &'static str = "EuphonicaPlayerPreferences";
         type Type = super::PlayerPreferences;
         type ParentType = adw::PreferencesPage;
 

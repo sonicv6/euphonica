@@ -13,7 +13,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/preferences/library.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/library.ui")]
     pub struct LibraryPreferences {
         #[template_child]
         pub sort_nulls_first: TemplateChild<adw::SwitchRow>,
@@ -34,7 +34,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for LibraryPreferences {
-        const NAME: &'static str = "EuphoniaLibraryPreferences";
+        const NAME: &'static str = "EuphonicaLibraryPreferences";
         type Type = super::LibraryPreferences;
         type ParentType = adw::PreferencesPage;
 

@@ -2,21 +2,21 @@
 <interface>
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
-	<template class="EuphoniaPreferences" parent="AdwPreferencesDialog">
+	<template class="EuphonicaPreferences" parent="AdwPreferencesDialog">
 		<property name="content-width">800</property>
 		<property name="content-height">600</property>
 		<property name="title" translatable="true">Preferences</property>
 		<child>
-			<object class="EuphoniaClientPreferences" id="client_tab"/>
+			<object class="EuphonicaClientPreferences" id="client_tab"/>
 		</child>
 		<child>
-			<object class="EuphoniaIntegrationsPreferences" id="integrations_tab"/>
+			<object class="EuphonicaIntegrationsPreferences" id="integrations_tab"/>
 		</child>
 		<child>
-			<object class="EuphoniaLibraryPreferences" id="library_tab"/>
+			<object class="EuphonicaLibraryPreferences" id="library_tab"/>
 		</child>
 		<child>
-			<object class="EuphoniaPlayerPreferences" id="player_tab"/>
+			<object class="EuphonicaPlayerPreferences" id="player_tab"/>
 		</child>
 	</template>
 </interface>

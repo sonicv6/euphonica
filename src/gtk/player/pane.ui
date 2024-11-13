@@ -2,7 +2,7 @@
 <interface>
   <requires lib="gtk" version="4.0" />
   <requires lib="Adw" version="1.0" />
-  <template class="EuphoniaPlayerPane" parent="GtkBox">
+  <template class="EuphonicaPlayerPane" parent="GtkBox">
     <object class="GtkPopover" id="crossfade_popover">
       <property name="has-arrow">true</property>
       <property name="name">crossfade_popover</property>
@@ -171,7 +171,7 @@
             </child>
 
             <child>
-              <object class="EuphoniaPlaybackControls" id="playback_controls"/>
+              <object class="EuphonicaPlaybackControls" id="playback_controls"/>
             </child>
             <child>
               <object class="GtkBox">
@@ -262,7 +262,7 @@
                   </object>
                 </child>
                 <child>
-                  <object class="EuphoniaVolumeKnob" id="vol_knob"/>
+                  <object class="EuphonicaVolumeKnob" id="vol_knob"/>
                 </child>
               </object>
             </child>

@@ -17,7 +17,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/seekbar.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/seekbar.ui")]
     pub struct Seekbar {
         pub position: Cell<f64>,
         #[template_child]
@@ -33,7 +33,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for Seekbar {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaSeekbar";
+        const NAME: &'static str = "EuphonicaSeekbar";
         type Type = super::Seekbar;
         type ParentType = gtk::Widget;
 

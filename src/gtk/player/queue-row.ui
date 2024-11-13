@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <template class="EuphoniaQueueRow" parent="GtkBox">
+  <template class="EuphonicaQueueRow" parent="GtkBox">
     <child>
       <object class="GtkRevealer" id="playing_indicator">
         <property name="transition-type">slide-right</property>
@@ -24,7 +24,7 @@
         <child>
           <object class="GtkImage" id="thumbnail">
             <property name="pixel-size">36</property>
-            <property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
+            <property name="resource">/org/euphonica/Euphonica/albumart-placeholder.png</property>
           </object>
         </child>
       </object>
@@ -39,7 +39,7 @@
           <object class="GtkBox">
             <property name="spacing">6</property>
             <child>
-              <object class="EuphoniaMarquee" id="song_name">
+              <object class="EuphonicaMarquee" id="song_name">
                 <property name="speed">20</property>
                 <style>
                   <class name="heading" />

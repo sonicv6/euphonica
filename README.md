@@ -1,5 +1,5 @@
-![Euphonia icon](data/icons/hicolor/scalable/apps/org.euphonia.Euphonia.svg)
-# Euphonia
+![Euphonica icon](data/icons/hicolor/scalable/apps/org.euphonica.Euphonica.svg)
+# Euphonica
 
 An MPD frontend with delusions of grandeur.
 
@@ -9,7 +9,7 @@ An MPD frontend with delusions of grandeur.
 - Browse your library by album or artist, with browsing by folder, genre and other criteria in the works
 - Sort albums by name, AlbumArtist or release date (provided you have the tags)
 - Asynchronous search for large collections
-- Configurable multi-artist tag syntax, works with anything you throw at it (in other words, your artist tags can be pretty messy and Euphonia will still be able to correctly split them into individual artists for the Artist View)
+- Configurable multi-artist tag syntax, works with anything you throw at it (in other words, your artist tags can be pretty messy and Euphonica will still be able to correctly split them into individual artists for the Artist View)
 - Performant album art fetching & display (cached with Stretto)
 - Background blur effect
 - Automatically fetch album arts & artist avatars from external sources (currently supports Last.fm and MusicBrainz)
@@ -41,18 +41,18 @@ An MPD frontend with delusions of grandeur.
 
 ## Build
 
-Euphonia is developed on, and so far has only been tested on Arch Linux (btw).
+Euphonica is developed on, and so far has only been tested on Arch Linux (btw).
 
 1. Make sure you have these dependencies installed beforehand:
   - gtk4 >= 4.16
   - libadwaita >= 1.6
   - rustup >= 1.27
   - meson >= 1.5
-  - mpd >= 0.21 (Euphonia relies on the new filter syntax)
+  - mpd >= 0.21 (Euphonica relies on the new filter syntax)
 
 2. Init build folder
   ```bash
-  cd /path/to/where/you/cloned/this/repo/euphonia
+  cd /path/to/where/you/cloned/this/repo/euphonica
   meson setup build --buildtype=release
   ```
 

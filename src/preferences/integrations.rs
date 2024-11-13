@@ -15,7 +15,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/preferences/integrations.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/integrations.ui")]
     pub struct IntegrationsPreferences {
         #[template_child]
         pub lastfm_key: TemplateChild<adw::EntryRow>,
@@ -34,7 +34,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for IntegrationsPreferences {
-        const NAME: &'static str = "EuphoniaIntegrationsPreferences";
+        const NAME: &'static str = "EuphonicaIntegrationsPreferences";
         type Type = super::IntegrationsPreferences;
         type ParentType = adw::PreferencesPage;
 

@@ -1,4 +1,4 @@
-project('euphonia', 'rust',
+project('euphonica', 'rust',
           version: '0.6.0',
     meson_version: '>= 0.62.0',
   default_options: [ 'warning_level=2', 'werror=false', ],
@@ -25,7 +25,7 @@ else
   version_suffix = ''
 endif
 
-application_id = 'org.euphonia.Euphonia@0@'.format(profile)
+application_id = 'org.euphonica.Euphonica@0@'.format(profile)
 
 subdir('data')
 subdir('src')

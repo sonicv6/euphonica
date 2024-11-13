@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<schemalist gettext-domain="euphonia">
-	<enum id="org.euphonia.Euphonia.sortby">
+<schemalist gettext-domain="euphonica">
+	<enum id="org.euphonica.Euphonica.sortby">
 		<value nick="song-title" value="1"/>
 		<value nick="artist" value="2"/>
 		<value nick="album-title" value="3"/>
@@ -8,25 +8,25 @@
 		<value nick="release-date" value="5"/>
 	</enum>
 
-	<enum id="org.euphonia.Euphonia.sortdir">
+	<enum id="org.euphonica.Euphonica.sortdir">
 		<value nick="asc" value="1"/>
 		<value nick="desc" value="0"/>  <!-- Works as boolean too -->
 	</enum>
 
-	<enum id="org.euphonia.Euphonia.volumeunit">
+	<enum id="org.euphonica.Euphonica.volumeunit">
 		<value nick="percents" value="0"/>
 		<value nick="decibels" value="1"/>  <!-- Works as boolean too -->
 	</enum>
 
-	<schema id="org.euphonia.Euphonia" path="/org/euphonia/Euphonia/">
-		<child schema="org.euphonia.Euphonia.state" name="state"/>
-		<child schema="org.euphonia.Euphonia.library" name="library"/>
-		<child schema="org.euphonia.Euphonia.metaprovider" name="metaprovider"/>
-		<child schema="org.euphonia.Euphonia.player" name="player"/>
-		<child schema="org.euphonia.Euphonia.client" name="client"/>
+	<schema id="org.euphonica.Euphonica" path="/org/euphonica/Euphonica/">
+		<child schema="org.euphonica.Euphonica.state" name="state"/>
+		<child schema="org.euphonica.Euphonica.library" name="library"/>
+		<child schema="org.euphonica.Euphonica.metaprovider" name="metaprovider"/>
+		<child schema="org.euphonica.Euphonica.player" name="player"/>
+		<child schema="org.euphonica.Euphonica.client" name="client"/>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.client" path="/org/euphonia/Euphonia/client/">
+	<schema id="org.euphonica.Euphonica.client" path="/org/euphonica/Euphonica/client/">
 		<!-- TODO: bool key for whether there's a password. Store password with oo7. -->
 		<key name="mpd-host" type="s">
 			<default>'localhost'</default>
@@ -37,7 +37,7 @@
 		<key name="mpd-ping-interval-s" type="u">
 			<summary>Ping interval for main client</summary>
 			<description>
-			Euphonia relies on a secondary background client that's always in "idle mode" to
+			Euphonica relies on a secondary background client that's always in "idle mode" to
 			synchronise itself with changes made by other frontend apps. Its main client does not
 			poll the daemon unless needed (e.g. to update the seekbar). Due to this, it still
 			needs to occasionally ping the daemon to keep the connection alive. Set this to
@@ -50,7 +50,7 @@
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.library" path="/org/euphonia/Euphonia/library/">
+	<schema id="org.euphonica.Euphonica.library" path="/org/euphonica/Euphonica/library/">
 		<key name="artist-tag-delims" type="as">
 			<default>[",", ";", ":", "&amp;", "/", "//", "\\", "\\\\", " X ", "feat.", "ft.", "duet with", "special guest"]</default>
 		</key>
@@ -74,7 +74,7 @@
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.metaprovider" path="/org/euphonia/Euphonia/metaprovider/">
+	<schema id="org.euphonica.Euphonica.metaprovider" path="/org/euphonica/Euphonica/metaprovider/">
 		<key name="delay-between-requests-s" type="d">
 			<default>1.5</default>
 			<summary>How long to wait between metadata provider API calls</summary>
@@ -96,11 +96,11 @@
 			</description>
 		</key>
 
-		<child schema="org.euphonia.Euphonia.metaprovider.lastfm" name="lastfm"/>
-		<child schema="org.euphonia.Euphonia.metaprovider.musicbrainz" name="musicbrainz"/>
+		<child schema="org.euphonica.Euphonica.metaprovider.lastfm" name="lastfm"/>
+		<child schema="org.euphonica.Euphonica.metaprovider.musicbrainz" name="musicbrainz"/>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.metaprovider.lastfm" path="/org/euphonia/Euphonia/metaprovider/lastfm/">
+	<schema id="org.euphonica.Euphonica.metaprovider.lastfm" path="/org/euphonica/Euphonica/metaprovider/lastfm/">
 		<key name="name" type="s">
 			<default>'Last.fm'</default>
 		</key>
@@ -115,7 +115,7 @@
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.metaprovider.musicbrainz" path="/org/euphonia/Euphonia/metaprovider/musicbrainz/">
+	<schema id="org.euphonica.Euphonica.metaprovider.musicbrainz" path="/org/euphonica/Euphonica/metaprovider/musicbrainz/">
 		<key name="name" type="s">
 			<default>'MusicBrainz'</default>
 		</key>
@@ -130,7 +130,7 @@
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.player" path="/org/euphonia/Euphonia/player/">
+	<schema id="org.euphonica.Euphonica.player" path="/org/euphonica/Euphonica/player/">
 		<key name="enable-mpris" type="b">
 			<default>true</default>
 		</key>
@@ -149,14 +149,14 @@
 		<key name="vol-knob-sensitivity" type="d">
 			<default>1.0</default>
 		</key>
-		<key name="vol-knob-unit" enum='org.euphonia.Euphonia.volumeunit'>
+		<key name="vol-knob-unit" enum='org.euphonica.Euphonica.volumeunit'>
 			<default>'percents'</default>
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.state" path="/org/euphonia/Euphonia/state/">
-		<child schema="org.euphonia.Euphonia.state.albumview" name="albumview"/>
-		<child schema="org.euphonia.Euphonia.state.artistview" name="artistview"/>
+	<schema id="org.euphonica.Euphonica.state" path="/org/euphonica/Euphonica/state/">
+		<child schema="org.euphonica.Euphonica.state.albumview" name="albumview"/>
+		<child schema="org.euphonica.Euphonica.state.artistview" name="artistview"/>
 
 		<!-- Remember last window size -->
 		<key name="last-window-width" type="i">
@@ -167,22 +167,22 @@
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.state.albumview" path="/org/euphonia/Euphonia/state/albumview/">
+	<schema id="org.euphonica.Euphonica.state.albumview" path="/org/euphonica/Euphonica/state/albumview/">
 		<!-- Album view state -->
-		<key name='sort-by' enum='org.euphonia.Euphonia.sortby'>
+		<key name='sort-by' enum='org.euphonica.Euphonica.sortby'>
 			<default>'album-title'</default>
 			<summary>Album View sort criterion</summary>
 		</key>
 
-		<key name="sort-direction" enum='org.euphonia.Euphonia.sortdir'>
+		<key name="sort-direction" enum='org.euphonica.Euphonica.sortdir'>
 			<default>'asc'</default>
 			<summary>Album View sort direction</summary>
 		</key>
 	</schema>
 
-	<schema id="org.euphonia.Euphonia.state.artistview" path="/org/euphonia/Euphonia/state/artistview/">
+	<schema id="org.euphonica.Euphonica.state.artistview" path="/org/euphonica/Euphonica/state/artistview/">
 		<!-- Artist view state -->
-		<key name="sort-direction" enum='org.euphonia.Euphonia.sortdir'>
+		<key name="sort-direction" enum='org.euphonica.Euphonica.sortdir'>
 			<default>'asc'</default>
 			<summary>Artist View sort direction</summary>
 		</key>

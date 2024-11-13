@@ -32,7 +32,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-cell.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/album-cell.ui")]
     pub struct AlbumCell {
         #[template_child]
         pub cover: TemplateChild<gtk::Picture>,  // Use high-resolution version
@@ -52,7 +52,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for AlbumCell {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaAlbumCell";
+        const NAME: &'static str = "EuphonicaAlbumCell";
         type Type = super::AlbumCell;
         type ParentType = gtk::Box;
 

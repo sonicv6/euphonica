@@ -31,7 +31,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/library/artist-view.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/artist-view.ui")]
     pub struct ArtistView {
         #[template_child]
         pub nav_view: TemplateChild<adw::NavigationView>,
@@ -97,7 +97,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for ArtistView {
-        const NAME: &'static str = "EuphoniaArtistView";
+        const NAME: &'static str = "EuphonicaArtistView";
         type Type = super::ArtistView;
         type ParentType = gtk::Widget;
 

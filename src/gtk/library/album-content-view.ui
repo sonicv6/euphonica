@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <requires lib="gtk" version="4.0"/>
-  <template class="EuphoniaAlbumContentView" parent="GtkWidget">
+  <template class="EuphonicaAlbumContentView" parent="GtkWidget">
     <child>
       <object class="AdwToolbarView">
         <child type="top">
@@ -53,7 +53,7 @@
                             <child>
                               <object class="GtkImage" id="cover">
                                 <property name="pixel-size">256</property>
-                                <property name="resource">/org/euphonia/Euphonia/albumart-placeholder.png</property>
+                                <property name="resource">/org/euphonica/Euphonica/albumart-placeholder.png</property>
                               </object>
                             </child>
                           </object>

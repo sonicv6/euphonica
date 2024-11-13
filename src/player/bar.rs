@@ -28,7 +28,7 @@ mod imp {
 
     #[derive(Default, Properties, CompositeTemplate)]
     #[properties(wrapper_type = super::PlayerBar)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/bar.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/bar.ui")]
     pub struct PlayerBar {
         // Left side: current song info
         #[template_child]
@@ -75,7 +75,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for PlayerBar {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaPlayerBar";
+        const NAME: &'static str = "EuphonicaPlayerBar";
         type Type = super::PlayerBar;
         type ParentType = gtk::Box;
 
@@ -450,7 +450,7 @@ impl PlayerBar {
         }
         else {
             self.imp().albumart.set_resource(
-                Some("/org/euphonia/Euphonia/albumart-placeholder.png")
+                Some("/org/euphonica/Euphonica/albumart-placeholder.png")
             );
         }
     }

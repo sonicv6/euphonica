@@ -39,7 +39,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/library/artist-content-view.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/artist-content-view.ui")]
     pub struct ArtistContentView {
         #[template_child]
         pub avatar: TemplateChild<adw::Avatar>,
@@ -118,7 +118,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for ArtistContentView {
-        const NAME: &'static str = "EuphoniaArtistContentView";
+        const NAME: &'static str = "EuphonicaArtistContentView";
         type Type = super::ArtistContentView;
         type ParentType = gtk::Widget;
 

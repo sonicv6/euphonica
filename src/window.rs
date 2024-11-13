@@ -24,18 +24,18 @@ use adw::{
     subclass::prelude::*
 };
 use gtk::{
-    gdk, gio, glib::{self, clone, closure_local},
+    gio, glib::{self, clone, closure_local}
 };
 use glib::signal::SignalHandlerId;
+use image::DynamicImage;
 use crate::{
-    application::EuphoniaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
+    application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
 };
 
 mod imp {
     use std::cell::{Cell, OnceCell};
 
     use glib::Properties;
-    use gtk::graphene;
     use utils::settings_manager;
 
     use crate::{common::paintables::FadePaintable, player::Player};
@@ -43,9 +43,9 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, Properties, gtk::CompositeTemplate)]
-    #[properties(wrapper_type = super::EuphoniaWindow)]
-    #[template(resource = "/org/euphonia/Euphonia/window.ui")]
-    pub struct EuphoniaWindow {
+    #[properties(wrapper_type = super::EuphonicaWindow)]
+    #[template(resource = "/org/euphonica/Euphonica/window.ui")]
+    pub struct EuphonicaWindow {
         // Top level widgets
         #[template_child]
         pub split_view: TemplateChild<adw::NavigationSplitView>,
@@ -83,23 +83,18 @@ mod imp {
         pub notify_playback_state_id: RefCell<Option<SignalHandlerId>>,
         pub notify_duration_id: RefCell<Option<SignalHandlerId>>,
 
-        // Kept here so snapshot() does not have to query GSettings on every frame
         #[property(get, set)]
         pub use_album_art_bg: Cell<bool>,
         #[property(get, set)]
-        pub blur_radius: Cell<u32>,
-        #[property(get, set)]
         pub opacity: Cell<f64>,
-        #[property(get, set)]
-        pub transition_duration: Cell<f64>,
         pub bg_paintable: FadePaintable,
         pub player: OnceCell<Player>
     }
 
     #[glib::object_subclass]
-    impl ObjectSubclass for EuphoniaWindow {
-        const NAME: &'static str = "EuphoniaWindow";
-        type Type = super::EuphoniaWindow;
+    impl ObjectSubclass for EuphonicaWindow {
+        const NAME: &'static str = "EuphonicaWindow";
+        type Type = super::EuphonicaWindow;
         type ParentType = adw::ApplicationWindow;
 
         fn class_init(klass: &mut Self::Class) {
@@ -113,12 +108,14 @@ mod imp {
     }
 
     #[glib::derived_properties]
-    impl ObjectImpl for EuphoniaWindow {
+    impl ObjectImpl for EuphonicaWindow {
         fn constructed(&self) {
             self.parent_constructed();
             let settings = settings_manager().child("player");
             let obj_borrow = self.obj();
             let obj = obj_borrow.as_ref();
+            let bg_paintable = &self.bg_paintable;
+
             settings
                 .bind(
                     "use-album-art-as-bg",
@@ -127,22 +124,18 @@ mod imp {
                 )
                 .build();
 
-            // If using album art as background we must disable the default coloured
-            // backgrounds that navigation views use for their sidebars.
-            // We do this by toggling the "no-shading" CSS class for the top-level
-            // content widget, which in turn toggles the CSS selectors selecting those
-            // views.
-            obj.connect_notify_local(
-                Some("use-album-art-bg"),
-                |this, _| {
-                    this.update_background();
-                }
-            );
+            settings
+                .bind(
+                    "bg-blur-radius",
+                    bg_paintable.current(),
+                    "blur-radius"
+                )
+                .build();
 
             settings
                 .bind(
                     "bg-blur-radius",
-                    obj,
+                    bg_paintable.previous(),
                     "blur-radius"
                 )
                 .build();
@@ -158,10 +151,22 @@ mod imp {
             settings
                 .bind(
                     "bg-transition-duration-s",
-                    obj,
+                    bg_paintable,
                     "transition-duration"
                 )
                 .build();
+
+            // If using album art as background we must disable the default coloured
+            // backgrounds that navigation views use for their sidebars.
+            // We do this by toggling the "no-shading" CSS class for the top-level
+            // content widget, which in turn toggles the CSS selectors selecting those
+            // views.
+            obj.connect_notify_local(
+                Some("use-album-art-bg"),
+                |this, _| {
+                    this.update_background();
+                }
+            );
 
             self.sidebar.connect_notify_local(
                 Some("showing-queue-view"),
@@ -197,72 +202,41 @@ mod imp {
             );
         }
     }
-    impl WidgetImpl for EuphoniaWindow {
+    impl WidgetImpl for EuphonicaWindow {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let widget = self.obj();
-            let width = widget.width() as f32;
-            let height = widget.height() as f32;
-
-            // Bluuuuuur
-            // Adopted from Nanling Zheng's implementation for Gapless.
+            // GPU-accelerated, statically-cached blur
             if self.use_album_art_bg.get() {
-                let bg_width = self.bg_paintable.intrinsic_width() as f32;
-                let bg_height = self.bg_paintable.intrinsic_height() as f32;
-                // Also zoom in enough to avoid the "transparent edges" caused by blurring edge pixels
-                let blur_radius = self.blur_radius.get();
-                let scale_x = width / (bg_width - blur_radius as f32) as f32;
-                let scale_y = height / (bg_height - blur_radius as f32) as f32;
-                let scale_max = scale_x.max(scale_y);
-                let view_width = bg_width * scale_max;
-                let view_height = bg_height * scale_max;
-                let delta_x = (width - view_width) * 0.5;
-                let delta_y = (height - view_height) * 0.5;
-
-                snapshot.push_clip(&graphene::Rect::new(
-                    0.0, 0.0, width, height
-                ));
-                snapshot.translate(&graphene::Point::new(
-                    delta_x, delta_y
-                ));
-                // Blur & opacity nodes
-
-                if blur_radius > 0 {
-                    snapshot.push_blur(blur_radius as f64);
-                }
                 let opacity = self.opacity.get();
                 if opacity < 1.0 {
                     snapshot.push_opacity(opacity);
                 }
-                self.bg_paintable.snapshot(snapshot, view_width as f64, view_height as f64);
-                snapshot.translate(&graphene::Point::new(
-                    -delta_x, -delta_y
-                ));
-                snapshot.pop();
+                self.bg_paintable.snapshot(
+                    snapshot,
+                    widget.width() as f64,
+                    widget.height() as f64
+                );
                 if opacity < 1.0 {
                     snapshot.pop();
                 }
-                if blur_radius > 0 {
-                    snapshot.pop();
-                }
             }
-
             // Call the parent class's snapshot() method to render child widgets
             self.parent_snapshot(snapshot);
         }
     }
-    impl WindowImpl for EuphoniaWindow {}
-    impl ApplicationWindowImpl for EuphoniaWindow {}
-    impl AdwApplicationWindowImpl for EuphoniaWindow {}
+    impl WindowImpl for EuphonicaWindow {}
+    impl ApplicationWindowImpl for EuphonicaWindow {}
+    impl AdwApplicationWindowImpl for EuphonicaWindow {}
 }
 
 glib::wrapper! {
-    pub struct EuphoniaWindow(ObjectSubclass<imp::EuphoniaWindow>)
+    pub struct EuphonicaWindow(ObjectSubclass<imp::EuphonicaWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
     adw::ApplicationWindow,
     @implements gio::ActionGroup, gio::ActionMap;
 }
 
-impl EuphoniaWindow {
+impl EuphonicaWindow {
     pub fn new<P: glib::object::IsA<gtk::Application>>(application: &P) -> Self {
         let win: Self =  glib::Object::builder()
             .property("application", application)
@@ -367,47 +341,55 @@ impl EuphoniaWindow {
         }
     }
 
-    /// Update blurred background, if enabled
+    /// Update blurred background, if enabled. Use thumbnail version to minimise disk read time
+    /// since we're doing this synchronously.
     fn update_background(&self) {
         if let Some(player) = self.imp().player.get() {
-            // Blur the thumbnail version (lower original resolution, less work)
-            let tex: Option<gdk::Texture> = player.current_song_album_art(true);
             let imp = self.imp();
+            let tex: Option<DynamicImage> = player.current_song_album_art_cpu(true);
             let bg_paintable = imp.bg_paintable.clone();
             if imp.use_album_art_bg.get() && tex.is_some() {
                 if !imp.content.has_css_class("no-shading") {
                     imp.content.add_css_class("no-shading");
                 }
-                bg_paintable.set_new_paintable(Some(tex.unwrap().upcast::<gdk::Paintable>()));
             }
             else {
                 if imp.content.has_css_class("no-shading") {
                     imp.content.remove_css_class("no-shading");
                 }
-                bg_paintable.set_new_paintable(None);
             }
-
-            // Run fade transition
-            // Remember to queue draw too
-            let anim_target = adw::CallbackAnimationTarget::new(
+            // Will immediately re-blur and upload to GPU at current size
+            bg_paintable.set_new_content(tex);
+            // Once we've finished the above (expensive) operations, we can safely start
+            // the fade animation without worrying about stuttering.
+            glib::idle_add_local_once(
                 clone!(
                     #[weak(rename_to = this)]
                     self,
-                    #[weak]
-                    bg_paintable,
-                    move |progress: f64| {
-                        bg_paintable.set_fade(progress);
-                        this.queue_draw();
+                    move || {
+                        // Run fade transition once main thread is free
+                        // Remember to queue draw too
+                        let duration = (bg_paintable.transition_duration() * 1000.0).round() as u32;
+                        let anim_target = adw::CallbackAnimationTarget::new(
+                            clone!(
+                                #[weak]
+                                this,
+                                move |progress: f64| {
+                                    bg_paintable.set_fade(progress);
+                                    this.queue_draw();
+                                }
+                            )
+                        );
+                        let anim = adw::TimedAnimation::new(
+                            &this,
+                            0.0, 1.0,
+                            duration,
+                            anim_target
+                        );
+                        anim.play();
                     }
                 )
             );
-            let anim = adw::TimedAnimation::new(
-                self,
-                0.0, 1.0,
-                (self.imp().transition_duration.get() * 1000.0).round() as u32,
-                anim_target
-            );
-            anim.play();
         }
     }
 
@@ -419,10 +401,10 @@ impl EuphoniaWindow {
         self.set_default_size(width, height);
     }
 
-    fn downcast_application(&self) -> EuphoniaApplication {
+    fn downcast_application(&self) -> EuphonicaApplication {
         self.application()
             .unwrap()
-            .downcast::<crate::application::EuphoniaApplication>()
+            .downcast::<crate::application::EuphonicaApplication>()
             .unwrap()
     }
 

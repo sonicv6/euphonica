@@ -160,7 +160,7 @@ mod background {
         if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
             println!("Downloaded album art for {:?}", uri);
             if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
-                let (hires, thumb) = utils::resize_image(dyn_img);
+                let (hires, thumb) = utils::resize_convert_image(dyn_img);
                 if !path.exists() || !thumbnail_path.exists() {
                     if let (Ok(_), Ok(_)) = (
                         hires.save(path),

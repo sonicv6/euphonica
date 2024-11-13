@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <template class="EuphoniaPlaybackControls" parent="GtkBox">
+  <template class="EuphonicaPlaybackControls" parent="GtkBox">
     <child>
       <object class="GtkBox">
         <property name="hexpand">true</property>
@@ -99,7 +99,7 @@
         </child>
         <child>
           <!-- Bottom: seekbar -->
-          <object class="EuphoniaSeekbar" id="seekbar"/>
+          <object class="EuphonicaSeekbar" id="seekbar"/>
         </child>
       </object>
     </child>

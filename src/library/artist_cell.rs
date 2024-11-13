@@ -30,7 +30,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/library/artist-cell.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/artist-cell.ui")]
     pub struct ArtistCell {
         #[template_child]
         pub avatar: TemplateChild<adw::Avatar>,  // Use high-resolution version
@@ -45,7 +45,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for ArtistCell {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaArtistCell";
+        const NAME: &'static str = "EuphonicaArtistCell";
         type Type = super::ArtistCell;
         type ParentType = gtk::Box;
 

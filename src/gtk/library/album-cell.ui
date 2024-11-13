@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<template class="EuphoniaAlbumCell" parent="GtkBox">
+	<template class="EuphonicaAlbumCell" parent="GtkBox">
 		<!-- Use 1 outer box to centre the inner box. This way we
 			 can force content to stay within the album art's width.-->
 		<property name="halign">3</property>

@@ -113,7 +113,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Album {
-        const NAME: &'static str = "EuphoniaAlbum";
+        const NAME: &'static str = "EuphonicaAlbum";
         type Type = super::Album;
 
         fn new() -> Self {

@@ -2,13 +2,13 @@
 <interface>
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
-	<template class="EuphoniaClientPreferences" parent="AdwPreferencesPage">
+	<template class="EuphonicaClientPreferences" parent="AdwPreferencesPage">
     <property name="title" translatable="true">Database</property>
 		<property name="icon-name">server-pick-symbolic</property>
 		<child>
 			<object class="AdwPreferencesGroup">
 				<property name="title" translatable="true">Music Player Daemon</property>
-				<property name="description" translatable="true">Change how Euphonia connects to your Music Player Daemon instance. Click Reconnect to save these settings and initiate a new connection.</property>
+				<property name="description" translatable="true">Change how Euphonica connects to your Music Player Daemon instance. Click Reconnect to save these settings and initiate a new connection.</property>
 				<child>
 					<object class="AdwEntryRow" id="mpd_host">
 						<property name="title" translatable="true">Host address</property>

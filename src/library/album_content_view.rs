@@ -33,7 +33,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/library/album-content-view.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/album-content-view.ui")]
     pub struct AlbumContentView {
         #[template_child]
         pub infobox_revealer: TemplateChild<gtk::Revealer>,
@@ -106,7 +106,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for AlbumContentView {
-        const NAME: &'static str = "EuphoniaAlbumContentView";
+        const NAME: &'static str = "EuphonicaAlbumContentView";
         type Type = super::AlbumContentView;
         type ParentType = gtk::Widget;
 

@@ -1,8 +1,8 @@
 pkgdatadir = get_option('prefix') / get_option('datadir') / meson.project_name()
 gnome = import('gnome')
 
-gnome.compile_resources('euphonia',
-  'euphonia.gresource.xml',
+gnome.compile_resources('euphonica',
+  'euphonica.gresource.xml',
   gresource_bundle: true,
   install: true,
   install_dir: pkgdatadir,
@@ -10,7 +10,7 @@ gnome.compile_resources('euphonia',
 
 conf = configuration_data()
 conf.set('VERSION', meson.project_version())
-conf.set_quoted('GETTEXT_PACKAGE', 'euphonia')
+conf.set_quoted('GETTEXT_PACKAGE', 'euphonica')
 conf.set_quoted('LOCALEDIR', get_option('prefix') / get_option('localedir'))
 conf.set_quoted('APPLICATION_ID', application_id)
 conf.set_quoted('PKGDATADIR', pkgdatadir)

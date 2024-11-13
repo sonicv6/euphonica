@@ -15,7 +15,7 @@ use glib::{
 use crate::common::{Album, Artist};
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, glib::Enum)]
-#[enum_type(name = "EuphoniaConnectionState")]
+#[enum_type(name = "EuphonicaConnectionState")]
 pub enum ConnectionState {
     #[default]
     NotConnected,
@@ -42,7 +42,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for ClientState {
-        const NAME: &'static str = "EuphoniaClientState";
+        const NAME: &'static str = "EuphonicaClientState";
         type Type = super::ClientState;
 
         fn new() -> Self {

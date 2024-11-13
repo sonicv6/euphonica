@@ -27,7 +27,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/player/pane.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/player/pane.ui")]
     pub struct PlayerPane {
         // Song info
         #[template_child]
@@ -90,7 +90,7 @@ mod imp {
     #[glib::object_subclass]
     impl ObjectSubclass for PlayerPane {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphoniaPlayerPane";
+        const NAME: &'static str = "EuphonicaPlayerPane";
         type Type = super::PlayerPane;
         type ParentType = gtk::Box;
 

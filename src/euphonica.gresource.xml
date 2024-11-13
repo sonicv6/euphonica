@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-	<gresource prefix="/org/euphonia/Euphonia">
+	<gresource prefix="/org/euphonica/Euphonica">
 		<file preprocess="xml-stripblanks">window.ui</file>
 		<file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
 		<file preprocess="xml-stripblanks">gtk/sidebar-button.ui</file>
@@ -36,7 +36,7 @@
 		<file>gtk/style.css</file>
 		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
 	</gresource>
-	<gresource prefix="/org/euphonia/Euphonia/icons/scalable/actions/">
+	<gresource prefix="/org/euphonica/Euphonica/icons/scalable/actions/">
 		<file preprocess="xml-stripblanks" alias="settings-symbolic.svg">gtk/icons/settings-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="mixramp-off-symbolic.svg">gtk/icons/mixramp-off-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="mixramp-symbolic.svg">gtk/icons/mixramp-symbolic.svg</file>

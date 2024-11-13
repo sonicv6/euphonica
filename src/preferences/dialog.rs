@@ -22,7 +22,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonia/Euphonia/gtk/preferences/dialog.ui")]
+    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/dialog.ui")]
     pub struct Preferences {
         #[template_child]
         pub client_tab: TemplateChild<ClientPreferences>,
@@ -39,7 +39,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Preferences {
-        const NAME: &'static str = "EuphoniaPreferences";
+        const NAME: &'static str = "EuphonicaPreferences";
         type Type = super::Preferences;
         type ParentType = adw::PreferencesDialog;
 

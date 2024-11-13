@@ -20,7 +20,7 @@ use super::{
 
 // Mostly for eyecandy
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
-#[enum_type(name = "EuphoniaQualityGrade")]
+#[enum_type(name = "EuphonicaQualityGrade")]
 pub enum QualityGrade {
     #[default]
     Unknown, // Catch-all
@@ -170,7 +170,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Song {
-        const NAME: &'static str = "EuphoniaSong";
+        const NAME: &'static str = "EuphonicaSong";
         type Type = super::Song;
 
         fn new() -> Self {
@@ -352,7 +352,7 @@ impl Song {
             .title(self.get_name())
             .trackid(
                 ObjectPath::from_string_unchecked(
-                    format!("/org/euphonia/Euphonia/{}", self.get_queue_id())
+                    format!("/org/euphonica/Euphonica/{}", self.get_queue_id())
                 )
             )
             .length(Time::from_millis(self.get_duration() as i64))
