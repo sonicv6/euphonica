@@ -560,6 +560,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
+name = "colorutils-rs"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31ca2cc8ed986672b15bfd3e416014e40cada05196bdfaa51168985f3c2e81f1"
+dependencies = [
+ "erydanos",
+ "half",
+ "num-traits",
+ "rayon",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -792,6 +804,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "erydanos"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a47baa8d6403c503aada20928019931ed367ed226ec0916f27c6a0d3af86c559"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "euphonica"
 version = "0.1.0"
 dependencies = [
@@ -808,6 +829,7 @@ dependencies = [
  "image 0.25.1",
  "itertools 0.13.0",
  "libadwaita",
+ "libblur",
  "librsvg",
  "mpd",
  "mpris-server",
@@ -1549,6 +1571,7 @@ checksum = "6dd08c532ae367adf81c312a4580bc67f1d0fe8bc9c460520283f4c0ff277888"
 dependencies = [
  "cfg-if 1.0.0",
  "crunchy",
+ "num-traits",
 ]
 
 [[package]]
@@ -1999,6 +2022,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "libblur"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e999317b46d9532bfb15a3a8d718e97a849ea9d3fe125be3456e7681d9c95f87"
+dependencies = [
+ "colorutils-rs",
+ "erydanos",
+ "half",
+ "libc",
+ "num-traits",
+ "rayon",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.161"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2014,6 +2051,12 @@ dependencies = [
  "cc",
  "once_cell",
 ]
+
+[[package]]
+name = "libm"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
 
 [[package]]
 name = "librsvg"
@@ -2407,6 +2450,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]

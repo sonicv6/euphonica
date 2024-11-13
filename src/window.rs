@@ -24,9 +24,10 @@ use adw::{
     subclass::prelude::*
 };
 use gtk::{
-    gdk, gio, glib::{self, clone, closure_local}
+    gio, glib::{self, clone, closure_local}
 };
 use glib::signal::SignalHandlerId;
+use image::DynamicImage;
 use crate::{
     application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
 };
@@ -340,43 +341,55 @@ impl EuphonicaWindow {
         }
     }
 
-    /// Update blurred background, if enabled
+    /// Update blurred background, if enabled. Use thumbnail version to minimise disk read time
+    /// since we're doing this synchronously.
     fn update_background(&self) {
         if let Some(player) = self.imp().player.get() {
-            let tex: Option<gdk::Texture> = player.current_song_album_art(false);
             let imp = self.imp();
+            let tex: Option<DynamicImage> = player.current_song_album_art_cpu(true);
             let bg_paintable = imp.bg_paintable.clone();
             if imp.use_album_art_bg.get() && tex.is_some() {
                 if !imp.content.has_css_class("no-shading") {
                     imp.content.add_css_class("no-shading");
                 }
-                bg_paintable.set_new_paintable(Some(tex.unwrap().upcast::<gdk::Paintable>()));
             }
             else {
                 if imp.content.has_css_class("no-shading") {
                     imp.content.remove_css_class("no-shading");
                 }
-                bg_paintable.set_new_paintable(None);
             }
-            // Run fade transition
-            // Remember to queue draw too
-            let anim_target = adw::CallbackAnimationTarget::new(
+            // Will immediately re-blur and upload to GPU at current size
+            bg_paintable.set_new_content(tex);
+            // Once we've finished the above (expensive) operations, we can safely start
+            // the fade animation without worrying about stuttering.
+            glib::idle_add_local_once(
                 clone!(
                     #[weak(rename_to = this)]
                     self,
-                    move |progress: f64| {
-                        this.imp().bg_paintable.set_fade(progress);
-                        this.queue_draw();
+                    move || {
+                        // Run fade transition once main thread is free
+                        // Remember to queue draw too
+                        let duration = (bg_paintable.transition_duration() * 1000.0).round() as u32;
+                        let anim_target = adw::CallbackAnimationTarget::new(
+                            clone!(
+                                #[weak]
+                                this,
+                                move |progress: f64| {
+                                    bg_paintable.set_fade(progress);
+                                    this.queue_draw();
+                                }
+                            )
+                        );
+                        let anim = adw::TimedAnimation::new(
+                            &this,
+                            0.0, 1.0,
+                            duration,
+                            anim_target
+                        );
+                        anim.play();
                     }
                 )
             );
-            let anim = adw::TimedAnimation::new(
-                self,
-                0.0, 1.0,
-                (self.imp().bg_paintable.transition_duration() * 1000.0).round() as u32,
-                anim_target
-            );
-            anim.play();
         }
     }
 

@@ -3,10 +3,10 @@ use gtk::{
     glib,
     gdk,
     gdk::subclass::paintable::*,
-    graphene,
     prelude::*,
     subclass::prelude::*
 };
+use image::DynamicImage;
 
 // Background paintable implementation.
 // Euphonica can optionally use the currently-playing track's album art as its
@@ -21,22 +21,27 @@ use gtk::{
 // To make this easier to implement, we implement all the blurring and caching in
 // this separate GdkPaintable.
 mod imp {
-    use glib::{closure_local, Properties};
+    use glib::Properties;
+    use image::{imageops::FilterType, DynamicImage};
+    use libblur::{stack_blur, FastBlurChannels, ThreadingPolicy};
 
     use super::*;
 
     #[derive(Default, Properties)]
     #[properties(wrapper_type = super::BlurPaintable)]
     pub struct BlurPaintable {
-        pub content: RefCell<Option<gdk::Paintable>>, // unblurred content
-        pub cached: RefCell<Option<gdk::Paintable>>, // cached blurred content
+        pub content: RefCell<Option<DynamicImage>>, // unblurred content
+        pub cached: RefCell<Option<gdk::MemoryTexture>>, // cached blurred content
         // Kept here so snapshot() does not have to query GSettings on every frame
         #[property(get, set = Self::set_blur_radius)]
         pub blur_radius: Cell<u32>,
 
+        #[property(get)]
         pub needs_reblur: Cell<bool>,
         // Kept here to detect window size changes, which necessitate re-blurring
+        #[property(get)]
         pub curr_width: Cell<f64>,
+        #[property(get)]
         pub curr_height: Cell<f64>
     }
 
@@ -72,22 +77,22 @@ mod imp {
         }
 
         fn intrinsic_width(&self) -> i32 {
-            if let Some(content) = self.content.borrow().as_ref() {
-                content.intrinsic_width()
+            if let Some(cached) = self.cached.borrow().as_ref() {
+                cached.intrinsic_width()
             }
             else {1}
         }
 
         fn intrinsic_height(&self) -> i32 {
-            if let Some(content) = self.content.borrow().as_ref() {
-                content.intrinsic_height()
+            if let Some(cached) = self.cached.borrow().as_ref() {
+                cached.intrinsic_height()
             }
             else {1}
         }
 
         fn intrinsic_aspect_ratio(&self) -> f64 {
-            if let Some(content) = self.content.borrow().as_ref() {
-                content.intrinsic_aspect_ratio()
+            if let Some(cached) = self.cached.borrow().as_ref() {
+                cached.intrinsic_aspect_ratio()
             }
             else {1.0}
         }
@@ -101,7 +106,7 @@ mod imp {
             // Can also be set to true by set_blur_radius
             if self.needs_reblur.get() {
                 // Regenerate blur first, then draw the blurred texture
-                self.update_blur(width as f32, height as f32);
+                self.update_blur(width.ceil() as u32, height.ceil() as u32);
             }
             // Check if there is a texture (might have been called before being given a texture)
             if let Some(cached) = self.cached.borrow().as_ref() {
@@ -118,53 +123,37 @@ mod imp {
             }
         }
 
-        /// Scale the paintable to the current size, then blur them.
+        /// Scale the image to the current size, then blur them.
         /// Here we will scale to fill, centering the content paintable in the drawing area.
-        pub fn update_blur(&self, width: f32, height: f32) {
-            if let Some(paintable) = self.content.borrow().as_ref() {
-                // Create a separate snapshot to cache the blur
-                let snapshot = gtk::Snapshot::new();
-                let blur_radius = self.blur_radius.get() as f32;
-                let bg_width = paintable.intrinsic_width() as f32;
-                let bg_height = paintable.intrinsic_height() as f32;
-                // Scale a bit more to hide the semitransparent blurred edges
-                let scale_x = width / (bg_width - 2.0 * blur_radius);
-                let scale_y = height / (bg_height - 2.0 * blur_radius);
-                let scale_max = scale_x.max(scale_y);  // Scale by this much to completely fill the requested area
-
-                // Figure out where to position the upper left corner of the content paintable such that
-                // when scaled (keeping the upper left corner static) it would fill the whole drawing area.
-                let view_width = bg_width * scale_max;
-                let view_height = bg_height * scale_max;
-                let delta_x = (width - view_width) * 0.5;
-                let delta_y = (height - view_height) * 0.5;
-                if blur_radius > 0.0 {
-                    snapshot.push_blur(blur_radius.into());
-                }
-                // To further optimise performance, clip areas that are outside the viewport (plus some margins
-                // for the blur radius) before blurring.
-                snapshot.push_clip(&graphene::Rect::new(
-                    -blur_radius, -blur_radius, width + blur_radius * 2.0, height + blur_radius * 2.0
-                ));
-                snapshot.translate(&graphene::Point::new(
-                    delta_x,
-                    delta_y
-                ));
-                paintable.snapshot(&snapshot, view_width.into(), view_height.into());
-                snapshot.translate(&graphene::Point::new(
-                    -delta_x,
-                    -delta_y
-                ));
-                // Clip
-                snapshot.pop();
-                // Blur
-                if blur_radius > 0.0 {
-                    snapshot.pop();
-                }
-                // Cache immutable texture
-                if let Some(rendered) = snapshot.to_paintable(Some(&graphene::Size::new(width, height))) {
-                    self.cached.replace(Some(rendered.current_image()));
-                }
+        pub fn update_blur(&self, width: u32, height: u32) {
+            if let Some(di) = self.content.borrow().as_ref() {
+                let scaled = di.resize_to_fill(
+                    width,
+                    height,
+                    FilterType::Nearest
+                );
+                let mut dst_bytes: Vec<u8> = scaled.as_bytes().to_vec();
+                // Always assume RGB8 (no alpha channel)
+                // This works since we're the ones who wrote the original images
+                // to disk in the first place.
+                stack_blur(
+                    &mut dst_bytes,
+                    width * 3,
+                    width,
+                    height,
+                    self.blur_radius.get(),
+                    FastBlurChannels::Channels3,
+                    ThreadingPolicy::Adaptive
+                );
+                // Wrap in MemoryTexture for snapshotting
+                let mem_tex = gdk::MemoryTexture::new(
+                    width as i32,
+                    height as i32,
+                    gdk::MemoryFormat::R8g8b8,
+                    &glib::Bytes::from_owned(dst_bytes),
+                    (width * 3) as usize
+                );
+                self.cached.replace(Some(mem_tex));
             }
             else {
                 // Content image has been removed => remove blurred version too.
@@ -184,17 +173,41 @@ impl BlurPaintable {
         Self::default()
     }
 
-    pub fn set_content(&self, new: Option<gdk::Paintable>) {
+    /// Set new content to be blurred.
+    /// This will immediately force a reblur and texture upload to GPU, so be sure to
+    /// finish running this before starting the animation.
+    pub fn set_content(&self, new: Option<DynamicImage>) {
         self.imp().content.replace(new);
-        self.imp().needs_reblur.replace(true);
+        self.invalidate_contents();
+        self.imp().update_blur(
+            self.imp().curr_width.get().round() as u32,
+            self.imp().curr_height.get().round() as u32
+        );
+    }
+
+    /// Take content and cached blur from another paintable, if blur config & size are similar.
+    /// This helps when migrating content between current and previous paintables (avoids one blur & upload).
+    pub fn take_from(&self, other: &Self) {
+        let cache_updated = !other.needs_reblur();
+        self.imp().content.replace(other.take_content());
+        if self.curr_width() == other.curr_width() && self.curr_height() == other.curr_height()  && self.blur_radius() == other.blur_radius() && cache_updated {
+            self.imp().cached.replace(other.get_cached());
+            self.imp().needs_reblur.replace(false);
+        }
+        self.invalidate_contents();
     }
 
     pub fn has_content(&self) -> bool {
         self.imp().content.borrow().as_ref().is_some()
     }
 
-    pub fn content(&self) -> Option<gdk::Paintable> {
-        self.imp().content.borrow().clone()
+    pub fn take_content(&self) -> Option<DynamicImage> {
+        self.imp().needs_reblur.replace(true);
+        self.imp().content.take()
+    }
+
+    pub fn get_cached(&self) -> Option<gdk::MemoryTexture> {
+        self.imp().cached.borrow().as_ref().cloned()
     }
 }
 

@@ -7,6 +7,7 @@ use crate::{
     utils::{prettify_audio_format, settings_manager}
 };
 use async_lock::OnceCell as AsyncOnceCell;
+use image::DynamicImage;
 use mpris_server::{
     zbus::{self, fdo},
     LocalPlayerInterface, LocalRootInterface, LocalServer,
@@ -854,12 +855,24 @@ impl Player {
     }
 
     pub fn current_song_album_art(&self, thumbnail: bool) -> Option<Texture> {
-        // Use high-resolution version
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if let Some(cache) = self.imp().cache.get() {
                 if let Some(album) = song.get_album() {
                     // Should have been scheduled by queue updates.
                     return cache.load_cached_album_art(album, thumbnail, false);
+                }
+            }
+            return None;
+        }
+        None
+    }
+
+    pub fn current_song_album_art_cpu(&self, thumbnail: bool) -> Option<DynamicImage> {
+        if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            if let Some(cache) = self.imp().cache.get() {
+                if let Some(album) = song.get_album() {
+                    // Always read from disk
+                    return cache.load_cached_album_art_cpu(album, thumbnail, false);
                 }
             }
             return None;

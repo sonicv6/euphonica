@@ -2,6 +2,7 @@ use std::cell::Cell;
 use gtk::{
     gdk::{self, subclass::paintable::*}, prelude::*, subclass::prelude::*, glib
 };
+use image::DynamicImage;
 
 use crate::common::paintables::BlurPaintable;
 
@@ -112,10 +113,10 @@ impl FadePaintable {
         }
     }
 
-    pub fn set_new_paintable(&self, new: Option<gdk::Paintable>) {
-        self.imp().previous.set_content(self.imp().current.content());
-        self.imp().current.set_content(new);
+    pub fn set_new_content(&self, new: Option<DynamicImage>) {
+        self.imp().previous.take_from(&self.imp().current);
         self.set_fade(0.0);
+        self.imp().current.set_content(new);
     }
 }
 

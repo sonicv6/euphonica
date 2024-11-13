@@ -15,6 +15,7 @@ extern crate fasthash;
 extern crate bson;
 extern crate polodb_core;
 use async_channel::{Sender, Receiver};
+use image::{io::Reader, DynamicImage};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
 use std::{
@@ -390,10 +391,10 @@ impl Cache {
         }
     }
 
+    /// This is a public method to allow other controllers to get cached album arts for
+    /// specific songs/albums directly if possible.
+    /// Without this, they can only get the textures via signals, which have overhead.s
     pub fn load_cached_album_art(&self, album: &AlbumInfo, thumbnail: bool, schedule: bool) -> Option<Texture> {
-        // This is a public method to allow other controllers to get cached album arts for
-        // specific songs/albums directly if possible.
-        // Without this, they can only get the textures via signals, which have overheads.
         let folder_uri = album.uri.to_owned();
         let key = (format!("uri:{}", &folder_uri), thumbnail);
         if let Some(tex) = IMAGE_CACHE.get(&key) {
@@ -407,6 +408,22 @@ impl Cache {
         }
         None
     }
+
+
+    /// Alterantive to load_cached_album_art that returns a CPU-bound image::DynamicImage, useful for CPU-powered
+    /// background stack blur logic. This always triggers a disk read, since our cache only contains references
+    /// to GdkTextures, which may be GPU-bound.
+    pub fn load_cached_album_art_cpu(&self, album: &AlbumInfo, thumbnail: bool, schedule: bool) -> Option<DynamicImage> {
+        let folder_uri = album.uri.to_owned();
+        let path = self.get_path_for(&Metadata::AlbumArt(folder_uri, thumbnail));
+        if path.exists() {
+            Some(Reader::open(path.to_str().unwrap()).unwrap().decode().unwrap())
+        }
+        else {
+            None
+        }
+    }
+
 
     /// Convenience method to check whether album art for a given album is locally available,
     /// and if not, queue its downloading from MPD.
