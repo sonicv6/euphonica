@@ -663,9 +663,8 @@ impl Player {
                 self.notify("duration");
                 self.notify("quality-grade");
                 self.notify("format-desc");
-                // Avoid needlessly changing album art as it will cause the whole
-                // bar to redraw (blurred background).
-                if old_song.is_none() || (new_song.get_album_title() != old_song.unwrap().get_album_title()) {
+                // Avoid needlessly changing album art as background blur updates are expensive.
+                if (old_song.is_none()) || (new_song.get_album_title() != old_song.unwrap().get_album_title()) {
                     self.notify("album");
                     self.notify("album-art");
                 }
@@ -685,12 +684,12 @@ impl Player {
             // No song is playing. Update state accordingly.
             let was_playing = self.imp().current_song.borrow().as_ref().is_some(); // end borrow
             if  was_playing {
+                let _ = self.imp().current_song.take();
                 self.notify("title");
                 self.notify("artist");
                 self.notify("album");
                 self.notify("album-art");
                 self.notify("duration");
-                let _ = self.imp().current_song.take();
                 // Update MPRIS side
                 if self.imp().mpris_enabled.get() {
                     mpris_changes.push(Property::Metadata(

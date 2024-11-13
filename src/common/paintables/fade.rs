@@ -70,7 +70,7 @@ mod imp {
             // 2. Check if there's a previous texture. If there is and fade < 1.0, draw it at 1-fade opacity.
             let fade = self.fade.get();
             if self.current.has_content() {
-                if self.previous.has_content() && fade < 1.0 {
+                if !self.previous.has_content() && fade < 1.0 {
                     snapshot.push_opacity(fade);
                     self.current.snapshot(snapshot, width, height);
                     snapshot.pop();
@@ -114,6 +114,9 @@ impl FadePaintable {
     }
 
     pub fn set_new_content(&self, new: Option<DynamicImage>) {
+        if new.is_none() {
+            println!("Clearing...");
+        }
         self.imp().previous.take_from(&self.imp().current);
         self.set_fade(0.0);
         self.imp().current.set_content(new);
