@@ -9,9 +9,12 @@ An MPD frontend with delusions of grandeur.
 - Browse your library by album or artist, with browsing by folder, genre and other criteria in the works
 - Sort albums by name, AlbumArtist or release date (provided you have the tags)
 - Asynchronous search for large collections
-- Configurable multi-artist tag syntax, works with anything you throw at it (in other words, your artist tags can be pretty messy and Euphonica will still be able to correctly split them into individual artists for the Artist View)
+- Configurable multi-artist tag syntax, works with anything you throw at it
+  - In other words, your artist tags can be pretty messy and Euphonica will still be able to correctly split them into individual artists.
 - Performant album art fetching & display (cached with Stretto)
-- Background blur effect
+- Lightweight, statically-cached background blur effect powered by [libblur](https://github.com/awxkee/libblur)'s stack blur implementation.
+  - Stack blur is **blazing fast** compared to Gaussian blur and does not get heavier with higher blur radii.
+  - Blur logic is further optimised to **only run when needed** (changing album art, window size and/or blur config); otherwise GTK is just rendering a static pre-blurred texture. In short you get background blur nearly for free.
 - Automatically fetch album arts & artist avatars from external sources (currently supports Last.fm and MusicBrainz)
 - Album wikis & artist bios are supported too
 - All externally-acquired metadata are cached locally & persisted on disk to avoid needless API calls
