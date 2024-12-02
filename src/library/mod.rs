@@ -8,6 +8,9 @@ mod artist_cell;
 mod artist_content_view;
 mod artist_song_row;
 
+mod folder_view;
+mod folder_row;
+
 mod controller;
 
 pub use album_view::AlbumView;

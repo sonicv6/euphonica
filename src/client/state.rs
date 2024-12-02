@@ -160,6 +160,12 @@ mod imp {
                     Signal::builder("queue-replaced")
                         .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
                         .build(),
+                    Signal::builder("folder-contents-downloaded")
+                        .param_types([
+                            str::static_type(), // corresponding path
+                            BoxedAnyObject::static_type() // Vec<INode>
+                        ])
+                        .build(),
                 ]
             })
         }

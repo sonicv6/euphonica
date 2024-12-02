@@ -20,6 +20,8 @@ mod imp {
         #[template_child]
         pub artists_btn: TemplateChild<SidebarButton>,
         #[template_child]
+        pub folders_btn: TemplateChild<SidebarButton>,
+        #[template_child]
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub queue_len: TemplateChild<gtk::Label>,

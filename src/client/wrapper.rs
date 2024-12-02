@@ -19,24 +19,6 @@ use crate::{
 
 use super::state::{ClientState, ConnectionState};
 
-pub fn get_dummy_song(uri: &str) -> mpd::Song {
-    // Many of mpd's methods require an impl of trait ToSongPath, which
-    // - Is not made public,
-    // - Is only implemented by their Song struct, and
-    // - Is only for getting the URI anyway.
-    mpd::Song {
-        file: uri.to_owned(),
-        name: None,
-        title: None,
-        last_mod: None,
-        artist: None,
-        duration: None,
-        place: None,
-        range: None,
-        tags: Vec::new()
-    }
-}
-
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
 pub enum MpdMessage {
@@ -48,7 +30,7 @@ pub enum MpdMessage {
     Play,
     Pause,
     Stop,
-    Add(String), // Add by URI
+    Add(String, bool), // Add by URI. If true, treat URI as folder-level and add recursively.
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
     DeleteId(u32),
@@ -72,6 +54,7 @@ pub enum MpdMessage {
     Consume(bool),
     GetSticker(String, String, String), // Type, URI, name
     SetSticker(String, String, String, String), // Type, URI, name, value
+    LsInfo(String),  // URI
 
     // Reserved for cache controller
     // folder-level URI, key doc & paths to write the hires & thumbnail versions
@@ -157,7 +140,7 @@ mod background {
         path: PathBuf,
         thumbnail_path: PathBuf
     ) {
-        if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
+        if let Ok(bytes) = client.albumart(&uri) {
             println!("Downloaded album art for {:?}", uri);
             if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
                 let (hires, thumb) = utils::resize_convert_image(dyn_img);
@@ -563,7 +546,7 @@ impl MpdWrapper {
             MpdMessage::MixRampDb(db) => self.set_mixramp_db(db),
             MpdMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
             MpdMessage::Status => self.get_status(),
-            MpdMessage::Add(uri) => self.add(uri.as_ref()),
+            MpdMessage::Add(uri, recursive) => self.add(uri.as_ref(), recursive),
             MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
             MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
             MpdMessage::Random(state) => self.set_random(state),
@@ -598,7 +581,7 @@ impl MpdWrapper {
             }
             MpdMessage::ArtistContent(name) => self.get_artist_content(name),
             MpdMessage::FindAdd(terms) => self.find_add(terms),
-
+            MpdMessage::LsInfo(uri) => self.lsinfo(&uri),
             // Result messages from child thread
             MpdMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
@@ -665,7 +648,7 @@ impl MpdWrapper {
         }
     }
 
-    fn queue_task(&self, task: BackgroundTask) {
+    pub fn queue_task(&self, task: BackgroundTask) {
         if let Some(sender) = self.bg_sender.borrow().as_ref() {
             sender.send_blocking(task).expect("Cannot queue background task");
             if let Some(client) = self.main_client.borrow_mut().as_mut() {
@@ -731,9 +714,14 @@ impl MpdWrapper {
         }
     }
 
-    pub fn add(&self, uri: &str) {
+    pub fn add(&self, uri: &str, recursive: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let _ = client.push(get_dummy_song(uri));
+            if recursive {
+                let _ = client.findadd(Query::new().and(Term::Base, uri));
+            }
+            else {
+                let _ = client.push(uri);
+            }
         }
     }
 
@@ -1065,6 +1053,17 @@ impl MpdWrapper {
             //     query.and(term.0.into(), term.1);
             // }
             client.findadd(&query).expect("Failed to run query!");
+        }
+    }
+
+    pub fn lsinfo(&self, uri: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            if let Ok(contents) = client.lsinfo(uri) {
+                self.state.emit_by_name::<()>("folder-contents-downloaded", &[
+                    &uri.to_value(),
+                    &BoxedAnyObject::new(contents).to_value()
+                ]);
+            }
         }
     }
 }

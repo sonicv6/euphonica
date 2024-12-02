@@ -73,6 +73,8 @@
 		<file preprocess="xml-stripblanks" alias="playlist-symbolic.svg">gtk/icons/playlist-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="library-music-symbolic.svg">gtk/icons/library-music-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="music-queue-symbolic.svg">gtk/icons/music-queue-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="music-note-single-symbolic.svg">gtk/icons/music-note-single-symbolic.svg</file>
+		<file preprocess="xml-stripblanks" alias="music-paper-symbolic.svg">gtk/icons/music-paper-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="user-trash-symbolic.svg">gtk/icons/user-trash-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="server-pick-symbolic.svg">gtk/icons/server-pick-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-base-symbolic.svg">gtk/icons/format-base-symbolic.svg</file>

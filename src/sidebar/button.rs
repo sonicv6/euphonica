@@ -29,7 +29,6 @@ mod imp {
         pub icon_name: RefCell<String>
     }
 
-    // The central trait for subclassing a GObject
     #[glib::object_subclass]
     impl ObjectSubclass for SidebarButton {
         // `NAME` needs to match `class` attribute of template
@@ -46,7 +45,6 @@ mod imp {
         }
     }
 
-    // Trait shared by all GObjects
     #[glib::derived_properties]
     impl ObjectImpl for SidebarButton {
         fn constructed(&self) {
@@ -64,7 +62,6 @@ mod imp {
         }
     }
 
-    // Trait shared by all widgets
     impl WidgetImpl for SidebarButton {}
 
     impl ButtonImpl for SidebarButton {}

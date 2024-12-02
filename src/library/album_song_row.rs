@@ -213,7 +213,7 @@ impl AlbumSongRow {
                         uri,
                         move |_| {
                             if let Some(library) = this.imp().library.get() {
-                                library.queue_uri(&uri, true, true);
+                                library.queue_uri(&uri, true, true, false);
                             }
                         }
                     )
@@ -233,7 +233,7 @@ impl AlbumSongRow {
                         uri,
                         move |_| {
                             if let Some(library) = this.imp().library.get() {
-                                library.queue_uri(&uri, false, false);
+                                library.queue_uri(&uri, false, false, false);
                             }
                         }
                     )

@@ -106,6 +106,7 @@ pub struct SongInfo {
     quality_grade: QualityGrade,
     // MusicBrainz stuff
     mbid: Option<String>,
+    last_modified: Option<String>
 }
 
 impl SongInfo {
@@ -137,6 +138,7 @@ impl Default for SongInfo {
             release_date: None,
             quality_grade: QualityGrade::Unknown,
             mbid: None,
+            last_modified: None
         }
     }
 }
@@ -177,8 +179,7 @@ mod imp {
             Self {
                 info: OnceCell::new(),
                 pos: Cell::new(0),
-                is_playing: Cell::new(false),
-
+                is_playing: Cell::new(false)
             }
         }
     }
@@ -200,7 +201,8 @@ mod imp {
                     ParamSpecInt64::builder("track").read_only().build(),
                     ParamSpecInt64::builder("disc").read_only().build(),
                     ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date").read_only().build(),  // boxes Option<time::Date>
-                    ParamSpecString::builder("quality-grade").read_only().build()
+                    ParamSpecString::builder("quality-grade").read_only().build(),
+                    ParamSpecString::builder("last-modified").read_only().build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -226,6 +228,7 @@ mod imp {
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 // "release_date" => obj.get_release_date.to_value(),
                 "quality-grade" => obj.get_quality_grade().to_icon_name().to_value(),
+                "last-modified" => obj.get_last_modified().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -259,6 +262,10 @@ impl Song {
 
     pub fn get_name(&self) -> &str {
         &self.get_info().title
+    }
+
+    pub fn get_last_modified(&self) -> Option<&str> {
+        self.get_info().last_modified.as_deref()
     }
 
     pub fn get_duration(&self) -> u64 {
@@ -427,7 +434,8 @@ impl From<mpd::song::Song> for SongInfo {
             disc: Cell::new(-1),
             release_date: None,
             quality_grade: QualityGrade::Unknown,
-            mbid: None
+            mbid: None,
+            last_modified: song.last_mod
         };
 
         if let Some(place) = song.place {
