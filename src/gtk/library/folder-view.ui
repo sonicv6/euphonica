@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="EuphonicaFolderView" parent="GtkWidget">
+    <child>
+      <object class="AdwToolbarView" id="top_view">
+        <child type="top">
+					<object class="AdwHeaderBar">
+            <child type="start">
+              <object class="GtkBox">
+                <child>
+                  <object class="GtkButton" id="back_btn">
+                    <property name="icon-name">left-symbolic</property>
+                    <property name="sensitive">false</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="forward_btn">
+                    <property name="icon-name">right-symbolic</property>
+                    <property name="sensitive">false</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <property name="title-widget">
+              <object class="GtkLabel" id="path_widget">
+                <property name="ellipsize">end</property>
+              </object>
+            </property>
+            <child type="end">
+              <object class="GtkToggleButton" id="search_btn">
+                <property name="icon-name">edit-find-symbolic</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkMenuButton">
+                <style>
+                  <class name="flat"/>
+                </style>
+                <property name="primary">True</property>
+                <property name="child">
+                  <object class="GtkBox">
+                    <property name="spacing">6</property>
+                    <child>
+                      <object class="GtkImage" id="sort_dir">
+                        <property name="icon-name">view-sort-ascending-symbolic</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="sort_mode">
+                        <property name="label">Error</property>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+                <property name="menu-model">sort_menu</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child type="top">
+          <object class="GtkSearchBar" id="search_bar">
+            <property name="key-capture-widget">top_view</property>
+            <child>
+              <object class="GtkSearchEntry" id="search_entry">
+                <property name="search-delay">150</property>
+                <property name="width-request">400</property>
+              </object>
+            </child>
+          </object>
+        </child>
+				<property name="content">
+          <object class="GtkStack" id="loading_stack">
+            <child>
+              <object class="GtkStackPage">
+                <property name="name">loading</property>
+                <property name="child">
+                  <object class="AdwSpinner">
+
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkStackPage">
+                <property name="name">content</property>
+                <property name="child">
+                  <object class="GtkScrolledWindow">
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vscrollbar-policy">automatic</property>
+                    <property name="propagate-natural-height">true</property>
+                    <property name="has-frame">false</property>
+                    <property name="vexpand">true</property>
+                    <property name="child">
+                      <object class="GtkListView" id="list_view">
+                        <property name="show-separators">true</property>
+                        <property name="single-click-activate">true</property>
+                        <style>
+                          <class name="no-bg"/>
+                        </style>
+                      </object>
+                    </property>
+                  </object>
+                </property>
+              </object>
+            </child>
+          </object>
+				</property>
+			</object>
+    </child>
+  </template>
+
+  <menu id="sort_menu">
+    <section>
+      <attribute name="label" translatable="yes">Sort by</attribute>
+      <item>
+        <attribute name="label" translatable="yes">_Name</attribute>
+        <attribute name="action">folderview.sort-by</attribute>
+        <attribute name="target">filename</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Last modified</attribute>
+        <attribute name="action">albumview.sort-by</attribute>
+        <attribute name="target">last-modified</attribute>
+      </item>
+    </section>
+    <section>
+      <attribute name="label" translatable="yes">Sort direction</attribute>
+      <item>
+        <attribute name="label" translatable="yes">_Ascending</attribute>
+        <attribute name="action">folderview.sort-direction</attribute>
+        <attribute name="target">asc</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Descending</attribute>
+        <attribute name="action">folderview.sort-direction</attribute>
+        <attribute name="target">desc</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>
