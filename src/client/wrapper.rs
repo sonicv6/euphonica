@@ -8,13 +8,13 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client, error::Error, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Subsystem
+    client::Client, error::Error, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Subsystem
 };
 use image::DynamicImage;
 use uuid::Uuid;
 
 use crate::{
-    common::{Album, AlbumInfo, Artist, ArtistInfo, Song, SongInfo}, meta_providers::Metadata, player::PlaybackFlow, utils
+    common::{Album, AlbumInfo, Artist, ArtistInfo, INode, Song, SongInfo}, meta_providers::Metadata, player::PlaybackFlow, utils
 };
 
 use super::state::{ClientState, ConnectionState};
@@ -79,7 +79,7 @@ pub enum MpdMessage {
 // Work requests for sending to the child thread.
 // Completed results will be reported back via MpdMessage.
 #[derive(Debug)]
-enum BackgroundTask {
+pub enum BackgroundTask {
     Update,
     DownloadAlbumArt(String, bson::Document, PathBuf, PathBuf),  // folder-level URI
     FetchAlbums,  // Gradually get all albums
@@ -546,7 +546,7 @@ impl MpdWrapper {
             MpdMessage::MixRampDb(db) => self.set_mixramp_db(db),
             MpdMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
             MpdMessage::Status => self.get_status(),
-            MpdMessage::Add(uri, recursive) => self.add(uri.as_ref(), recursive),
+            MpdMessage::Add(uri, recursive) => self.add(uri, recursive),
             MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
             MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
             MpdMessage::Random(state) => self.set_random(state),
@@ -581,7 +581,7 @@ impl MpdWrapper {
             }
             MpdMessage::ArtistContent(name) => self.get_artist_content(name),
             MpdMessage::FindAdd(terms) => self.find_add(terms),
-            MpdMessage::LsInfo(uri) => self.lsinfo(&uri),
+            MpdMessage::LsInfo(uri) => self.lsinfo(uri),
             // Result messages from child thread
             MpdMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
@@ -714,7 +714,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn add(&self, uri: &str, recursive: bool) {
+    pub fn add(&self, uri: String, recursive: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if recursive {
                 let _ = client.findadd(Query::new().and(Term::Base, uri));
@@ -1056,12 +1056,18 @@ impl MpdWrapper {
         }
     }
 
-    pub fn lsinfo(&self, uri: &str) {
+    pub fn lsinfo(&self, uri: String) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(contents) = client.lsinfo(uri) {
+            if let Ok(contents) = client.lsinfo(&uri) {
+                println!("Downloaded {} folder entries", contents.len());
                 self.state.emit_by_name::<()>("folder-contents-downloaded", &[
                     &uri.to_value(),
-                    &BoxedAnyObject::new(contents).to_value()
+                    &BoxedAnyObject::new(contents.into_iter().map(move |entry| {
+                        match entry {
+                            LsInfoEntry::Directory(dir) => INode::from_directory_with_path(dir, &uri),
+                            _ => INode::from(entry)
+                        }
+                    }).collect::<Vec<INode>>()).to_value()
                 ]);
             }
         }

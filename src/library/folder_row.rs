@@ -169,8 +169,8 @@ impl FolderRow {
         let _ = self.imp().library.set(library);
         item
             .property_expression("item")
-            .chain_property::<INode>("title")
-            .bind(self, "title", gtk::Widget::NONE);
+            .chain_property::<INode>("uri")
+            .bind(self, "uri", gtk::Widget::NONE);
 
         item
             .property_expression("item")

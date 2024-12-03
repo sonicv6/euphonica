@@ -22,8 +22,7 @@ use crate::{
     client::{
         ClientState,
         ConnectionState,
-        MpdWrapper
-    }, common::{Album, INode, INodeType},
+    }, common::{INode, INodeType},
     utils::{g_cmp_str_options, g_search_substr, settings_manager}
 };
 
@@ -62,8 +61,6 @@ mod imp {
     #[template(resource = "/org/euphonica/Euphonica/gtk/library/folder-view.ui")]
     pub struct FolderView {
         #[template_child]
-        pub nav_view: TemplateChild<adw::NavigationView>,
-        #[template_child]
         pub path_widget: TemplateChild<gtk::Label>,
         #[template_child]
         pub loading_stack: TemplateChild<gtk::Stack>,
@@ -79,8 +76,6 @@ mod imp {
         pub sort_mode: TemplateChild<gtk::Label>,
         #[template_child]
         pub search_btn: TemplateChild<gtk::ToggleButton>,
-        #[template_child]
-        pub search_mode: TemplateChild<gtk::DropDown>,
         #[template_child]
         pub search_bar: TemplateChild<gtk::SearchBar>,
         #[template_child]
@@ -109,7 +104,6 @@ mod imp {
     impl Default for FolderView {
         fn default() -> Self {
             Self {
-                nav_view: TemplateChild::default(),
                 path_widget: TemplateChild::default(),
                 loading_stack: TemplateChild::default(),
                 back_btn: TemplateChild::default(),
@@ -118,14 +112,13 @@ mod imp {
                 sort_dir: TemplateChild::default(),
                 sort_mode: TemplateChild::default(),
                 search_btn: TemplateChild::default(),
-                search_mode: TemplateChild::default(),
                 search_bar: TemplateChild::default(),
                 search_entry: TemplateChild::default(),
                 // Content
                 history: RefCell::new(Vec::new()),
                 curr_idx: Cell::new(0),
                 list_view: TemplateChild::default(),
-                inodes: gio::ListStore::new::<Album>(),
+                inodes: gio::ListStore::new::<INode>(),
                 // Search & filter models
                 search_filter: gtk::CustomFilter::default(),
                 sorter: gtk::CustomSorter::default(),
@@ -165,7 +158,7 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
-            let _ = self.obj().bind_property("path", &self.path_widget.get(), "label");
+            self.obj().bind_property("path", &self.path_widget.get(), "label").sync_create().build();
 
             self.back_btn.connect_clicked(clone!(
                 #[weak(rename_to = this)]
@@ -204,11 +197,19 @@ mod imp {
         fn update_nav_btn_sensitivity(&self) {
             let curr_idx = self.curr_idx.get();
             let hist_len = self.history.borrow().len();
+            println!("Curr idx: {}", curr_idx);
+            println!("Hist len: {}", hist_len);
             if curr_idx == 0 {
                 self.back_btn.set_sensitive(false);
             }
+            else {
+                self.back_btn.set_sensitive(true);
+            }
             if curr_idx == hist_len {
                 self.forward_btn.set_sensitive(false);
+            }
+            else {
+                self.forward_btn.set_sensitive(true);
             }
         }
         pub fn move_back(&self) {
@@ -258,21 +259,20 @@ impl FolderView {
         let history = imp.history.borrow();
         let curr_idx = imp.curr_idx.get();
         if history.len() > 0 && curr_idx > 0 {
-            history[..(curr_idx - 1)].join("/")
+            history[..curr_idx].join("/")
         }
         else {
-            // TODO: l10n
-            "Library Root".to_string()
+            "".to_string()
         }
     }
 
     pub fn navigate(&self) {
+        self.notify("path");
         self.imp().library.get().unwrap().get_folder_contents(&self.get_path());
         self.imp().loading_stack.set_visible_child_name("loading");
     }
 
-    pub fn setup(&self, library: Library, cache: Rc<Cache>, client: Rc<MpdWrapper>) {
-        let client_state = client.get_client_state();
+    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
         self.imp().library.set(library.clone()).expect("Cannot init FolderView with Library");
         client_state.connect_notify_local(Some("connection-state"), clone!(
             #[weak(rename_to = this)]
@@ -286,6 +286,26 @@ impl FolderView {
                 }
             }
         ));
+        client_state.connect_closure(
+            "folder-contents-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: ClientState, uri: String, entries: glib::BoxedAnyObject| {
+                    // If original URI matches current URI, refresh current view
+                    println!("Requested URI: {}", &uri);
+                    println!("Current URI: {}", &this.get_path());
+                    if uri == this.get_path() {
+                        this.imp().inodes.remove_all();
+                        this.imp().inodes.extend_from_slice(entries.borrow::<Vec<INode>>().as_ref());
+                        this.imp().loading_stack.set_visible_child_name("content");
+                    }
+                }
+            )
+        );
+
+
         self.setup_sort();
         self.setup_search();
         self.setup_listview(client_state.clone(), cache.clone(), library.clone());
@@ -472,19 +492,6 @@ impl FolderView {
                 }
             )
         );
-
-        let search_mode = self.imp().search_mode.get();
-        search_mode.connect_notify_local(
-            Some("selected"),
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |_, _| {
-                    println!("Changed search mode");
-                    this.imp().search_filter.changed(gtk::FilterChange::Different);
-                }
-            )
-        );
     }
 
     pub fn on_inode_clicked(&self, inode: &INode) {
@@ -507,6 +514,7 @@ impl FolderView {
                         history.truncate(curr_idx);
                     }
                     history.push(name.to_owned());
+                    println!("History: {:?}", &history);
                 }
                 self.imp().move_forward();
             }
@@ -514,17 +522,17 @@ impl FolderView {
     }
 
     fn setup_listview(&self, client_state: ClientState, cache: Rc<Cache>, library: Library) {
-        client_state.connect_closure(
-            "inode-basic-info-downloaded",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: ClientState, inode: INode| {
-                    this.add_inode(inode);
-                }
-            )
-        );
+        // client_state.connect_closure(
+        //     "inode-basic-info-downloaded",
+        //     false,
+        //     closure_local!(
+        //         #[strong(rename_to = this)]
+        //         self,
+        //         move |_: ClientState, inode: INode| {
+        //             this.add_inode(inode);
+        //         }
+        //     )
+        // );
         // Setup search bar
         let search_bar = self.imp().search_bar.get();
         let search_entry = self.imp().search_entry.get();

@@ -72,8 +72,8 @@
 												<property name="name">albums</property>
 												<property name="child">
 													<object
-														class="EuphonicaAlbumView"
-														id="album_view">
+															class="EuphonicaAlbumView"
+															id="album_view">
 													</object>
 												</property>
 											</object>
@@ -85,8 +85,21 @@
 												<property name="name">artists</property>
 												<property name="child">
 													<object
-														class="EuphonicaArtistView"
-														id="artist_view">
+															class="EuphonicaArtistView"
+															id="artist_view">
+													</object>
+												</property>
+											</object>
+										</child>
+
+										<child>
+											<object class="GtkStackPage">
+												<property name="title" translatable="true">Folders</property>
+												<property name="name">folders</property>
+												<property name="child">
+													<object
+															class="EuphonicaFolderView"
+															id="folder_view">
 													</object>
 												</property>
 											</object>
@@ -98,8 +111,8 @@
 												<property name="name">queue</property>
 												<property name="child">
 													<object
-														class="EuphonicaQueueView"
-														id="queue_view">
+															class="EuphonicaQueueView"
+															id="queue_view">
 													</object>
 												</property>
 											</object>

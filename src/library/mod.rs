@@ -23,4 +23,6 @@ use artist_cell::ArtistCell;
 use artist_song_row::ArtistSongRow;
 pub use artist_content_view::ArtistContentView;
 
+pub use folder_view::FolderView;
+
 pub use controller::Library;

@@ -42,7 +42,6 @@ mod imp {
         // 4.3. Send AlbumInfo class to main thread via MpdMessage.
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
-        
 
         pub cache: OnceCell<Rc<Cache>>,
     }

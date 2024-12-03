@@ -1,17 +1,8 @@
 use std::cell::OnceCell;
-use mpd::lsinfo::LsInfoEntry;
-use time::Date;
+use mpd::{directory::Directory, lsinfo::LsInfoEntry};
 use gtk::glib;
 use glib::prelude::*;
-use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-
-use super::{
-    ArtistInfo,
-    SongInfo,
-    parse_mb_artist_tag,
-    artists_to_string
-};
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "EuphonicaINodeType")]
@@ -145,6 +136,15 @@ glib::wrapper! {
 }
 
 impl INode {
+    pub fn from_directory_with_path(dir: Directory, path: &str) -> Self {
+        let info = INodeInfo {
+            uri: path.to_owned() + "/" + &dir.name,
+            last_modified: dir.last_mod,
+            inode_type: INodeType::Folder
+        };
+        Self::from(info)
+    }
+
     // ALL of the getters below require that the info field be initialised!
     pub fn get_info(&self) -> &INodeInfo {
         &self.imp().info.get().unwrap()
@@ -175,5 +175,12 @@ impl From<INodeInfo> for INode {
         let res = glib::Object::builder::<Self>().build();
         let _ = res.imp().info.set(info);
         res
+    }
+}
+
+impl From<LsInfoEntry> for INode {
+    fn from(entry: LsInfoEntry) -> Self {
+        let info = INodeInfo::from(entry);
+        Self::from(info)
     }
 }
