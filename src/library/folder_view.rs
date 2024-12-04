@@ -308,7 +308,7 @@ impl FolderView {
 
         self.setup_sort();
         self.setup_search();
-        self.setup_listview(client_state.clone(), cache.clone(), library.clone());
+        self.setup_listview(cache.clone(), library.clone());
     }
 
     fn setup_sort(&self) {
@@ -521,7 +521,7 @@ impl FolderView {
         }
     }
 
-    fn setup_listview(&self, client_state: ClientState, cache: Rc<Cache>, library: Library) {
+    fn setup_listview(&self, cache: Rc<Cache>, library: Library) {
         // client_state.connect_closure(
         //     "inode-basic-info-downloaded",
         //     false,
@@ -651,14 +651,5 @@ impl FolderView {
                 this.on_inode_clicked(&inode);
             })
         );
-    }
-
-    fn add_inode(&self, inode: INode) {
-        self.imp().inodes.append(&inode);
-        // self.imp().inode_count.set_label(&self.imp().inode_list.n_items().to_string());
-    }
-
-    pub fn clear(&self) {
-        self.imp().inodes.remove_all();
     }
 }

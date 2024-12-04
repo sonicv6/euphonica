@@ -19,6 +19,10 @@ use crate::{
 
 use super::state::{ClientState, ConnectionState};
 
+const BATCH_SIZE: u32 = 4096;
+const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once (same
+// folder, same tag, etc)
+
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
 pub enum MpdMessage {
@@ -73,6 +77,7 @@ pub enum MpdMessage {
     ArtistBasicInfoDownloaded(ArtistInfo), // Return new artist to be added to the list model.
     ArtistSongInfoDownloaded(String, Vec<SongInfo>),  // Return songs of an artist (or had their participation)
     ArtistAlbumBasicInfoDownloaded(String, AlbumInfo),  // Return albums that had this artist in their AlbumArtist tag.
+    FolderContentsDownloaded(String, Vec<LsInfoEntry>),
     DBUpdated
 }
 
@@ -82,6 +87,7 @@ pub enum MpdMessage {
 pub enum BackgroundTask {
     Update,
     DownloadAlbumArt(String, bson::Document, PathBuf, PathBuf),  // folder-level URI
+    FetchFolderContents(String), // Gradually get all inodes in folder at path
     FetchAlbums,  // Gradually get all albums
     FetchAlbumSongs(String),  // Get songs of album with given tag
     FetchArtists(bool),  // Gradually get all artists. If bool flag is true, will parse AlbumArtist tag
@@ -201,16 +207,24 @@ mod background {
         F: Fn(Vec<SongInfo>) -> Result<(), SendError<MpdMessage>>
     {
         // TODO: batched windowed retrieval
-        let songs: Vec<SongInfo> = client
-            .find(query, Window::from((0, 4096)))
-            .unwrap()
-            .iter_mut()
-            .map(|mpd_song| {
-                SongInfo::from(std::mem::take(mpd_song))
-            })
-            .collect();
-        if !songs.is_empty() {
-            let _ = respond(songs);
+        let mut curr_len: u32 = 0;
+        let mut more: bool = true;
+        while more && (curr_len as usize) < FETCH_LIMIT {
+            let songs: Vec<SongInfo> = client
+                .find(query, Window::from((curr_len, curr_len + BATCH_SIZE)))
+                .unwrap()
+                .iter_mut()
+                .map(|mpd_song| {
+                    SongInfo::from(std::mem::take(mpd_song))
+                })
+                .collect();
+            if !songs.is_empty() {
+                let _ = respond(songs);
+                curr_len += BATCH_SIZE;
+            }
+            else {
+                more = false;
+            }
         }
     }
 
@@ -339,6 +353,20 @@ mod background {
             }
         );
     }
+
+    pub fn fetch_folder_contents(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<MpdMessage>,
+        path: String
+    ) {
+        if let Ok(contents) = client.lsinfo(&path) {
+            println!("Downloaded {} folder entries", contents.len());
+            let _ = sender_to_fg.send_blocking(MpdMessage::FolderContentsDownloaded(
+                path,
+                contents
+            ));
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -452,6 +480,9 @@ impl MpdWrapper {
                                     background::fetch_albums_of_artist(
                                         &mut client, &sender_to_fg, name
                                     )
+                                }
+                                BackgroundTask::FetchFolderContents(uri) => {
+                                    background::fetch_folder_contents(&mut client, &sender_to_fg, uri)
                                 }
                             }
                         }
@@ -581,7 +612,7 @@ impl MpdWrapper {
             }
             MpdMessage::ArtistContent(name) => self.get_artist_content(name),
             MpdMessage::FindAdd(terms) => self.find_add(terms),
-            MpdMessage::LsInfo(uri) => self.lsinfo(uri),
+            MpdMessage::LsInfo(uri) => self.queue_task(BackgroundTask::FetchFolderContents(uri)),
             // Result messages from child thread
             MpdMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
@@ -621,6 +652,7 @@ impl MpdWrapper {
                 Some(artist_name),
                 album_info
             ),
+            MpdMessage::FolderContentsDownloaded(uri, contents) => self.on_folder_contents_downloaded(uri, contents),
             MpdMessage::DBUpdated => {},
             MpdMessage::Busy(busy) => self.state.set_busy(busy),
         }
@@ -1056,21 +1088,16 @@ impl MpdWrapper {
         }
     }
 
-    pub fn lsinfo(&self, uri: String) {
-        if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(contents) = client.lsinfo(&uri) {
-                println!("Downloaded {} folder entries", contents.len());
-                self.state.emit_by_name::<()>("folder-contents-downloaded", &[
-                    &uri.to_value(),
-                    &BoxedAnyObject::new(contents.into_iter().map(move |entry| {
-                        match entry {
-                            LsInfoEntry::Directory(dir) => INode::from_directory_with_path(dir, &uri),
-                            _ => INode::from(entry)
-                        }
-                    }).collect::<Vec<INode>>()).to_value()
-                ]);
-            }
-        }
+    pub fn on_folder_contents_downloaded(&self, uri: String, contents: Vec<LsInfoEntry>) {
+        self.state.emit_by_name::<()>("folder-contents-downloaded", &[
+            &uri.to_value(),
+            &BoxedAnyObject::new(contents.into_iter().map(move |entry| {
+                match entry {
+                    LsInfoEntry::Directory(dir) => INode::from_directory_with_path(dir, &uri),
+                    _ => INode::from(entry)
+                }
+            }).collect::<Vec<INode>>()).to_value()
+        ]);
     }
 }
 
