@@ -50,11 +50,8 @@ mod imp {
         pub append_queue: TemplateChild<gtk::Button>,
         pub uri: RefCell<String>,
         pub inode_type: Cell<INodeType>,
-        // For unbinding the queue buttons when not bound to a song (i.e. being recycled)
-        pub replace_queue_id: RefCell<Option<SignalHandlerId>>,
-        pub append_queue_id: RefCell<Option<SignalHandlerId>>,
         // Only used while displaying a folder. For songs simply use a song MIME icon.
-        pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
+        // pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
         pub library: OnceCell<Library>
     }
 
@@ -77,6 +74,50 @@ mod imp {
 
     // Trait shared by all GObjects
     impl ObjectImpl for FolderRow {
+        fn constructed(&self) {
+            self.parent_constructed();
+
+            self.replace_queue.connect_clicked(
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |_| {
+                        if let Some(library) = this.library.get() {
+                            match this.inode_type.get() {
+                                INodeType::Song => {
+                                    library.queue_uri(this.uri.borrow().as_ref(), true, true, false);
+                                },
+                                INodeType::Folder => {
+                                    library.queue_uri(this.uri.borrow().as_ref(), true, true, true);
+                                },
+                                _ => unreachable!()
+                            }
+                        }
+                    }
+                )
+            );
+
+            self.append_queue.connect_clicked(
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |_| {
+                        if let Some(library) = this.library.get() {
+                            match this.inode_type.get() {
+                                INodeType::Song => {
+                                    library.queue_uri(this.uri.borrow().as_ref(), false, false, false);
+                                },
+                                INodeType::Folder => {
+                                    library.queue_uri(this.uri.borrow().as_ref(), false, false, true);
+                                },
+                                _ => unreachable!()
+                            }
+                        }
+                    }
+                )
+            );
+        }
+
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
@@ -199,95 +240,37 @@ impl FolderRow {
     //     self.imp().thumbnail.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
     // }
 
-    pub fn bind(&self, inode: &INode, _cache: Rc<Cache>) {
-        // Bind album art listener. Set once first (like sync_create)
-        // self.update_thumbnail(song.get_album(), cache.clone(), true);
-        // let thumbnail_binding = cache.get_cache_state().connect_closure(
-        //     "album-art-downloaded",
-        //     false,
-        //     closure_local!(
-        //         #[weak(rename_to = this)]
-        //         self,
-        //         #[strong]
-        //         song,
-        //         #[weak]
-        //         cache,
-        //         move |_: CacheState, folder_uri: String| {
-        //             if let Some(album) = song.get_album() {
-        //                 if album.uri == folder_uri {
-        //                     this.update_thumbnail(Some(album), cache, false);
-        //                 }
-        //             }
-        //         }
-        //     )
-        // );
-        // self.imp().thumbnail_signal_id.replace(Some(thumbnail_binding));
-        // Bind the queue buttons
-        let uri = inode.get_uri().to_owned();
-        if let Some(old_id) = self.imp().replace_queue_id.replace(
-            Some(
-                self.imp().replace_queue.connect_clicked(
-                    clone!(
-                        #[weak(rename_to = this)]
-                        self,
-                        #[strong]
-                        uri,
-                        move |_| {
-                            if let Some(library) = this.imp().library.get() {
-                                match this.imp().inode_type.get() {
-                                    INodeType::Song => {
-                                        library.queue_uri(&uri, true, true, false);
-                                    },
-                                    INodeType::Folder => {
-                                        library.queue_uri(&uri, true, true, true);
-                                    },
-                                    _ => unreachable!()
-                                }
-                            }
-                        }
-                    )
-                )
-            )
-        ) {
-            // Unbind old ID
-            self.imp().replace_queue.disconnect(old_id);
-        }
-        if let Some(old_id) = self.imp().append_queue_id.replace(
-            Some(
-                self.imp().append_queue.connect_clicked(
-                    clone!(
-                        #[weak(rename_to = this)]
-                        self,
-                        #[strong]
-                        uri,
-                        move |_| {
-                            if let Some(library) = this.imp().library.get() {
-                                match this.imp().inode_type.get() {
-                                    INodeType::Song => {
-                                        library.queue_uri(&uri, false, false, false);
-                                    },
-                                    INodeType::Folder => {
-                                        library.queue_uri(&uri, false, false, true);
-                                    },
-                                    _ => unreachable!()
-                                }
-                            }
-                        }
-                    )
-                )
-            )
-        ) {
-            // Unbind old ID
-            self.imp().append_queue.disconnect(old_id);
-        }
-    }
+    // pub fn bind(&self, inode: &INode, _cache: Rc<Cache>) {
+    //     Bind album art listener. Set once first (like sync_create)
+    //     self.update_thumbnail(song.get_album(), cache.clone(), true);
+    //     let thumbnail_binding = cache.get_cache_state().connect_closure(
+    //         "album-art-downloaded",
+    //         false,
+    //         closure_local!(
+    //             #[weak(rename_to = this)]
+    //             self,
+    //             #[strong]
+    //             song,
+    //             #[weak]
+    //             cache,
+    //             move |_: CacheState, folder_uri: String| {
+    //                 if let Some(album) = song.get_album() {
+    //                     if album.uri == folder_uri {
+    //                         this.update_thumbnail(Some(album), cache, false);
+    //                     }
+    //                 }
+    //             }
+    //         )
+    //     );
+    //     self.imp().thumbnail_signal_id.replace(Some(thumbnail_binding));
+    // }
 
-    pub fn unbind(&self) {
-        if let Some(id) = self.imp().replace_queue_id.borrow_mut().take() {
-            self.imp().replace_queue.disconnect(id);
-        }
-        if let Some(id) = self.imp().append_queue_id.borrow_mut().take() {
-            self.imp().append_queue.disconnect(id);
-        }
-    }
+    // pub fn unbind(&self) {
+    //     if let Some(id) = self.imp().replace_queue_id.borrow_mut().take() {
+    //         self.imp().replace_queue.disconnect(id);
+    //     }
+    //     if let Some(id) = self.imp().append_queue_id.borrow_mut().take() {
+    //         self.imp().append_queue.disconnect(id);
+    //     }
+    // }
 }

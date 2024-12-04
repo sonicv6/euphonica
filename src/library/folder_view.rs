@@ -589,51 +589,6 @@ impl FolderView {
         //     }
         // );
 
-        // Tell factory how to bind `INodeCell` to one of our INode GObjects.
-        // If this cell is being bound to an inode, that means it might be displayed.
-        // As such, we'll also make it listen to the cache controller for any new
-        // inode art downloads. This ensures we will never have to iterate through
-        // the entire grid to update inode arts (only visible or nearly visible cells
-        // will be updated, thus yielding a constant update cost).
-        factory.connect_bind(clone!(
-            #[weak]
-            cache,
-            move |_, list_item| {
-                // Get `INode` from `ListItem` (that is, the data side)
-                let item: INode = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .item()
-                    .and_downcast::<INode>()
-                    .expect("The item has to be a common::INode.");
-
-                // Get `FolderRow` from `ListItem` (the UI widget)
-                let child: FolderRow = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .child()
-                    .and_downcast::<FolderRow>()
-                    .expect("The child has to be an `FolderRow`.");
-                child.bind(&item, cache);
-            }
-        ));
-
-
-        // When cell goes out of sight, unbind from item to allow reuse with another.
-        // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
-        factory.connect_unbind(
-            move |_, list_item| {
-                // Get `FolderRow` from `ListItem` (the UI widget)
-                let child: FolderRow = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .child()
-                    .and_downcast::<FolderRow>()
-                    .expect("The child has to be an `FolderRow`.");
-                child.unbind();
-            }
-        );
-
         // Set the factory of the list view
         self.imp().list_view.set_factory(Some(&factory));
 

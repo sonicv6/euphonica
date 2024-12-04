@@ -1091,12 +1091,7 @@ impl MpdWrapper {
     pub fn on_folder_contents_downloaded(&self, uri: String, contents: Vec<LsInfoEntry>) {
         self.state.emit_by_name::<()>("folder-contents-downloaded", &[
             &uri.to_value(),
-            &BoxedAnyObject::new(contents.into_iter().map(move |entry| {
-                match entry {
-                    LsInfoEntry::Directory(dir) => INode::from_directory_with_path(dir, &uri),
-                    _ => INode::from(entry)
-                }
-            }).collect::<Vec<INode>>()).to_value()
+            &BoxedAnyObject::new(contents.into_iter().map(INode::from).collect::<Vec<INode>>()).to_value()
         ]);
     }
 }

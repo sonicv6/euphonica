@@ -66,7 +66,6 @@ impl From<LsInfoEntry> for INodeInfo {
                 inode_type: INodeType::Song
             },
             LsInfoEntry::Directory(dir) => Self {
-                // Expect client wrapper to have already prepended name with path
                 uri: dir.name,
                 last_modified: dir.last_mod,
                 inode_type: INodeType::Folder
@@ -136,15 +135,6 @@ glib::wrapper! {
 }
 
 impl INode {
-    pub fn from_directory_with_path(dir: Directory, path: &str) -> Self {
-        let info = INodeInfo {
-            uri: path.to_owned() + "/" + &dir.name,
-            last_modified: dir.last_mod,
-            inode_type: INodeType::Folder
-        };
-        Self::from(info)
-    }
-
     // ALL of the getters below require that the info field be initialised!
     pub fn get_info(&self) -> &INodeInfo {
         &self.imp().info.get().unwrap()
