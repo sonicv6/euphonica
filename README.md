@@ -6,7 +6,7 @@ An MPD frontend with delusions of grandeur.
 ## Features
 - GTK4 Libadwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration
 - Audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums & detailed format printout
-- Browse your library by album or artist, with browsing by folder, genre and other criteria in the works
+- Browse your library by album, artist and folders, with browsing by genre and other criteria in the works
 - Sort albums by name, AlbumArtist or release date (provided you have the tags)
 - Asynchronous search for large collections
 - Configurable multi-artist tag syntax, works with anything you throw at it
@@ -70,8 +70,7 @@ Flatpak & AUR releases are also planned.
 
 ## TODO
 - Password support
-- Browse by folder
 - Browse by genre
 - Realtime lyrics fetching
-- Library management operations such as tag editing (will require access to the files themselves) 
+- Library management operations such as tag editing (will require access to the files themselves)
 - An "All tracks" page with advanced, freeform querying to take full advantage of MPD v0.21+'s new query syntax
