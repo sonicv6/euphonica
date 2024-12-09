@@ -18,24 +18,42 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cell::RefCell;
+use std::{cell::RefCell, thread, time::Duration};
 use adw::{
     prelude::*,
     subclass::prelude::*
 };
 use gtk::{
-    gio, glib::{self, clone, closure_local}
+    gdk, gio, glib::{self, clone, closure_local}
 };
 use glib::signal::SignalHandlerId;
 use image::DynamicImage;
 use crate::{
-    application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
+    application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils::{self, settings_manager}
 };
 
+enum BlurMessage {
+    Blur(String, bool), // URI and whether to fade to this image
+    BlurResult(gdk::MemoryTexture, bool), // GPU texture and whether to fade to this one
+    Stop
+}
+
+// Blurred background logic. Runs in a background thread. Both interpretations are valid :)
+// Our asynchronous background switching algorithm is pretty simple: Player controller
+// sends paths of album arts (just strings) to this thread. It then loads the image from
+// disk as a DynamicImage (CPU-side, not GdkTextures, which are quickly dumped into VRAM),
+// blurs it using libblur, uploads to GPU and fades background to it.
+// In case more paths arrive as we are in the middle of processing one for fading, the loop
+// will come back to the async channel with many messages in it. In this case, pop and drop
+// all except the last, which we will process normally. This means quickly skipping songs
+// will not result in a rapidly-changing background - it will only change as quickly as it
+// can fade or the CPU can blur, whichever is slower.
 mod imp {
     use std::cell::{Cell, OnceCell};
 
+    use async_channel::{Receiver, Sender};
     use glib::Properties;
+    use gtk::gdk;
     use utils::settings_manager;
 
     use crate::{common::paintables::FadePaintable, library::FolderView, player::Player};
@@ -90,7 +108,9 @@ mod imp {
         #[property(get, set)]
         pub opacity: Cell<f64>,
         pub bg_paintable: FadePaintable,
-        pub player: OnceCell<Player>
+        pub player: OnceCell<Player>,
+        pub sender_to_bg: OnceCell<Sender<BlurMessage>>, // sending a None will terminate the thread
+        pub bg_handle: OnceCell<gio::JoinHandle<()>>
     }
 
     #[glib::object_subclass]
@@ -202,6 +222,63 @@ mod imp {
                     }
                 )
             );
+
+            // Set up blur thread
+            let (sender_to_bg, bg_receiver) = async_channel::unbounded::<BlurMessage>();
+            self.sender_to_bg.set(sender_to_bg);
+            let (sender_to_fg, fg_receiver) = async_channel::bounded::<BlurMessage>(1); // block background thread until sent
+            let bg_handle = gio::spawn_blocking(move || {
+                println!("Starting background blur thread...");
+                let settings = settings_manager().child("player");
+                'outer: loop {
+                    // Check if there is work to do (block until there is)
+                    let mut last_msg: BlurMessage = bg_receiver
+                        .recv_blocking()
+                        .expect("Fatal: invalid message sent to window's blur thread");
+                    // In case the queue has more than one item, get the last one.
+                    while !bg_receiver.is_empty() {
+                        println!("Dropping extraneous blur requests...");
+                        last_msg = bg_receiver
+                            .recv_blocking()
+                            .expect("Fatal: invalid message sent to window's blur thread");
+                    }
+                    match last_msg {
+                        BlurMessage::Blur(uri, do_fade) => {
+                            // TODO
+                            // Wait until the ensuing fade operation has completed before
+                            // blurring the next art.
+                            thread::sleep(Duration::from_millis(
+                                (settings.double("bg-transition-duration-s") * 1000.0) as u64
+                            ));
+                        }
+                        BlurMessage::Stop => {
+                            break 'outer;
+                        }
+                        _ => unreachable!()  // we shouldn't ever send BlurResult to the child thread
+                    }
+                }
+            });
+            let _ = self.bg_handle.set(bg_handle);
+
+            // Use an async loop to wait for messages from the blur thread.
+            // The blur thread will send us handles to GPU textures. Upon receiving one,
+            // fade to it.
+            glib::MainContext::default().spawn_local(clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    use futures::prelude::*;
+                    // Allow receiver to be mutated, but keep it at the same memory address.
+                    // See Receiver::next doc for why this is needed.
+                    let mut receiver = std::pin::pin!(fg_receiver);
+                    while let Some(blur_msg) = receiver.next().await {
+                        match blur_msg {
+                            BlurMessage::BlurResult(tex, do_fade) => this.push_tex(tex, do_fade),
+                            _ => unreachable!()
+                        }
+
+                    }
+                }));
         }
     }
     impl WidgetImpl for EuphonicaWindow {
@@ -229,6 +306,61 @@ mod imp {
     impl WindowImpl for EuphonicaWindow {}
     impl ApplicationWindowImpl for EuphonicaWindow {}
     impl AdwApplicationWindowImpl for EuphonicaWindow {}
+
+    impl EuphonicaWindow {
+        /// Fade to the new texture, or to nothing if playing song has no album art.
+        fn push_tex(&self, tex: Option<gdk::MemoryTexture>, do_fade: bool) {
+            let bg_paintable = self.bg_paintable.clone();
+            if self.use_album_art_bg.get() && tex.is_some() {
+                if !self.content.has_css_class("no-shading") {
+                    self.content.add_css_class("no-shading");
+                }
+            }
+            else {
+                if self.content.has_css_class("no-shading") {
+                    self.content.remove_css_class("no-shading");
+                }
+            }
+            // Will immediately re-blur and upload to GPU at current size
+            bg_paintable.set_new_content(tex);
+            if do_fade {
+                // Once we've finished the above (expensive) operations, we can safely start
+                // the fade animation without worrying about stuttering.
+                glib::idle_add_local_once(
+                    clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        move || {
+                            // Run fade transition once main thread is free
+                            // Remember to queue draw too
+                            let duration = (bg_paintable.transition_duration() * 1000.0).round() as u32;
+                            let anim_target = adw::CallbackAnimationTarget::new(
+                                clone!(
+                                    #[weak]
+                                    this,
+                                    move |progress: f64| {
+                                        bg_paintable.set_fade(progress);
+                                        this.obj().queue_draw();
+                                    }
+                                )
+                            );
+                            let anim = adw::TimedAnimation::new(
+                                this.obj().as_ref(),
+                                0.0, 1.0,
+                                duration,
+                                anim_target
+                            );
+                            anim.play();
+                        }
+                    )
+                );
+            }
+            else {
+                // Just immediately show the new texture. Used for blur radius adjustments.
+                bg_paintable.set_fade(1.0);
+            }
+        }
+    }
 }
 
 glib::wrapper! {
@@ -252,7 +384,7 @@ impl EuphonicaWindow {
             clone!(
                 #[weak(rename_to = this)]
                 win,
-                move |_, _| {
+               move |_, _| {
                     this.update_background();
                 }
             )
