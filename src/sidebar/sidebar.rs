@@ -20,6 +20,8 @@ mod imp {
         #[template_child]
         pub artists_btn: TemplateChild<SidebarButton>,
         #[template_child]
+        pub folders_btn: TemplateChild<SidebarButton>,
+        #[template_child]
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub queue_len: TemplateChild<gtk::Label>,
@@ -107,6 +109,15 @@ impl Sidebar {
             }
         }));
 
+        self.imp().folders_btn.connect_toggled(clone!(
+            #[weak]
+            stack,
+            move |btn| {
+            if btn.is_active() {
+                stack.set_visible_child_name("folders");
+            }
+        }));
+
         self.imp().queue_btn.connect_toggled(clone!(
             #[weak]
             stack,
@@ -126,7 +137,8 @@ impl Sidebar {
         ));
         for btn in [
             &self.imp().albums_btn.get(),
-            &self.imp().artists_btn.get()
+            &self.imp().artists_btn.get(),
+            &self.imp().folders_btn.get()
         ] {
             btn.upcast_ref::<gtk::ToggleButton>().upcast_ref::<gtk::Button>().connect_clicked(clone!(
                 #[weak]

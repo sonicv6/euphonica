@@ -42,7 +42,6 @@ mod imp {
         // 4.3. Send AlbumInfo class to main thread via MpdMessage.
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
-        
 
         pub cache: OnceCell<Rc<Cache>>,
     }
@@ -151,15 +150,23 @@ impl Library {
         }
     }
 
-    pub fn queue_uri(&self, uri: &str, replace: bool, play: bool) {
+    /// Queue a song or folder (when recursive == true) for playback.
+    pub fn queue_uri(&self, uri: &str, replace: bool, play: bool, recursive: bool) {
         if let Some(sender) = self.imp().sender.get() {
             if replace {
                 let _ = sender.send_blocking(MpdMessage::Clear);
             }
-            let _ = sender.send_blocking(MpdMessage::Add(uri.to_owned()));
+            let _ = sender.send_blocking(MpdMessage::Add(uri.to_owned(), recursive));
             if replace && play {
                 let _ = sender.send_blocking(MpdMessage::PlayPos(0));
             }
+        }
+    }
+
+    // TODO: Lsinfo interface
+    pub fn get_folder_contents(&self, uri: &str) {
+        if let Some(sender) = self.imp().sender.get() {
+            let _ = sender.send_blocking(MpdMessage::LsInfo(uri.to_owned()));
         }
     }
 }

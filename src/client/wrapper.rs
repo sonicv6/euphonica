@@ -8,34 +8,20 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client, error::Error, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Subsystem
+    client::Client, error::Error, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Subsystem
 };
 use image::DynamicImage;
 use uuid::Uuid;
 
 use crate::{
-    common::{Album, AlbumInfo, Artist, ArtistInfo, Song, SongInfo}, meta_providers::Metadata, player::PlaybackFlow, utils
+    common::{Album, AlbumInfo, Artist, ArtistInfo, INode, Song, SongInfo}, meta_providers::Metadata, player::PlaybackFlow, utils
 };
 
 use super::state::{ClientState, ConnectionState};
 
-pub fn get_dummy_song(uri: &str) -> mpd::Song {
-    // Many of mpd's methods require an impl of trait ToSongPath, which
-    // - Is not made public,
-    // - Is only implemented by their Song struct, and
-    // - Is only for getting the URI anyway.
-    mpd::Song {
-        file: uri.to_owned(),
-        name: None,
-        title: None,
-        last_mod: None,
-        artist: None,
-        duration: None,
-        place: None,
-        range: None,
-        tags: Vec::new()
-    }
-}
+const BATCH_SIZE: u32 = 4096;
+const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once (same
+// folder, same tag, etc)
 
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
@@ -48,7 +34,7 @@ pub enum MpdMessage {
     Play,
     Pause,
     Stop,
-    Add(String), // Add by URI
+    Add(String, bool), // Add by URI. If true, treat URI as folder-level and add recursively.
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
     DeleteId(u32),
@@ -72,6 +58,7 @@ pub enum MpdMessage {
     Consume(bool),
     GetSticker(String, String, String), // Type, URI, name
     SetSticker(String, String, String, String), // Type, URI, name, value
+    LsInfo(String),  // URI
 
     // Reserved for cache controller
     // folder-level URI, key doc & paths to write the hires & thumbnail versions
@@ -90,15 +77,17 @@ pub enum MpdMessage {
     ArtistBasicInfoDownloaded(ArtistInfo), // Return new artist to be added to the list model.
     ArtistSongInfoDownloaded(String, Vec<SongInfo>),  // Return songs of an artist (or had their participation)
     ArtistAlbumBasicInfoDownloaded(String, AlbumInfo),  // Return albums that had this artist in their AlbumArtist tag.
+    FolderContentsDownloaded(String, Vec<LsInfoEntry>),
     DBUpdated
 }
 
 // Work requests for sending to the child thread.
 // Completed results will be reported back via MpdMessage.
 #[derive(Debug)]
-enum BackgroundTask {
+pub enum BackgroundTask {
     Update,
     DownloadAlbumArt(String, bson::Document, PathBuf, PathBuf),  // folder-level URI
+    FetchFolderContents(String), // Gradually get all inodes in folder at path
     FetchAlbums,  // Gradually get all albums
     FetchAlbumSongs(String),  // Get songs of album with given tag
     FetchArtists(bool),  // Gradually get all artists. If bool flag is true, will parse AlbumArtist tag
@@ -157,7 +146,7 @@ mod background {
         path: PathBuf,
         thumbnail_path: PathBuf
     ) {
-        if let Ok(bytes) = client.albumart(&get_dummy_song(&uri)) {
+        if let Ok(bytes) = client.albumart(&uri) {
             println!("Downloaded album art for {:?}", uri);
             if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
                 let (hires, thumb) = utils::resize_convert_image(dyn_img);
@@ -218,16 +207,24 @@ mod background {
         F: Fn(Vec<SongInfo>) -> Result<(), SendError<MpdMessage>>
     {
         // TODO: batched windowed retrieval
-        let songs: Vec<SongInfo> = client
-            .find(query, Window::from((0, 4096)))
-            .unwrap()
-            .iter_mut()
-            .map(|mpd_song| {
-                SongInfo::from(std::mem::take(mpd_song))
-            })
-            .collect();
-        if !songs.is_empty() {
-            let _ = respond(songs);
+        let mut curr_len: u32 = 0;
+        let mut more: bool = true;
+        while more && (curr_len as usize) < FETCH_LIMIT {
+            let songs: Vec<SongInfo> = client
+                .find(query, Window::from((curr_len, curr_len + BATCH_SIZE)))
+                .unwrap()
+                .iter_mut()
+                .map(|mpd_song| {
+                    SongInfo::from(std::mem::take(mpd_song))
+                })
+                .collect();
+            if !songs.is_empty() {
+                let _ = respond(songs);
+                curr_len += BATCH_SIZE;
+            }
+            else {
+                more = false;
+            }
         }
     }
 
@@ -356,6 +353,20 @@ mod background {
             }
         );
     }
+
+    pub fn fetch_folder_contents(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<MpdMessage>,
+        path: String
+    ) {
+        if let Ok(contents) = client.lsinfo(&path) {
+            println!("Downloaded {} folder entries", contents.len());
+            let _ = sender_to_fg.send_blocking(MpdMessage::FolderContentsDownloaded(
+                path,
+                contents
+            ));
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -470,6 +481,9 @@ impl MpdWrapper {
                                         &mut client, &sender_to_fg, name
                                     )
                                 }
+                                BackgroundTask::FetchFolderContents(uri) => {
+                                    background::fetch_folder_contents(&mut client, &sender_to_fg, uri)
+                                }
                             }
                         }
                     }
@@ -563,7 +577,7 @@ impl MpdWrapper {
             MpdMessage::MixRampDb(db) => self.set_mixramp_db(db),
             MpdMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
             MpdMessage::Status => self.get_status(),
-            MpdMessage::Add(uri) => self.add(uri.as_ref()),
+            MpdMessage::Add(uri, recursive) => self.add(uri, recursive),
             MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
             MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
             MpdMessage::Random(state) => self.set_random(state),
@@ -598,7 +612,7 @@ impl MpdWrapper {
             }
             MpdMessage::ArtistContent(name) => self.get_artist_content(name),
             MpdMessage::FindAdd(terms) => self.find_add(terms),
-
+            MpdMessage::LsInfo(uri) => self.queue_task(BackgroundTask::FetchFolderContents(uri)),
             // Result messages from child thread
             MpdMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
@@ -638,6 +652,7 @@ impl MpdWrapper {
                 Some(artist_name),
                 album_info
             ),
+            MpdMessage::FolderContentsDownloaded(uri, contents) => self.on_folder_contents_downloaded(uri, contents),
             MpdMessage::DBUpdated => {},
             MpdMessage::Busy(busy) => self.state.set_busy(busy),
         }
@@ -665,7 +680,7 @@ impl MpdWrapper {
         }
     }
 
-    fn queue_task(&self, task: BackgroundTask) {
+    pub fn queue_task(&self, task: BackgroundTask) {
         if let Some(sender) = self.bg_sender.borrow().as_ref() {
             sender.send_blocking(task).expect("Cannot queue background task");
             if let Some(client) = self.main_client.borrow_mut().as_mut() {
@@ -731,9 +746,14 @@ impl MpdWrapper {
         }
     }
 
-    pub fn add(&self, uri: &str) {
+    pub fn add(&self, uri: String, recursive: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let _ = client.push(get_dummy_song(uri));
+            if recursive {
+                let _ = client.findadd(Query::new().and(Term::Base, uri));
+            }
+            else {
+                let _ = client.push(uri);
+            }
         }
     }
 
@@ -1066,6 +1086,13 @@ impl MpdWrapper {
             // }
             client.findadd(&query).expect("Failed to run query!");
         }
+    }
+
+    pub fn on_folder_contents_downloaded(&self, uri: String, contents: Vec<LsInfoEntry>) {
+        self.state.emit_by_name::<()>("folder-contents-downloaded", &[
+            &uri.to_value(),
+            &BoxedAnyObject::new(contents.into_iter().map(INode::from).collect::<Vec<INode>>()).to_value()
+        ]);
     }
 }
 

@@ -1,6 +1,6 @@
 /* window.rs
  *
- * Copyright 2024 Work
+ * Copyright 2024 htkhiem2000
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ mod imp {
     use glib::Properties;
     use utils::settings_manager;
 
-    use crate::{common::paintables::FadePaintable, player::Player};
+    use crate::{common::paintables::FadePaintable, library::FolderView, player::Player};
 
     use super::*;
 
@@ -56,6 +56,8 @@ mod imp {
         pub album_view: TemplateChild<AlbumView>,
         #[template_child]
         pub artist_view: TemplateChild<ArtistView>,
+        #[template_child]
+        pub folder_view: TemplateChild<FolderView>,
         #[template_child]
         pub queue_view: TemplateChild<QueueView>,
 
@@ -268,6 +270,11 @@ impl EuphonicaWindow {
             app.get_client().get_client_state()
         );
         win.imp().artist_view.setup(
+            app.get_library(),
+            app.get_cache(),
+            app.get_client().get_client_state()
+        );
+        win.imp().folder_view.setup(
             app.get_library(),
             app.get_cache(),
             app.get_client().get_client_state()
