@@ -1,10 +1,7 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use gtk::{
-    gdk::{self, subclass::paintable::*}, prelude::*, subclass::prelude::*, glib
+    gdk::{self, prelude::*, subclass::paintable::*}, prelude::*, subclass::prelude::*, glib::{self, Properties}
 };
-use image::DynamicImage;
-
-use crate::common::paintables::BlurPaintable;
 
 // Background paintable implementation.
 // Euphonica can optionally use the currently-playing track's album art as its
@@ -12,17 +9,13 @@ use crate::common::paintables::BlurPaintable;
 // blurred. When the next song has a different album art, a fade animation will
 // be played.
 mod imp {
-    use glib::Properties;
-
-    use crate::common::paintables::BlurPaintable;
-
     use super::*;
 
     #[derive(Default, Properties)]
     #[properties(wrapper_type = super::FadePaintable)]
     pub struct FadePaintable {
-        pub current: BlurPaintable,
-        pub previous: BlurPaintable,
+        pub current: RefCell<Option<gdk::MemoryTexture>>,
+        pub previous: RefCell<Option<gdk::MemoryTexture>>,
         // 0 = previous, 0.5 = halfway, 1.0 = current
         pub fade: Cell<f64>,
         // Kept here so snapshot() does not have to query GSettings on every frame
@@ -43,19 +36,39 @@ mod imp {
 
     impl PaintableImpl for FadePaintable {
         fn current_image(&self) -> gdk::Paintable {
-            self.current.current_image()
+            if let Some(current) = self.current.borrow().as_ref() {
+                current.current_image()
+            }
+            else {
+                gdk::Paintable::new_empty(1, 1)
+            }
         }
 
         fn intrinsic_width(&self) -> i32 {
-            self.current.intrinsic_width()
+            if let Some(current) = self.current.borrow().as_ref() {
+                current.intrinsic_width()
+            }
+            else {
+                1
+            }
         }
 
         fn intrinsic_height(&self) -> i32 {
-            self.current.intrinsic_height()
+            if let Some(current) = self.current.borrow().as_ref() {
+                current.intrinsic_height()
+            }
+            else {
+                1
+            }
         }
 
         fn intrinsic_aspect_ratio(&self) -> f64 {
-            self.current.intrinsic_aspect_ratio()
+            if let Some(current) = self.current.borrow().as_ref() {
+                current.intrinsic_aspect_ratio()
+            }
+            else {
+                1.0
+            }
         }
 
         fn snapshot(&self, snapshot: &gdk::Snapshot, width: f64, height: f64) {
@@ -69,19 +82,21 @@ mod imp {
             //     1b. Else (there is a previous texture and/or fade is at 1.0), just draw at full opacity.
             // 2. Check if there's a previous texture. If there is and fade < 1.0, draw it at 1-fade opacity.
             let fade = self.fade.get();
-            if self.current.has_content() {
-                if !self.previous.has_content() && fade < 1.0 {
+            let current_has_content = self.current.borrow().is_some();
+            let previous_has_content = self.previous.borrow().is_some();
+            if current_has_content {
+                if !previous_has_content && fade < 1.0 {
                     snapshot.push_opacity(fade);
-                    self.current.snapshot(snapshot, width, height);
+                    self.current.borrow().as_ref().unwrap().snapshot(snapshot, width, height);
                     snapshot.pop();
                 }
                 else {
-                    self.current.snapshot(snapshot, width, height);
+                    self.current.borrow().as_ref().unwrap().snapshot(snapshot, width, height);
                 }
             }
-            if self.previous.has_content() && fade < 1.0 {
+            if previous_has_content && fade < 1.0 {
                 snapshot.push_opacity(1.0 - fade);
-                self.previous.snapshot(snapshot, width, height);
+                self.previous.borrow().as_ref().unwrap().snapshot(snapshot, width, height);
                 snapshot.pop();
             }
         }
@@ -93,14 +108,6 @@ glib::wrapper! {
 }
 
 impl FadePaintable {
-    pub fn current(&self) -> &BlurPaintable {
-        &self.imp().current
-    }
-
-    pub fn previous(&self) -> &BlurPaintable {
-        &self.imp().previous
-    }
-
     pub fn get_fade(&self) -> f64 {
         self.imp().fade.get()
     }
@@ -113,13 +120,14 @@ impl FadePaintable {
         }
     }
 
-    pub fn set_new_content(&self, new: Option<DynamicImage>) {
+    pub fn set_new_content(&self, new: Option<gdk::MemoryTexture>) {
         if new.is_none() {
             println!("Clearing...");
         }
-        self.imp().previous.take_from(&self.imp().current);
+        self.imp().previous.replace(self.imp().current.take());
+        self.imp().current.replace(new);
         self.set_fade(0.0);
-        self.imp().current.set_content(new);
+
     }
 }
 

@@ -23,10 +23,7 @@ use gtk::{gdk::Texture, glib::clone};
 use gtk::{gio, glib, prelude::*};
 use mpd::{status::{AudioFormat, State, Status}, ReplayGain};
 use std::{
-    cell::{Cell, OnceCell, RefCell},
-    rc::Rc,
-    sync::OnceLock,
-    vec::Vec,
+    cell::{Cell, OnceCell, RefCell}, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
 };
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
@@ -866,17 +863,29 @@ impl Player {
         None
     }
 
-    pub fn current_song_album_art_cpu(&self, thumbnail: bool) -> Option<DynamicImage> {
-        if let Some(song) = self.imp().current_song.borrow().as_ref() {
-            if let Some(cache) = self.imp().cache.get() {
-                if let Some(album) = song.get_album() {
-                    // Always read from disk
-                    return cache.load_cached_album_art_cpu(album, thumbnail, false);
-                }
+    pub fn current_song_album_art_path(&self, thumbnail: bool) -> Option<PathBuf> {
+        if let (
+            Some(song), Some(cache)
+        ) = (
+            self.imp().current_song.borrow().as_ref(),
+            self.imp().cache.get()
+        )
+            {
+            if let Some(album) = song.get_album() {
+                // Always read from disk
+                Some(
+                    cache.get_path_for(
+                        &crate::meta_providers::Metadata::AlbumArt(album.uri.to_owned(), thumbnail)
+                    )
+                )
             }
-            return None;
+            else {
+                None
+            }
         }
-        None
+        else {
+            None
+        }
     }
 
     pub fn quality_grade(&self) -> QualityGrade {
