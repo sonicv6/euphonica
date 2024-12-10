@@ -410,21 +410,6 @@ impl Cache {
     }
 
 
-    /// Alterantive to load_cached_album_art that returns a CPU-bound image::DynamicImage, useful for CPU-powered
-    /// background stack blur logic. This always triggers a disk read, since our cache only contains references
-    /// to GdkTextures, which may be GPU-bound.
-    pub fn load_cached_album_art_cpu(&self, album: &AlbumInfo, thumbnail: bool, schedule: bool) -> Option<DynamicImage> {
-        let folder_uri = album.uri.to_owned();
-        let path = self.get_path_for(&Metadata::AlbumArt(folder_uri, thumbnail));
-        if path.exists() {
-            Some(Reader::open(path.to_str().unwrap()).unwrap().decode().unwrap())
-        }
-        else {
-            None
-        }
-    }
-
-
     /// Convenience method to check whether album art for a given album is locally available,
     /// and if not, queue its downloading from MPD.
     /// If MPD doesn't have one locally, we'll try fetching from all the enabled metadata providers.

@@ -18,24 +18,82 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cell::RefCell;
+use std::{cell::RefCell, path::PathBuf, thread, time::Duration};
 use adw::{
     prelude::*,
     subclass::prelude::*
 };
 use gtk::{
-    gio, glib::{self, clone, closure_local}
+    gdk, gio, glib::{self, clone, closure_local}
 };
 use glib::signal::SignalHandlerId;
-use image::DynamicImage;
+use image::{imageops::FilterType, DynamicImage};
+use libblur::{stack_blur, FastBlurChannels, ThreadingPolicy};
 use crate::{
-    application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils
+    application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils::{self, settings_manager}
 };
 
+#[derive(Debug)]
+pub struct BlurConfig {
+    width: u32,
+    height: u32,
+    radius: u32,
+    fade: bool  // Whether this update requires fading to it. Those for updating radius shouldn't be faded.
+}
+
+fn run_blur(di: &DynamicImage, config: &BlurConfig) -> gdk::MemoryTexture {
+    let scaled = di.resize_to_fill(
+        config.width,
+        config.height,
+        FilterType::Nearest
+    );
+    let mut dst_bytes: Vec<u8> = scaled.as_bytes().to_vec();
+    // Always assume RGB8 (no alpha channel)
+    // This works since we're the ones who wrote the original images
+    // to disk in the first place.
+    stack_blur(
+        &mut dst_bytes,
+        config.width * 3,
+        config.width,
+        config.height,
+        config.radius,
+        FastBlurChannels::Channels3,
+        ThreadingPolicy::Adaptive
+    );
+    // Wrap in MemoryTexture for snapshotting
+    gdk::MemoryTexture::new(
+        config.width as i32,
+        config.height as i32,
+        gdk::MemoryFormat::R8g8b8,
+        &glib::Bytes::from_owned(dst_bytes),
+        (config.width * 3) as usize
+    )
+}
+
+pub enum BlurMessage {
+    New(PathBuf, BlurConfig), // Load new image at FULL PATH & blur with given configuration. Will fade.
+    Update(BlurConfig), // Re-blur current image but do not fade.
+    Result(gdk::MemoryTexture, bool), // GPU texture and whether to fade to this one.
+    Stop
+}
+
+// Blurred background logic. Runs in a background thread. Both interpretations are valid :)
+// Our asynchronous background switching algorithm is pretty simple: Player controller
+// sends paths of album arts (just strings) to this thread. It then loads the image from
+// disk as a DynamicImage (CPU-side, not GdkTextures, which are quickly dumped into VRAM),
+// blurs it using libblur, uploads to GPU and fades background to it.
+// In case more paths arrive as we are in the middle of processing one for fading, the loop
+// will come back to the async channel with many messages in it. In this case, pop and drop
+// all except the last, which we will process normally. This means quickly skipping songs
+// will not result in a rapidly-changing background - it will only change as quickly as it
+// can fade or the CPU can blur, whichever is slower.
 mod imp {
     use std::cell::{Cell, OnceCell};
 
+    use async_channel::Sender;
     use glib::Properties;
+    use gtk::gdk;
+    use image::io::Reader;
     use utils::settings_manager;
 
     use crate::{common::paintables::FadePaintable, library::FolderView, player::Player};
@@ -90,7 +148,10 @@ mod imp {
         #[property(get, set)]
         pub opacity: Cell<f64>,
         pub bg_paintable: FadePaintable,
-        pub player: OnceCell<Player>
+        pub player: OnceCell<Player>,
+        pub sender_to_bg: OnceCell<Sender<BlurMessage>>, // sending a None will terminate the thread
+        pub bg_handle: OnceCell<gio::JoinHandle<()>>,
+        pub prev_size: Cell<(u32, u32)>
     }
 
     #[glib::object_subclass]
@@ -128,22 +189,6 @@ mod imp {
 
             settings
                 .bind(
-                    "bg-blur-radius",
-                    bg_paintable.current(),
-                    "blur-radius"
-                )
-                .build();
-
-            settings
-                .bind(
-                    "bg-blur-radius",
-                    bg_paintable.previous(),
-                    "blur-radius"
-                )
-                .build();
-
-            settings
-                .bind(
                     "bg-opacity",
                     obj,
                     "opacity"
@@ -158,6 +203,15 @@ mod imp {
                 )
                 .build();
 
+            settings.connect_changed(Some("bg-blur-radius"), clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_, _| {
+                    // Blur radius updates need not fade
+                    this.obj().queue_background_update(false);
+                }
+            ));
+
             // If using album art as background we must disable the default coloured
             // backgrounds that navigation views use for their sidebars.
             // We do this by toggling the "no-shading" CSS class for the top-level
@@ -166,7 +220,7 @@ mod imp {
             obj.connect_notify_local(
                 Some("use-album-art-bg"),
                 |this, _| {
-                    this.update_background();
+                    this.queue_new_background();
                 }
             );
 
@@ -202,13 +256,104 @@ mod imp {
                     }
                 )
             );
+
+            // Set up blur thread
+            let (sender_to_bg, bg_receiver) = async_channel::unbounded::<BlurMessage>();
+            let _ = self.sender_to_bg.set(sender_to_bg);
+            let (sender_to_fg, fg_receiver) = async_channel::bounded::<BlurMessage>(1); // block background thread until sent
+            let bg_handle = gio::spawn_blocking(move || {
+                println!("Starting background blur thread...");
+                let settings = settings_manager().child("player");
+                // Cached here to avoid having to load the same image multiple times
+                let mut curr_data: Option<DynamicImage> = None;
+                let mut curr_path: Option<PathBuf> = None;
+                'outer: loop {
+                    let curr_path_mut = curr_path.as_mut();
+                    // Check if there is work to do (block until there is)
+                    let mut last_msg: BlurMessage = bg_receiver
+                        .recv_blocking()
+                        .expect("Fatal: invalid message sent to window's blur thread");
+                    // In case the queue has more than one item, get the last one.
+                    while !bg_receiver.is_empty() {
+                        last_msg = bg_receiver
+                            .recv_blocking()
+                            .expect("Fatal: invalid message sent to window's blur thread");
+                    }
+                    match last_msg {
+                        BlurMessage::New(path, config) => {
+                            if (curr_path_mut.is_some() && path != *curr_path_mut.unwrap()) || curr_path.is_none() {
+                                let di = Reader::open(&path).unwrap().decode().unwrap();
+                                curr_path.replace(path);
+                                // Guard against calls just after window creation: sizes will be 0, but
+                                // we should still record the image data here as the next calls (with sizes)
+                                // will only be Updates.
+                                if config.width > 0 && config.height > 0 {
+                                    let _ = sender_to_fg.send_blocking(BlurMessage::Result(run_blur(&di, &config), true));
+                                    thread::sleep(Duration::from_millis(
+                                        (settings.double("bg-transition-duration-s") * 1000.0) as u64
+                                    ));
+                                }
+                                curr_data.replace(di);
+                            }
+                            // Else no need to blur again
+                            // (size/radius updates are never sent via this message)
+                        }
+                        BlurMessage::Update(config) => {
+                            if let Some(data) = curr_data.as_ref() {
+                                if config.width > 0 && config.height > 0 {
+                                    let _ = sender_to_fg.send_blocking(BlurMessage::Result(run_blur(data, &config), config.fade));
+                                }
+                                if config.fade {
+                                    thread::sleep(Duration::from_millis(
+                                        (settings.double("bg-transition-duration-s") * 1000.0) as u64
+                                    ));
+                                }
+                            }
+                        }
+                        BlurMessage::Stop => {
+                            break 'outer;
+                        }
+                        _ => unreachable!()  // we shouldn't ever send BlurResult to the child thread
+                    }
+                }
+            });
+            let _ = self.bg_handle.set(bg_handle);
+
+            // Use an async loop to wait for messages from the blur thread.
+            // The blur thread will send us handles to GPU textures. Upon receiving one,
+            // fade to it.
+            glib::MainContext::default().spawn_local(clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move {
+                    use futures::prelude::*;
+                    // Allow receiver to be mutated, but keep it at the same memory address.
+                    // See Receiver::next doc for why this is needed.
+                    let mut receiver = std::pin::pin!(fg_receiver);
+                    while let Some(blur_msg) = receiver.next().await {
+                        match blur_msg {
+                            BlurMessage::Result(tex, do_fade) => this.push_tex(Some(tex), do_fade),
+                            _ => unreachable!()
+                        }
+
+                    }
+                }));
         }
     }
     impl WidgetImpl for EuphonicaWindow {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let widget = self.obj();
-            // GPU-accelerated, statically-cached blur
+            // Statically-cached blur
             if self.use_album_art_bg.get() {
+                // Check if window has been resized (will need reblur)
+                let new_size = (widget.width() as u32, widget.height() as u32);
+                if new_size != self.prev_size.get() {
+                    self.prev_size.replace(new_size);
+                    // Size changes are disorienting so we need to fade.
+                    widget.queue_background_update(true);
+                    // Will still reuse old (mis-sized) blur texture until child thread
+                    // comes back with a better one.
+                }
                 let opacity = self.opacity.get();
                 if opacity < 1.0 {
                     snapshot.push_opacity(opacity);
@@ -229,6 +374,61 @@ mod imp {
     impl WindowImpl for EuphonicaWindow {}
     impl ApplicationWindowImpl for EuphonicaWindow {}
     impl AdwApplicationWindowImpl for EuphonicaWindow {}
+
+    impl EuphonicaWindow {
+        /// Fade to the new texture, or to nothing if playing song has no album art.
+        pub fn push_tex(&self, tex: Option<gdk::MemoryTexture>, do_fade: bool) {
+            let bg_paintable = self.bg_paintable.clone();
+            if self.use_album_art_bg.get() && tex.is_some() {
+                if !self.content.has_css_class("no-shading") {
+                    self.content.add_css_class("no-shading");
+                }
+            }
+            else {
+                if self.content.has_css_class("no-shading") {
+                    self.content.remove_css_class("no-shading");
+                }
+            }
+            // Will immediately re-blur and upload to GPU at current size
+            bg_paintable.set_new_content(tex);
+            if do_fade {
+                // Once we've finished the above (expensive) operations, we can safely start
+                // the fade animation without worrying about stuttering.
+                glib::idle_add_local_once(
+                    clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        move || {
+                            // Run fade transition once main thread is free
+                            // Remember to queue draw too
+                            let duration = (bg_paintable.transition_duration() * 1000.0).round() as u32;
+                            let anim_target = adw::CallbackAnimationTarget::new(
+                                clone!(
+                                    #[weak]
+                                    this,
+                                    move |progress: f64| {
+                                        bg_paintable.set_fade(progress);
+                                        this.obj().queue_draw();
+                                    }
+                                )
+                            );
+                            let anim = adw::TimedAnimation::new(
+                                this.obj().as_ref(),
+                                0.0, 1.0,
+                                duration,
+                                anim_target
+                            );
+                            anim.play();
+                        }
+                    )
+                );
+            }
+            else {
+                // Just immediately show the new texture. Used for blur radius adjustments.
+                bg_paintable.set_fade(1.0);
+            }
+        }
+    }
 }
 
 glib::wrapper! {
@@ -246,14 +446,14 @@ impl EuphonicaWindow {
 
         let app = win.downcast_application();
         let player = app.get_player();
-        win.update_background();
+        win.queue_new_background();
         player.connect_notify_local(
             Some("album-art"),
             clone!(
                 #[weak(rename_to = this)]
                 win,
-                move |_, _| {
-                    this.update_background();
+               move |_, _| {
+                    this.queue_new_background();
                 }
             )
         );
@@ -348,55 +548,40 @@ impl EuphonicaWindow {
         }
     }
 
-    /// Update blurred background, if enabled. Use thumbnail version to minimise disk read time
-    /// since we're doing this synchronously.
-    fn update_background(&self) {
+    /// Set blurred background to a new image, if enabled. Use thumbnail version to
+    /// minimise disk read time.
+    fn queue_new_background(&self) {
         if let Some(player) = self.imp().player.get() {
-            let imp = self.imp();
-            let tex: Option<DynamicImage> = player.current_song_album_art_cpu(true);
-            let bg_paintable = imp.bg_paintable.clone();
-            if imp.use_album_art_bg.get() && tex.is_some() {
-                if !imp.content.has_css_class("no-shading") {
-                    imp.content.add_css_class("no-shading");
-                }
+            if let (Some(path), Some(sender)) = (
+                player.current_song_album_art_path(true),
+                self.imp().sender_to_bg.get()
+            ) {
+                let settings = settings_manager().child("player");
+                let config = BlurConfig {
+                    width: self.width() as u32,
+                    height: self.height() as u32,
+                    radius: settings.uint("bg-blur-radius"),
+                    fade: true  // new image, must fade
+                };
+                let _ = sender.send_blocking(BlurMessage::New(path, config));
             }
             else {
-                if imp.content.has_css_class("no-shading") {
-                    imp.content.remove_css_class("no-shading");
-                }
+                // Clear background
+                self.imp().push_tex(None, true);
             }
-            // Will immediately re-blur and upload to GPU at current size
-            bg_paintable.set_new_content(tex);
-            // Once we've finished the above (expensive) operations, we can safely start
-            // the fade animation without worrying about stuttering.
-            glib::idle_add_local_once(
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    move || {
-                        // Run fade transition once main thread is free
-                        // Remember to queue draw too
-                        let duration = (bg_paintable.transition_duration() * 1000.0).round() as u32;
-                        let anim_target = adw::CallbackAnimationTarget::new(
-                            clone!(
-                                #[weak]
-                                this,
-                                move |progress: f64| {
-                                    bg_paintable.set_fade(progress);
-                                    this.queue_draw();
-                                }
-                            )
-                        );
-                        let anim = adw::TimedAnimation::new(
-                            &this,
-                            0.0, 1.0,
-                            duration,
-                            anim_target
-                        );
-                        anim.play();
-                    }
-                )
-            );
+        }
+    }
+
+    fn queue_background_update(&self, fade: bool) {
+        if let Some(sender) = self.imp().sender_to_bg.get() {
+            let settings = settings_manager().child("player");
+            let config = BlurConfig {
+                width: self.width() as u32,
+                height: self.height() as u32,
+                radius: settings.uint("bg-blur-radius"),
+                fade
+            };
+            let _ = sender.send_blocking(BlurMessage::Update(config));
         }
     }
 
