@@ -37,7 +37,7 @@
                             </child>
                           </object>
                         </property>
-                        <property name="menu-model">sort_menu</property>
+                        <property name="menu-model">album_sort_menu</property>
                       </object>
                     </child>
                   </object>
@@ -110,7 +110,7 @@
     </child>
   </template>
 
-  <menu id="sort_menu">
+  <menu id="album_sort_menu">
     <section>
       <attribute name="label" translatable="yes">Sort by</attribute>
       <item>

@@ -273,6 +273,9 @@ impl FolderView {
     }
 
     pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
+        self.setup_sort();
+        self.setup_search();
+        self.setup_listview(cache.clone(), library.clone());
         self.imp().library.set(library.clone()).expect("Cannot init FolderView with Library");
         client_state.connect_notify_local(Some("connection-state"), clone!(
             #[weak(rename_to = this)]
@@ -304,15 +307,9 @@ impl FolderView {
                 }
             )
         );
-
-
-        self.setup_sort();
-        self.setup_search();
-        self.setup_listview(cache.clone(), library.clone());
     }
 
     fn setup_sort(&self) {
-        // TODO: use albumsort & albumartistsort tags where available
         // Setup sort widget & actions
         let settings = settings_manager();
         let state = settings.child("state").child("folderview");

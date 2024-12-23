@@ -53,7 +53,7 @@
                     </child>
                   </object>
                 </property>
-                <property name="menu-model">sort_menu</property>
+                <property name="menu-model">folder_sort_menu</property>
               </object>
             </child>
           </object>
@@ -110,7 +110,7 @@
     </child>
   </template>
 
-  <menu id="sort_menu">
+  <menu id="folder_sort_menu">
     <section>
       <attribute name="label" translatable="yes">Sort by</attribute>
       <item>
@@ -120,7 +120,7 @@
       </item>
       <item>
         <attribute name="label" translatable="yes">_Last modified</attribute>
-        <attribute name="action">albumview.sort-by</attribute>
+        <attribute name="action">folderview.sort-by</attribute>
         <attribute name="target">last-modified</attribute>
       </item>
     </section>
