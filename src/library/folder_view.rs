@@ -73,7 +73,9 @@ mod imp {
         #[template_child]
         pub sort_dir: TemplateChild<gtk::Image>,
         #[template_child]
-        pub sort_mode: TemplateChild<gtk::Label>,
+        pub sort_dir_btn: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub sort_mode: TemplateChild<gtk::DropDown>,
         #[template_child]
         pub search_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
@@ -110,6 +112,7 @@ mod imp {
                 forward_btn: TemplateChild::default(),
                 // Search & filter widgets
                 sort_dir: TemplateChild::default(),
+                sort_dir_btn: TemplateChild::default(),
                 sort_mode: TemplateChild::default(),
                 search_btn: TemplateChild::default(),
                 search_bar: TemplateChild::default(),
@@ -314,14 +317,18 @@ impl FolderView {
         let settings = settings_manager();
         let state = settings.child("state").child("folderview");
         let library_settings = settings.child("library");
-        let actions = gio::SimpleActionGroup::new();
-        actions.add_action(
-            &state.create_action("sort-by")
-        );
-        actions.add_action(
-            &state.create_action("sort-direction")
-        );
-        self.insert_action_group("folderview", Some(&actions));
+        let sort_dir_btn = self.imp().sort_dir_btn.get();
+        sort_dir_btn.connect_clicked(clone!(
+            #[weak]
+            state,
+            move |_| {
+                if state.string("sort-direction") == "asc" {
+                    let _ = state.set_string("sort-direction", "desc");
+                } else {
+                    let _ = state.set_string("sort-direction", "asc");
+                }
+            }
+        ));
         let sort_dir = self.imp().sort_dir.get();
         state
             .bind(
@@ -342,14 +349,20 @@ impl FolderView {
             .bind(
                 "sort-by",
                 &sort_mode,
-                "label",
+                "selected",
             )
-            .get_only()
             .mapping(|val, _| {
                 // TODO: i18n
                 match val.get::<String>().unwrap().as_ref() {
-                    "filename" => Some("Name".to_value()),
-                    "last-modified" => Some("Last modified".to_value()),
+                    "filename" => Some(0.to_value()),
+                    "last-modified" => Some(1.to_value()),
+                    _ => unreachable!()
+                }
+            })
+            .set_mapping(|val, _| {
+                match val.get::<u32>().unwrap() {
+                    0 => Some("filename".to_variant()),
+                    1 => Some("last-modified".to_variant()),
                     _ => unreachable!()
                 }
             })

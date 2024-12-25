@@ -17,12 +17,11 @@
                       </object>
                     </child>
                     <child type="end">
-                      <object class="GtkMenuButton">
+                      <object class="GtkButton" id="sort_dir_btn">
                         <style>
                           <class name="flat"/>
                         </style>
-                        <property name="primary">True</property>
-                        <property name="child">
+                        <child>
                           <object class="GtkBox">
                             <property name="spacing">6</property>
                             <child>
@@ -36,8 +35,7 @@
                               </object>
                             </child>
                           </object>
-                        </property>
-                        <property name="menu-model">artist_sort_menu</property>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -90,20 +88,4 @@
       </object>
     </child>
   </template>
-
-  <menu id="artist_sort_menu">
-    <section>
-      <attribute name="label" translatable="yes">Sort direction</attribute>
-      <item>
-        <attribute name="label" translatable="yes">_Ascending</attribute>
-        <attribute name="action">artistview.sort-direction</attribute>
-        <attribute name="target">asc</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_Descending</attribute>
-        <attribute name="action">artistview.sort-direction</attribute>
-        <attribute name="target">desc</attribute>
-      </item>
-    </section>
-  </menu>
 </interface>

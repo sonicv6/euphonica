@@ -17,27 +17,32 @@
                       </object>
                     </child>
                     <child type="end">
-                      <object class="GtkMenuButton">
+                      <object class="GtkBox">
                         <style>
+                          <class name="linked"/>
                           <class name="flat"/>
                         </style>
-                        <property name="primary">True</property>
-                        <property name="child">
-                          <object class="GtkBox">
-                            <property name="spacing">6</property>
+                        <child>
+                          <object class="GtkButton" id="sort_dir_btn">
                             <child>
                               <object class="GtkImage" id="sort_dir">
                                 <property name="icon-name">view-sort-ascending-symbolic</property>
                               </object>
                             </child>
-                            <child>
-                              <object class="GtkLabel" id="sort_mode">
-                                <property name="label">Error</property>
-                              </object>
-                            </child>
                           </object>
-                        </property>
-                        <property name="menu-model">album_sort_menu</property>
+                        </child>
+                        <child>
+                          <object class="GtkDropDown" id="sort_mode">
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item translatable="yes">File name</item>
+                                  <item translatable="yes">Last modified</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -109,38 +114,4 @@
       </object>
     </child>
   </template>
-
-  <menu id="album_sort_menu">
-    <section>
-      <attribute name="label" translatable="yes">Sort by</attribute>
-      <item>
-        <attribute name="label" translatable="yes">_Album title</attribute>
-        <attribute name="action">albumview.sort-by</attribute>
-        <attribute name="target">album-title</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_AlbumArtist</attribute>
-        <attribute name="action">albumview.sort-by</attribute>
-        <attribute name="target">album-artist</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_Release date</attribute>
-        <attribute name="action">albumview.sort-by</attribute>
-        <attribute name="target">release-date</attribute>
-      </item>
-    </section>
-    <section>
-      <attribute name="label" translatable="yes">Sort direction</attribute>
-      <item>
-        <attribute name="label" translatable="yes">_Ascending</attribute>
-        <attribute name="action">albumview.sort-direction</attribute>
-        <attribute name="target">asc</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_Descending</attribute>
-        <attribute name="action">albumview.sort-direction</attribute>
-        <attribute name="target">desc</attribute>
-      </item>
-    </section>
-  </menu>
 </interface>

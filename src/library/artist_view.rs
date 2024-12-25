@@ -40,6 +40,8 @@ mod imp {
         #[template_child]
         pub sort_dir: TemplateChild<gtk::Image>,
         #[template_child]
+        pub sort_dir_btn: TemplateChild<gtk::Button>,
+        #[template_child]
         pub search_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub search_bar: TemplateChild<gtk::SearchBar>,
@@ -72,6 +74,7 @@ mod imp {
                 nav_view: TemplateChild::default(),
                 // Search & filter widgets
                 sort_dir: TemplateChild::default(),
+                sort_dir_btn: TemplateChild::default(),
                 // sort_mode: TemplateChild::default(),
                 search_btn: TemplateChild::default(),
                 // search_mode: TemplateChild::default(),
@@ -166,11 +169,18 @@ impl ArtistView {
         let settings = settings_manager();
         let state = settings.child("state").child("artistview");
         let library_settings = settings.child("library");
-        let actions = gio::SimpleActionGroup::new();
-        actions.add_action(
-            &state.create_action("sort-direction")
-        );
-        self.insert_action_group("artistview", Some(&actions));
+        let sort_dir_btn = self.imp().sort_dir_btn.get();
+        sort_dir_btn.connect_clicked(clone!(
+            #[weak]
+            state,
+            move |_| {
+                if state.string("sort-direction") == "asc" {
+                    let _ = state.set_string("sort-direction", "desc");
+                } else {
+                    let _ = state.set_string("sort-direction", "asc");
+                }
+            }
+        ));
         let sort_dir = self.imp().sort_dir.get();
         state
             .bind(
