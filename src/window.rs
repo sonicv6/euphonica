@@ -30,7 +30,7 @@ use glib::signal::SignalHandlerId;
 use image::{imageops::FilterType, DynamicImage};
 use libblur::{stack_blur, FastBlurChannels, ThreadingPolicy};
 use crate::{
-    application::EuphonicaApplication, client::ConnectionState, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils::{self, settings_manager}
+    application::EuphonicaApplication, client::{ClientState, ConnectionState}, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils::{self, settings_manager}
 };
 
 #[derive(Debug)]
@@ -109,6 +109,8 @@ mod imp {
         pub split_view: TemplateChild<adw::NavigationSplitView>,
         #[template_child]
         pub content: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub toast_overlay: TemplateChild<adw::ToastOverlay>,
         // Main views
         #[template_child]
         pub album_view: TemplateChild<AlbumView>,
@@ -122,7 +124,6 @@ mod imp {
         // Content view stack
         #[template_child]
         pub stack: TemplateChild<gtk::Stack>,
-
         // Sidebar
         // TODO: Replace with Libadwaita spinner when v1.6 hits stable
         #[template_child]
@@ -445,8 +446,20 @@ impl EuphonicaWindow {
             .build();
 
         let app = win.downcast_application();
+        let client_state = app.get_client().get_client_state();
         let player = app.get_player();
         win.queue_new_background();
+        client_state.connect_closure(
+            "database-updated",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                win,
+                move |_: ClientState| {
+                    this.send_simple_toast("Database updated with changes", 3);
+                }
+            )
+        );
         player.connect_notify_local(
             Some("album-art"),
             clone!(
@@ -515,6 +528,14 @@ impl EuphonicaWindow {
         win.bind_state();
         win.setup_signals();
         win
+    }
+
+    pub fn send_simple_toast(&self, title: &str, timeout: u32) {
+        let toast = adw::Toast::builder()
+            .title(title)
+            .timeout(timeout)
+            .build();
+        self.imp().toast_overlay.add_toast(toast);
     }
 
     fn update_player_bar_visibility(&self) {

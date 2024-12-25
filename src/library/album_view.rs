@@ -17,10 +17,7 @@ use super::{
     AlbumContentView
 };
 use crate::{
-    common::Album,
-    cache::Cache,
-    client::ClientState,
-    utils::{settings_manager, g_cmp_str_options, g_cmp_options, g_search_substr}
+    cache::Cache, client::{ClientState, ConnectionState}, common::Album, utils::{g_cmp_options, g_cmp_str_options, g_search_substr, settings_manager}
 };
 
 mod imp {
@@ -431,6 +428,19 @@ impl AlbumView {
     }
 
     fn setup_gridview(&self, client_state: ClientState, cache: Rc<Cache>) {
+        // Refresh upon reconnection.
+        // User-initiated refreshes will also trigger a reconnection, which will
+        // in turn trigger this.
+        client_state.connect_notify_local(Some("connection-state"), clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |state, _| {
+                if state.get_connection_state() == ConnectionState::Connected {
+                    this.clear();
+                    this.imp().library.get().unwrap().init_albums();
+                }
+            }
+        ));
         client_state.connect_closure(
             "album-basic-info-downloaded",
             false,

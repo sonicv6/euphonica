@@ -60,6 +60,10 @@ pub enum MpdMessage {
     SetSticker(String, String, String, String), // Type, URI, name, value
     LsInfo(String),  // URI
 
+    // For initialising views upon new connection
+    FetchAlbums,
+    FetchArtists(bool),
+
     // Reserved for cache controller
     // folder-level URI, key doc & paths to write the hires & thumbnail versions
     // Key doc is here so we can query fetching from remote sources with the cache controller in case MPD can't
@@ -595,6 +599,8 @@ impl MpdWrapper {
             MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             MpdMessage::SeekCur(position) => self.seek_current_song(position),
             MpdMessage::Queue => self.get_current_queue(),
+            MpdMessage::FetchAlbums => self.fetch_albums(),
+            MpdMessage::FetchArtists(use_albumartists) => self.fetch_artists(use_albumartists),
             MpdMessage::Albums => self.queue_task(BackgroundTask::FetchAlbums),
             MpdMessage::AlbumArt(folder_uri, key, path, thumbnail_path) => {
                 self.queue_task(
@@ -674,6 +680,12 @@ impl MpdWrapper {
                 Subsystem::Output => {
                     self.get_outputs();
                 }
+                Subsystem::Database => {
+                    // Database changed after updating. Perform a reconnection,
+                    // which will also trigger views to refresh their contents.
+                    self.state.emit_by_name::<()>("database-updated", &[]);
+                    let _ = self.sender.send_blocking(MpdMessage::Connect);
+                }
                 // More to come
                 _ => {}
             }
@@ -697,12 +709,18 @@ impl MpdWrapper {
     }
 
     fn init_state(&self) {
-        self.queue_task(BackgroundTask::FetchAlbums);
-        self.queue_task(BackgroundTask::FetchArtists(false));
         self.get_outputs();
         // Get queue first so we can look for current song in it later
         self.get_current_queue();
         self.get_status();
+    }
+
+    pub fn fetch_albums(&self) {
+        self.queue_task(BackgroundTask::FetchAlbums);
+    }
+
+    pub fn fetch_artists(&self, use_albumartists: bool) {
+        self.queue_task(BackgroundTask::FetchArtists(use_albumartists));
     }
 
     async fn connect(self: Rc<Self>) {

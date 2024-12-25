@@ -99,6 +99,7 @@ mod imp {
             obj.setup_gactions();
             obj.set_accels_for_action("app.quit", &["<primary>q"]);
             obj.set_accels_for_action("app.fullscreen", &["F11"]);
+            obj.set_accels_for_action("app.refresh", &["F5"]);
 
             self.library.setup(self.sender.clone(), self.cache.clone());
             self.player.setup(
@@ -178,6 +179,9 @@ impl EuphonicaApplication {
         let toggle_fullscreen_action = gio::ActionEntry::builder("fullscreen")
             .activate(move |app: &Self, _, _| app.toggle_fullscreen())
             .build();
+        let refresh_action = gio::ActionEntry::builder("refresh")
+            .activate(move |app: &Self, _, _| app.refresh())
+            .build();
         let update_db_action = gio::ActionEntry::builder("update-db")
             .activate(move |app: &Self, _, _| app.update_db())
             .build();
@@ -192,6 +196,7 @@ impl EuphonicaApplication {
             .build();
         self.add_action_entries([
             toggle_fullscreen_action,
+            refresh_action,
             update_db_action,
             quit_action,
             about_action,
@@ -212,6 +217,8 @@ impl EuphonicaApplication {
         let window = self.active_window().unwrap();
         if state {
             window.fullscreen();
+            // Send a toast with instructions on how to return to windowed mode
+            window.downcast_ref::<EuphonicaWindow>().unwrap().send_simple_toast("Press F11 to exit fullscreen", 3);
         }
         else {
             window.unfullscreen();
@@ -221,6 +228,11 @@ impl EuphonicaApplication {
     pub fn raise_window(&self) {
         let window = self.active_window().unwrap();
         window.present();
+    }
+
+    fn refresh(&self) {
+        let sender = &self.imp().sender;
+        let _ = sender.send_blocking(MpdMessage::Connect);
     }
 
     fn update_db(&self) {

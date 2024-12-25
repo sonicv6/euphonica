@@ -169,4 +169,16 @@ impl Library {
             let _ = sender.send_blocking(MpdMessage::LsInfo(uri.to_owned()));
         }
     }
+
+    pub fn init_albums(&self) {
+        if let Some(sender) = self.imp().sender.get() {
+            let _ = sender.send_blocking(MpdMessage::FetchAlbums);
+        }
+    }
+
+    pub fn init_artists(&self, use_albumartists: bool) {
+        if let Some(sender) = self.imp().sender.get() {
+            let _ = sender.send_blocking(MpdMessage::FetchArtists(use_albumartists));
+        }
+    }
 }

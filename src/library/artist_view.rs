@@ -17,14 +17,11 @@ use super::{
     ArtistContentView
 };
 use crate::{
-    common::Artist,
-    cache::Cache,
-    client::ClientState,
-    utils::{settings_manager, g_cmp_str_options, g_search_substr}
+    cache::Cache, client::{ClientState, ConnectionState}, common::Artist, utils::{g_cmp_str_options, g_search_substr, settings_manager}
 };
 
 mod imp {
-    use std::sync::OnceLock;
+    use std::{cell::OnceCell, sync::OnceLock};
 
     use glib::subclass::Signal;
 
@@ -65,7 +62,7 @@ mod imp {
         // items.
         // If search term is now shorter, only check non-matching items to see
         // if they now match.
-        pub last_search_len: Cell<usize>,
+        pub last_search_len: Cell<usize>
     }
 
     impl Default for ArtistView {
@@ -332,6 +329,21 @@ impl ArtistView {
     }
 
     fn setup_gridview(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+        // Refresh upon reconnection.
+        // User-initiated refreshes will also trigger a reconnection, which will
+        // in turn trigger this.
+        client_state.connect_notify_local(Some("connection-state"), clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[weak]
+            library,
+            move |state, _| {
+                if state.get_connection_state() == ConnectionState::Connected {
+                    this.clear();
+                    library.init_artists(false);
+                }
+            }
+        ));
         client_state.connect_closure(
             "artist-basic-info-downloaded",
             false,

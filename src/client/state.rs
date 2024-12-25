@@ -88,6 +88,8 @@ mod imp {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
             SIGNALS.get_or_init(|| {
                 vec![
+                    Signal::builder("database-updated")
+                        .build(),
                     Signal::builder("sticker-downloaded")
                         .param_types([
                             String::static_type(),         // Type
