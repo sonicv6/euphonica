@@ -37,6 +37,8 @@ mod imp {
         #[template_child]
         pub queue_pane_view: TemplateChild<adw::NavigationSplitView>,
         #[template_child]
+        pub content_stack: TemplateChild<gtk::Stack>,
+        #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
         #[template_child]
         pub queue_title: TemplateChild<adw::WindowTitle>,
@@ -96,27 +98,6 @@ mod imp {
                 .bidirectional()
                 .sync_create()
                 .build();
-
-            // // After un-collapsing, set show_pane to inactive.
-            // // This is because on collapsing, the OverlaySplitView will default to not
-            // // showing the sidebar.
-            // self.queue_pane_view.connect_collapsed_notify(clone!(
-            //     #[weak(rename_to = this)]
-            //     self,
-            //     move |pane_view: &adw::OverlaySplitView| {
-            //         if !pane_view.is_collapsed() {
-            //             this.show_pane.set_active(true);
-            //         }
-            //         else {
-            //             this.show_pane.set_active(false);
-            //         }
-            //     }
-            // ));
-
-            // self.show_pane
-            //     .bind_property("active", &self.queue_pane_view.get(), "show-sidebar")
-            //     .sync_create()
-            //     .build();
         }
     }
 
@@ -159,7 +140,21 @@ impl QueueView {
         // Enable/disable clear queue button depending on whether the queue is empty or not
         // Set selection mode
         // TODO: Allow click to jump to song
-        let sel_model = SingleSelection::new(Some(player.queue()));
+        let queue_model = player.queue();
+        let stack = self.imp().content_stack.get();
+        queue_model
+            .bind_property("n-items", &stack, "visible-child-name")
+            .transform_to(|_, val: u32| {
+                if val == 0 {
+                    Some("empty")
+                }
+                else {
+                    Some("queue")
+                }
+            })
+            .sync_create()
+            .build();
+        let sel_model = SingleSelection::new(Some(queue_model));
         self.imp().queue.set_model(Some(&sel_model));
 
         // Set up factory

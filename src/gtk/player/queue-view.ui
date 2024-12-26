@@ -64,51 +64,72 @@
                   </object>
                 </child>
                 <property name="content">
-                  <object class="GtkBox">
-                    <property name="orientation">1</property>
+                  <object class="GtkStack" id="content_stack">
                     <child>
-                      <object class="GtkCenterBox">
-                        <style>
-                          <class name="toolbar"/>
-                        </style>
-                        <property name="end-widget">
-                          <object class="GtkBox">
-                            <property name="spacing">6</property>
-                            <child>
-                              <object class="GtkToggleButton" id="consume">
-                                <property name="label" translatable="true">Consume</property>
-																<property name="tooltip-text" translatable="true">Remove songs from queue as they are played</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkButton" id="clear_queue">
-                                <property name="icon-name">list-remove-all-symbolic</property>
-                                <property name="tooltip-text" translatable="true">Clear the queue</property>
-                                <property name="sensitive">false</property>
-                                <style>
-                                  <class name="destructive-action"/>
-                                </style>
-                              </object>
-														</child>
-													</object>
+                      <object class="GtkStackPage">
+                        <property name="name">empty</property>
+                        <property name="child">
+                          <object class="AdwStatusPage">
+                            <property name="title" translatable="true">Empty Queue</property>
+                            <property name="description" translatable="true">Add songs from your library to start listening</property>
+                            <property name="icon-name">music-note-single-symbolic</property>
+                          </object>
                         </property>
                       </object>
                     </child>
                     <child>
-                      <object class="GtkScrolledWindow">
-                        <property name="hscrollbar-policy">never</property>
-                        <property name="vscrollbar-policy">automatic</property>
-                        <property name="propagate-natural-height">true</property>
-                        <property name="has-frame">false</property>
-                        <property name="vexpand">true</property>
-                        <property name="hexpand">true</property>
+                      <object class="GtkStackPage">
+                        <property name="name">queue</property>
                         <property name="child">
-                          <object class="GtkListView" id="queue">
-                            <property name="show-separators">true</property>
-                            <property name="single-click-activate">true</property>
-                            <style>
-                              <class name="no-bg" />
-                            </style>
+                          <object class="GtkBox">
+                            <property name="orientation">1</property>
+                            <child>
+                              <object class="GtkCenterBox">
+                                <style>
+                                  <class name="toolbar"/>
+                                </style>
+                                <property name="end-widget">
+                                  <object class="GtkBox">
+                                    <property name="spacing">6</property>
+                                    <child>
+                                      <object class="GtkToggleButton" id="consume">
+                                        <property name="label" translatable="true">Consume</property>
+																        <property name="tooltip-text" translatable="true">Remove songs from queue as they are played</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton" id="clear_queue">
+                                        <property name="icon-name">list-remove-all-symbolic</property>
+                                        <property name="tooltip-text" translatable="true">Clear the queue</property>
+                                        <property name="sensitive">false</property>
+                                        <style>
+                                          <class name="destructive-action"/>
+                                        </style>
+                                      </object>
+														        </child>
+													        </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkScrolledWindow">
+                                <property name="hscrollbar-policy">never</property>
+                                <property name="vscrollbar-policy">automatic</property>
+                                <property name="propagate-natural-height">true</property>
+                                <property name="has-frame">false</property>
+                                <property name="vexpand">true</property>
+                                <property name="hexpand">true</property>
+                                <property name="child">
+                                  <object class="GtkListView" id="queue">
+                                    <property name="show-separators">true</property>
+                                    <property name="single-click-activate">true</property>
+                                    <style>
+                                      <class name="no-bg" />
+                                    </style>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
                           </object>
                         </property>
                       </object>
