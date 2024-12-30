@@ -112,7 +112,7 @@ mod imp {
                 bindings: RefCell::new(Vec::new()),
                 cover_signal_id: RefCell::new(None),
                 cache: OnceCell::new(),
-                selecting_all: Cell::new(false)
+                selecting_all: Cell::new(true)  // When nothing is selected, default to select-all
             }
         }
     }
