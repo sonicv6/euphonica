@@ -23,6 +23,8 @@ const BATCH_SIZE: u32 = 4096;
 const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once (same
 // folder, same tag, etc)
 
+// Big TODO: Reduce dependency on enums & async_channels for calls that happen right on the main thread.
+// They should only be used for cross-thread communication.
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
 pub enum MpdMessage {
@@ -35,6 +37,7 @@ pub enum MpdMessage {
     Pause,
     Stop,
     Add(String, bool), // Add by URI. If true, treat URI as folder-level and add recursively.
+    AddMulti(Vec<String>), // Batch-add URIs. This will create a command list to maintain efficiency.
     PlayPos(u32), // Play song at queue position
     PlayId(u32), // Play song at queue ID
     DeleteId(u32),
@@ -582,6 +585,7 @@ impl MpdWrapper {
             MpdMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
             MpdMessage::Status => self.get_status(),
             MpdMessage::Add(uri, recursive) => self.add(uri, recursive),
+            MpdMessage::AddMulti(uris) => self.add_multi(&uris),
             MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
             MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
             MpdMessage::Random(state) => self.set_random(state),
@@ -772,6 +776,13 @@ impl MpdWrapper {
             else {
                 let _ = client.push(uri);
             }
+        }
+    }
+
+    pub fn add_multi(&self, uris: &[String]) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            let ids = client.push_multiple(uris);
+            println!("{:?}", ids);
         }
     }
 

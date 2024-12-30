@@ -83,5 +83,7 @@
 		<file preprocess="xml-stripblanks" alias="format-cd-symbolic.svg">gtk/icons/format-cd-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-hires-symbolic.svg">gtk/icons/format-hires-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-dsd-symbolic.svg">gtk/icons/format-dsd-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="edit-select-all-symbolic.svg">gtk/icons/edit-select-all-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="edit-select-none-symbolic.svg">gtk/icons/edit-select-none-symbolic.svg</file>
 	</gresource>
 </gresources>
