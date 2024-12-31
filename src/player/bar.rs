@@ -10,8 +10,7 @@ use glib::{
 use mpd::output::Output;
 
 use crate::{
-    utils::settings_manager,
-    common::{QualityGrade, Marquee}
+    cache::placeholders::ALBUMART_PLACEHOLDER, common::{Marquee, QualityGrade}, utils::settings_manager
 };
 
 use super::{
@@ -449,9 +448,7 @@ impl PlayerBar {
             self.imp().albumart.set_paintable(tex.as_ref());
         }
         else {
-            self.imp().albumart.set_resource(
-                Some("/org/euphonica/Euphonica/albumart-placeholder.png")
-            );
+            self.imp().albumart.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
         }
     }
 
