@@ -6,7 +6,8 @@ An MPD frontend with delusions of grandeur.
 ## Features
 - GTK4 Libadwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration
 - Audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums & detailed format printout
-- Browse your library by album, artist and folders, with browsing by genre and other criteria in the works
+- Browse your library by album, artist and folders with multiselection support. Browsing by genre
+and other criteria are planned
 - Sort albums by name, AlbumArtist or release date (provided you have the tags)
 - Asynchronous search for large collections
 - Configurable multi-artist tag syntax, works with anything you throw at it
@@ -69,6 +70,7 @@ Euphonica is developed on, and so far has only been tested on Arch Linux (btw).
 Flatpak & AUR releases are also planned.
 
 ## TODO
+- Playlists support
 - Password support
 - Browse by genre
 - Realtime lyrics fetching

@@ -32,7 +32,7 @@ use crate::{
 };
 
 mod imp {
-    use std::sync::OnceLock;
+    use std::{cell::Cell, sync::OnceLock};
 
     use glib::subclass::Signal;
 
@@ -70,10 +70,19 @@ mod imp {
         #[template_child]
         pub song_subview: TemplateChild<gtk::ListView>,
         pub song_list: gio::ListStore,
+        pub song_sel_model: gtk::MultiSelection,
         #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
         #[template_child]
+        pub replace_queue_text: TemplateChild<gtk::Label>,
+        #[template_child]
         pub append_queue: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub append_queue_text: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub sel_all: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub sel_none: TemplateChild<gtk::Button>,
 
         // Discography sub-view
         #[template_child]
@@ -83,7 +92,8 @@ mod imp {
         pub artist: RefCell<Option<Artist>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub avatar_signal_id: RefCell<Option<SignalHandlerId>>,
-        pub cache: OnceCell<Rc<Cache>>
+        pub cache: OnceCell<Rc<Cache>>,
+        pub selecting_all: Cell<bool>  // Enables queuing all songs from this artist efficiently
     }
 
     impl Default for ArtistContentView {
@@ -103,15 +113,21 @@ mod imp {
                 // All songs sub-view
                 song_subview: TemplateChild::default(),
                 song_list: gio::ListStore::new::<Song>(),
+                song_sel_model: gtk::MultiSelection::new(Option::<gio::ListStore>::None),
                 replace_queue: TemplateChild::default(),
                 append_queue: TemplateChild::default(),
+                replace_queue_text: TemplateChild::default(),
+                append_queue_text: TemplateChild::default(),
+                sel_all: TemplateChild::default(),
+                sel_none: TemplateChild::default(),
                 // Discography sub-view
                 album_subview: TemplateChild::default(),
                 album_list: gio::ListStore::new::<Album>(),
                 artist: RefCell::new(None),
                 bindings: RefCell::new(Vec::new()),
                 avatar_signal_id: RefCell::new(None),
-                cache: OnceCell::new()
+                cache: OnceCell::new(),
+                selecting_all: Cell::new(true)  // When nothing is selected, default to select-all
             }
         }
     }
@@ -144,6 +160,63 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+
+            // Set up song subview
+            self.song_sel_model.set_model(Some(&self.song_list.clone()));
+            self.song_subview.set_model(Some(&self.song_sel_model));
+
+            // Change button labels depending on selection state
+            self.song_sel_model.connect_selection_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |sel_model, _, _| {
+                    // TODO: this can be slow, might consider redesigning
+                    let n_sel = sel_model.selection().size();
+                    if n_sel == 0 || (n_sel as u32) == sel_model.model().unwrap().n_items() {
+                        this.selecting_all.replace(true);
+                        this.replace_queue_text.set_label("Play all");
+                        this.append_queue_text.set_label("Queue all");
+                    }
+                    else {
+                        // TODO: l10n
+                        this.selecting_all.replace(false);
+                        this.replace_queue_text.set_label(format!("Play {}", n_sel).as_str());
+                        this.append_queue_text.set_label(format!("Queue {}", n_sel).as_str());
+                    }
+                }
+            ));
+
+            let song_sel_model = self.song_sel_model.clone();
+            self.sel_all.connect_clicked(clone!(
+                #[weak]
+                song_sel_model,
+                move |_| {
+                    song_sel_model.select_all();
+                }
+            ));
+            self.sel_none.connect_clicked(clone!(
+                #[weak]
+                song_sel_model,
+                move |_| {
+                    song_sel_model.unselect_all();
+                }
+            ));
+
+            // Set up album subview
+            let album_sel_model = gtk::SingleSelection::new(Some(self.album_list.clone()));
+            self.album_subview.set_model(Some(&album_sel_model));
+            self.album_subview.connect_activate(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |view, position| {
+                    let model = view.model().expect("The model has to exist.");
+                    let album = model
+                        .item(position)
+                        .and_downcast::<Album>()
+                        .expect("The item has to be a `common::Album`.");
+
+                    this.obj().emit_by_name::<()>("album-clicked", &[&album.to_value()]);
+                }));
         }
 
         fn signals() -> &'static [Signal] {
@@ -266,6 +339,66 @@ impl ArtistContentView {
     }
 
     fn setup_song_subview(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
+        // Hook up buttons
+        let replace_queue_btn = self.imp().replace_queue.get();
+        replace_queue_btn.connect_clicked(
+            clone!(
+                #[strong(rename_to = this)]
+                self,
+                #[weak]
+                library,
+                move |_| {
+                    if let Some(artist) = this.imp().artist.borrow().as_ref() {
+                        if this.imp().selecting_all.get() {
+                            library.queue_artist(artist.clone(), false, true, true);
+                        }
+                        else {
+                            let store = &this.imp().song_list;
+                            // Get list of selected songs
+                            let sel = &this.imp().song_sel_model.selection();
+                            let mut songs: Vec<Song> = Vec::with_capacity(sel.size() as usize);
+                            let (iter, first_idx) = gtk::BitsetIter::init_first(sel).unwrap();
+                            songs.push(store.item(first_idx).and_downcast::<Song>().unwrap());
+                            iter
+                                .for_each(
+                                    |idx| songs.push(store.item(idx).and_downcast::<Song>().unwrap())
+                                );
+                            library.queue_songs(&songs, true, true);
+                        }
+                    }
+                }
+            )
+        );
+        let append_queue_btn = self.imp().append_queue.get();
+        append_queue_btn.connect_clicked(
+            clone!(
+                #[strong(rename_to = this)]
+                self,
+                #[weak]
+                library,
+                move |_| {
+                    if let Some(artist) = this.imp().artist.borrow().as_ref() {
+                        if this.imp().selecting_all.get() {
+                            library.queue_artist(artist.clone(), false, false, false);
+                        }
+                        else {
+                            let store = &this.imp().song_list;
+                            // Get list of selected songs
+                            let sel = &this.imp().song_sel_model.selection();
+                            let mut songs: Vec<Song> = Vec::with_capacity(sel.size() as usize);
+                            let (iter, first_idx) = gtk::BitsetIter::init_first(sel).unwrap();
+                            songs.push(store.item(first_idx).and_downcast::<Song>().unwrap());
+                            iter
+                                .for_each(
+                                    |idx| songs.push(store.item(idx).and_downcast::<Song>().unwrap())
+                                );
+                            library.queue_songs(&songs, false, false);
+                        }
+                    }
+                }
+            )
+        );
+
         client_state.connect_closure(
             "artist-songs-downloaded",
             false,
@@ -283,36 +416,6 @@ impl ArtistContentView {
                 }
             )
         );
-
-        // TODO
-        // let replace_queue_btn = self.imp().replace_queue.get();
-        // replace_queue_btn.connect_clicked(
-        //     clone!(
-        //         #[strong(rename_to = this)]
-        //         self,
-        //         #[weak]
-        //         library,
-        //         move |_| {
-        //             if let Some(artist) = this.imp().artist.borrow().as_ref() {
-        //                 library.queue_songs(artist.clone(), true, true);
-        //             }
-        //         }
-        //     )
-        // );
-        // let append_queue_btn = self.imp().append_queue.get();
-        // append_queue_btn.connect_clicked(
-        //     clone!(
-        //         #[strong(rename_to = this)]
-        //         self,
-        //         #[weak]
-        //         library,
-        //         move |_| {
-        //             if let Some(artist) = this.imp().artist.borrow().as_ref() {
-        //                 library.queue_artist(artist.clone(), false, false);
-        //             }
-        //         }
-        //     )
-        // );
 
         // Set up factory
         let factory = SignalListItemFactory::new();
@@ -358,7 +461,6 @@ impl ArtistContentView {
             }
         ));
 
-
         // When row goes out of sight, unbind from item to allow reuse with another.
         factory.connect_unbind(move |_, list_item| {
             // Get `ArtistSongRow` from `ListItem` (the UI widget)
@@ -373,11 +475,9 @@ impl ArtistContentView {
 
         // Set the factory of the list view
         self.imp().song_subview.set_factory(Some(&factory));
-        let sel_model = gtk::NoSelection::new(Some(self.imp().song_list.clone()));
-        self.imp().song_subview.set_model(Some(&sel_model));
     }
 
-    fn setup_album_subview(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
+    fn setup_album_subview(&self, cache: Rc<Cache>, client_state: ClientState) {
         // TODO: handle click (switch to album tab & push album content page)
         // Unlike songs, we receive albums one by one.
         client_state.connect_closure(
@@ -445,57 +545,13 @@ impl ArtistContentView {
 
         // Set the factory of the list view
         self.imp().album_subview.set_factory(Some(&factory));
-        let sel_model = gtk::SingleSelection::new(Some(self.imp().album_list.clone()));
-        self.imp().album_subview.set_model(Some(&sel_model));
-        self.imp().album_subview.connect_activate(clone!(
-            #[weak(rename_to = this)]
-            self,
-            move |view, position| {
-            let model = view.model().expect("The model has to exist.");
-            let album = model
-                .item(position)
-                .and_downcast::<Album>()
-                .expect("The item has to be a `common::Album`.");
-
-            this.emit_by_name::<()>("album-clicked", &[&album.to_value()]);
-        }));
-
-        // Hook up buttons
-        let replace_queue_btn = self.imp().replace_queue.get();
-        replace_queue_btn.connect_clicked(
-            clone!(
-                #[strong(rename_to = this)]
-                self,
-                #[weak]
-                library,
-                move |_| {
-                    if let Some(artist) = this.imp().artist.borrow().as_ref() {
-                        library.queue_artist(artist.clone(), false, true, true);
-                    }
-                }
-            )
-        );
-        let append_queue_btn = self.imp().append_queue.get();
-        append_queue_btn.connect_clicked(
-            clone!(
-                #[strong(rename_to = this)]
-                self,
-                #[weak]
-                library,
-                move |_| {
-                    if let Some(artist) = this.imp().artist.borrow().as_ref() {
-                        library.queue_artist(artist.clone(), false, false, false);
-                    }
-                }
-            )
-        );
     }
 
     pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
         let _ = self.imp().cache.set(cache.clone());
         self.setup_info_box(cache.clone());
-        self.setup_song_subview(library.clone(), cache.clone(), client_state.clone());
-        self.setup_album_subview(library, cache, client_state);
+        self.setup_song_subview(library, cache.clone(), client_state.clone());
+        self.setup_album_subview(cache, client_state);
     }
 
     /// Returns true if an avatar was successfully retrieved.
