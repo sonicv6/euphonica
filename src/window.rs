@@ -73,6 +73,7 @@ fn run_blur(di: &DynamicImage, config: &BlurConfig) -> gdk::MemoryTexture {
 pub enum BlurMessage {
     New(PathBuf, BlurConfig), // Load new image at FULL PATH & blur with given configuration. Will fade.
     Update(BlurConfig), // Re-blur current image but do not fade.
+    Clear, // Clears last-blurred cache.
     Result(gdk::MemoryTexture, bool), // GPU texture and whether to fade to this one.
     Stop
 }
@@ -310,6 +311,10 @@ mod imp {
                                     ));
                                 }
                             }
+                        }
+                        BlurMessage::Clear => {
+                            curr_data = None;
+                            curr_path = None;
                         }
                         BlurMessage::Stop => {
                             break 'outer;
@@ -573,21 +578,31 @@ impl EuphonicaWindow {
     /// minimise disk read time.
     fn queue_new_background(&self) {
         if let Some(player) = self.imp().player.get() {
-            if let (Some(path), Some(sender)) = (
-                player.current_song_album_art_path(true),
-                self.imp().sender_to_bg.get()
-            ) {
-                let settings = settings_manager().child("player");
-                let config = BlurConfig {
-                    width: self.width() as u32,
-                    height: self.height() as u32,
-                    radius: settings.uint("bg-blur-radius"),
-                    fade: true  // new image, must fade
-                };
-                let _ = sender.send_blocking(BlurMessage::New(path, config));
+            if let Some(sender) =  self.imp().sender_to_bg.get() {
+                if let Some(path) = player.current_song_album_art_path(true) {
+                    println!("Got path: {:?}", &path);
+                    if path.exists() {
+                        println!("Path exists!");
+                        let settings = settings_manager().child("player");
+                        let config = BlurConfig {
+                            width: self.width() as u32,
+                            height: self.height() as u32,
+                            radius: settings.uint("bg-blur-radius"),
+                            fade: true  // new image, must fade
+                        };
+                        let _ = sender.send_blocking(BlurMessage::New(path, config));
+                    }
+                    else {
+                        let _ = sender.send_blocking(BlurMessage::Clear);
+                        self.imp().push_tex(None, true);
+                    }
+                }
+                else {
+                    let _ = sender.send_blocking(BlurMessage::Clear);
+                    self.imp().push_tex(None, true);
+                }
             }
             else {
-                // Clear background
                 self.imp().push_tex(None, true);
             }
         }

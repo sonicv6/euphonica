@@ -36,7 +36,7 @@
 		<file preprocess="xml-stripblanks">gtk/preferences/player.ui</file>
 
 		<file>gtk/style.css</file>
-		<file alias="albumart-placeholder.png">gtk/textures/albumart-placeholder.png</file>
+		<file preprocess="xml-stripblanks" alias="albumart-placeholder.svg">gtk/textures/albumart-placeholder.svg</file>
 	</gresource>
 	<gresource prefix="/org/euphonica/Euphonica/icons/scalable/actions/">
 		<file preprocess="xml-stripblanks" alias="settings-symbolic.svg">gtk/icons/settings-symbolic.svg</file>
@@ -83,5 +83,7 @@
 		<file preprocess="xml-stripblanks" alias="format-cd-symbolic.svg">gtk/icons/format-cd-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-hires-symbolic.svg">gtk/icons/format-hires-symbolic.svg</file>
 		<file preprocess="xml-stripblanks" alias="format-dsd-symbolic.svg">gtk/icons/format-dsd-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="edit-select-all-symbolic.svg">gtk/icons/edit-select-all-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="edit-select-none-symbolic.svg">gtk/icons/edit-select-none-symbolic.svg</file>
 	</gresource>
 </gresources>

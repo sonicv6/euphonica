@@ -5,12 +5,7 @@ use std::{
 use time::{Date, format_description};
 use adw::subclass::prelude::*;
 use gtk::{
-    prelude::*,
-    gio,
-    glib,
-    CompositeTemplate,
-    SignalListItemFactory,
-    ListItem,
+    gio, glib, prelude::*, BitsetIter, CompositeTemplate, ListItem, SignalListItemFactory
 };
 use glib::{
     clone,
@@ -30,6 +25,8 @@ use crate::{
 };
 
 mod imp {
+    use std::cell::Cell;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
@@ -67,14 +64,24 @@ mod imp {
         #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
         #[template_child]
+        pub replace_queue_text: TemplateChild<gtk::Label>,
+        #[template_child]
         pub append_queue: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub append_queue_text: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub sel_all: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub sel_none: TemplateChild<gtk::Button>,
 
         pub song_list: gio::ListStore,
+        pub sel_model: gtk::MultiSelection,
 
         pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
         pub cache: OnceCell<Rc<Cache>>,
+        pub selecting_all: Cell<bool>  // Enables queuing the entire album efficiently
     }
 
     impl Default for AlbumContentView {
@@ -94,12 +101,18 @@ mod imp {
                 runtime: TemplateChild::default(),
                 content: TemplateChild::default(),
                 song_list: gio::ListStore::new::<Song>(),
+                sel_model: gtk::MultiSelection::new(Option::<gio::ListStore>::None),
                 replace_queue: TemplateChild::default(),
                 append_queue: TemplateChild::default(),
+                replace_queue_text: TemplateChild::default(),
+                append_queue_text: TemplateChild::default(),
+                sel_all: TemplateChild::default(),
+                sel_none: TemplateChild::default(),
                 album: RefCell::new(None),
                 bindings: RefCell::new(Vec::new()),
                 cover_signal_id: RefCell::new(None),
-                cache: OnceCell::new()
+                cache: OnceCell::new(),
+                selecting_all: Cell::new(true)  // When nothing is selected, default to select-all
             }
         }
     }
@@ -132,6 +145,46 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+
+            self.sel_model.set_model(Some(&self.song_list.clone()));
+            self.content.set_model(Some(&self.sel_model));
+
+            // Change button labels depending on selection state
+            self.sel_model.connect_selection_changed(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |sel_model, _, _| {
+                    // TODO: this can be slow, might consider redesigning
+                    let n_sel = sel_model.selection().size();
+                    if n_sel == 0 || (n_sel as u32) == sel_model.model().unwrap().n_items() {
+                        this.selecting_all.replace(true);
+                        this.replace_queue_text.set_label("Play all");
+                        this.append_queue_text.set_label("Queue all");
+                    }
+                    else {
+                        // TODO: l10n
+                        this.selecting_all.replace(false);
+                        this.replace_queue_text.set_label(format!("Play {}", n_sel).as_str());
+                        this.append_queue_text.set_label(format!("Queue {}", n_sel).as_str());
+                    }
+                }
+            ));
+
+            let sel_model = self.sel_model.clone();
+            self.sel_all.connect_clicked(clone!(
+                #[weak]
+                sel_model,
+                move |_| {
+                    sel_model.select_all();
+                }
+            ));
+            self.sel_none.connect_clicked(clone!(
+                #[weak]
+                sel_model,
+                move |_| {
+                    sel_model.unselect_all();
+                }
+            ));
         }
     }
 
@@ -267,7 +320,22 @@ impl AlbumContentView {
                 library,
                 move |_| {
                     if let Some(album) = this.imp().album.borrow().as_ref() {
-                        library.queue_album(album.clone(), true, true);
+                        if this.imp().selecting_all.get() {
+                            library.queue_album(album.clone(), true, true);
+                        }
+                        else {
+                            let store = &this.imp().song_list;
+                            // Get list of selected songs
+                            let sel = &this.imp().sel_model.selection();
+                            let mut songs: Vec<Song> = Vec::with_capacity(sel.size() as usize);
+                            let (iter, first_idx) = BitsetIter::init_first(sel).unwrap();
+                            songs.push(store.item(first_idx).and_downcast::<Song>().unwrap());
+                            iter
+                                .for_each(
+                                    |idx| songs.push(store.item(idx).and_downcast::<Song>().unwrap())
+                                );
+                            library.queue_songs(&songs, true, true);
+                        }
                     }
                 }
             )
@@ -281,7 +349,22 @@ impl AlbumContentView {
                 library,
                 move |_| {
                     if let Some(album) = this.imp().album.borrow().as_ref() {
-                        library.queue_album(album.clone(), false, false);
+                        if this.imp().selecting_all.get() {
+                            library.queue_album(album.clone(), false, false);
+                        }
+                        else {
+                            let store = &this.imp().song_list;
+                            // Get list of selected songs
+                            let sel = &this.imp().sel_model.selection();
+                            let mut songs: Vec<Song> = Vec::with_capacity(sel.size() as usize);
+                            let (iter, first_idx) = BitsetIter::init_first(sel).unwrap();
+                            songs.push(store.item(first_idx).and_downcast::<Song>().unwrap());
+                            iter
+                                .for_each(
+                                    |idx| songs.push(store.item(idx).and_downcast::<Song>().unwrap())
+                                );
+                            library.queue_songs(&songs, false, false);
+                        }
                     }
                 }
             )
@@ -412,10 +495,6 @@ impl AlbumContentView {
         let info = album.get_info();
         println!("[AlbumContentView] Updating cover");
         self.update_cover(info);
-
-        // Save reference to album object
-        let sel_model = gtk::NoSelection::new(Some(self.imp().song_list.clone()));
-        self.imp().content.set_model(Some(&sel_model));
         self.imp().album.borrow_mut().replace(album);
     }
 

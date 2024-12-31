@@ -7,11 +7,9 @@ use std::{
 };
 use async_channel::Sender;
 use crate::{
-    client::MpdMessage,
-    cache::Cache,
-    common::{
+    cache::Cache, client::MpdMessage, common::{
         Album,
-        Artist
+        Artist, Song
     }
 };
 use gtk::{
@@ -98,6 +96,23 @@ impl Library {
         }
         if let Some(sender) = self.imp().sender.get() {
             let _ = sender.send_blocking(MpdMessage::AlbumContent(album.get_title().to_owned()));
+        }
+    }
+
+    /// Queue specific songs
+    pub fn queue_songs(&self, songs: &[Song], replace: bool, play: bool) {
+        if let Some(sender) = self.imp().sender.get() {
+            if replace {
+                let _ = sender.send_blocking(MpdMessage::Clear);
+            }
+            let _ = sender.send_blocking(
+                MpdMessage::AddMulti(
+                    songs.iter().map(|s| s.get_uri().to_owned()).collect()
+                )
+            );
+            if replace && play {
+                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
+            }
         }
     }
 
