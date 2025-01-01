@@ -1,4 +1,4 @@
-use async_channel::Sender;
+use std::rc::Rc;
 
 use adw::subclass::prelude::*;
 use adw::prelude::*;
@@ -10,7 +10,7 @@ use gtk::{
 use glib::clone;
 
 use crate::{
-    client::{MpdMessage, ClientState, ConnectionState},
+    client::{ClientState, ConnectionState, MpdWrapper},
     utils
 };
 
@@ -93,8 +93,9 @@ impl ClientPreferences {
         }
     }
 
-    pub fn setup(&self, sender: Sender<MpdMessage>, client_state: ClientState) {
+    pub fn setup(&self, client: Rc<MpdWrapper>) {
         let imp = self.imp();
+        let client_state = client.clone().get_client_state();
         // Populate with current gsettings values
         let settings = utils::settings_manager();
         // These should only be saved when the Apply button is clicked.
@@ -141,12 +142,12 @@ impl ClientPreferences {
             self,
             #[strong]
             conn_settings,
-            #[strong]
-            sender,
+            #[weak]
+            client,
             move |_| {
                 let _ = conn_settings.set_string("mpd-host", &this.imp().mpd_host.text());
                 let _ = conn_settings.set_uint("mpd-port", this.imp().mpd_port.text().parse::<u32>().unwrap());
-                let _ = sender.send_blocking(MpdMessage::Connect);
+                let _ = client.queue_connect();
             }
         ));
         let mpd_download_album_art = imp.mpd_download_album_art.get();

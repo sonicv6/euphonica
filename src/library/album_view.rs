@@ -564,7 +564,6 @@ impl AlbumView {
                     .item(position)
                     .and_downcast::<Album>()
                     .expect("The item has to be a `common::Album`.");
-                println!("Clicked on {:?}", &album);
                 this.on_album_clicked(&album);
             })
         );

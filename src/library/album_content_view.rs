@@ -437,7 +437,6 @@ impl AlbumContentView {
     }
 
     pub fn bind(&self, album: Album) {
-        println!("Binding to album: {:?}", &album);
         let title_label = self.imp().title.get();
         let artist_label = self.imp().artist.get();
         let release_date_label = self.imp().release_date.get();
@@ -457,7 +456,6 @@ impl AlbumContentView {
         // Save binding
         bindings.push(artist_binding);
 
-        println!("[AlbumContentView] Updating meta");
         self.update_meta(&album);
         let release_date_binding = album
             .bind_property("release_date", &release_date_label, "label")
@@ -493,13 +491,11 @@ impl AlbumContentView {
         bindings.push(release_date_viz_binding);
 
         let info = album.get_info();
-        println!("[AlbumContentView] Updating cover");
         self.update_cover(info);
         self.imp().album.borrow_mut().replace(album);
     }
 
     pub fn unbind(&self) {
-        println!("Album content page hidden. Unbinding...");
         for binding in self.imp().bindings.borrow_mut().drain(..) {
             binding.unbind();
         }

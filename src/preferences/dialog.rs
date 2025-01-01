@@ -9,7 +9,7 @@ use gtk::{
     CompositeTemplate
 };
 
-use crate::{cache::Cache, client::{ClientState, MpdMessage}};
+use crate::{cache::Cache, client::MpdWrapper};
 
 use super::{
     ClientPreferences,
@@ -74,10 +74,10 @@ impl Default for Preferences {
 }
 
 impl Preferences {
-    pub fn new(sender: Sender<MpdMessage>, client_state: ClientState, cache: Rc<Cache>) -> Self {
+    pub fn new(client: Rc<MpdWrapper>, cache: Rc<Cache>) -> Self {
         let res = Self::default();
 
-        res.imp().client_tab.get().setup(sender, client_state);
+        res.imp().client_tab.get().setup(client);
         res.imp().library_tab.get().setup();
         res.imp().player_tab.get().setup();
         res.imp().integrations_tab.get().setup(cache);

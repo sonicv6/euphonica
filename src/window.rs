@@ -30,7 +30,13 @@ use glib::signal::SignalHandlerId;
 use image::{imageops::FilterType, DynamicImage};
 use libblur::{stack_blur, FastBlurChannels, ThreadingPolicy};
 use crate::{
-    application::EuphonicaApplication, client::{ClientState, ConnectionState}, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils::{self, settings_manager}
+    application::EuphonicaApplication,
+    client::{ClientState, ConnectionState},
+    common::Album,
+    library::{AlbumView, ArtistContentView, ArtistView},
+    player::{PlayerBar, QueueView},
+    sidebar::Sidebar,
+    utils::{self, settings_manager}
 };
 
 #[derive(Debug)]
@@ -580,9 +586,7 @@ impl EuphonicaWindow {
         if let Some(player) = self.imp().player.get() {
             if let Some(sender) =  self.imp().sender_to_bg.get() {
                 if let Some(path) = player.current_song_album_art_path(true) {
-                    println!("Got path: {:?}", &path);
                     if path.exists() {
-                        println!("Path exists!");
                         let settings = settings_manager().child("player");
                         let config = BlurConfig {
                             width: self.width() as u32,

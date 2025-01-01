@@ -25,14 +25,13 @@ use std::{
     fs::create_dir_all,
     path::PathBuf
 };
-use async_channel::Sender;
 
 use crate::{
+    cache::Cache,
+    client::{BackgroundTask, MpdWrapper},
+    config::{APPLICATION_USER_AGENT, VERSION},
     library::Library,
     player::Player,
-    client::{MpdWrapper, MpdMessage},
-    cache::Cache,
-    config::{VERSION, APPLICATION_USER_AGENT},
     preferences::Preferences,
     EuphonicaWindow
 };
@@ -48,7 +47,6 @@ mod imp {
         pub library: Library,
         pub cache: Rc<Cache>,
         // pub library: Rc<LibraryController>, // TODO
-    	pub sender: Sender<MpdMessage>, // To send to client wrapper
     	pub client: Rc<MpdWrapper>,
     	pub cache_path: PathBuf // Just clone this to construct more detailed paths
     }
@@ -78,14 +76,13 @@ mod imp {
             // These two are GObjects (already refcounted by GLib)
             let player = Player::default();
             let library = Library::default();
-            cache.set_mpd_sender(sender.clone());
+            cache.set_mpd_client(client.clone());
 
             Self {
                 player,
                 library,
                 client,
                 cache,
-                sender,
                 cache_path
             }
         }
@@ -101,11 +98,10 @@ mod imp {
             obj.set_accels_for_action("app.fullscreen", &["F11"]);
             obj.set_accels_for_action("app.refresh", &["F5"]);
 
-            self.library.setup(self.sender.clone(), self.cache.clone());
+            self.library.setup(self.client.clone(), self.cache.clone());
             self.player.setup(
                 self.obj().clone(),
-                self.sender.clone(),
-                self.client.clone().get_client_state(),
+                self.client.clone(),
                 self.cache.clone()
             );
         }
@@ -129,9 +125,10 @@ mod imp {
             // Ask the window manager/compositor to present the window
             window.present();
 
+            // Piggyback on the refresh method to trigger a connect attempt.
             // Start attempting to connect to the daemon once the window has been displayed.
             // This avoids delaying the presentation until the connection process concludes.
-            let _ = application.imp().sender.send_blocking(MpdMessage::Connect);
+            application.refresh();
         }
     }
 
@@ -169,10 +166,6 @@ impl EuphonicaApplication {
 
     pub fn get_client(&self) -> Rc<MpdWrapper> {
         self.imp().client.clone()
-    }
-
-    pub fn get_sender(&self) -> Sender<MpdMessage> {
-        self.imp().sender.clone()
     }
 
     fn setup_gactions(&self) {
@@ -231,13 +224,11 @@ impl EuphonicaApplication {
     }
 
     fn refresh(&self) {
-        let sender = &self.imp().sender;
-        let _ = sender.send_blocking(MpdMessage::Connect);
+        self.imp().client.clone().queue_connect();
     }
 
     fn update_db(&self) {
-        let sender = &self.imp().sender;
-        let _ = sender.send_blocking(MpdMessage::Update);
+        self.imp().client.clone().queue_background(BackgroundTask::Update);
     }
 
     fn show_about(&self) {
@@ -261,8 +252,7 @@ impl EuphonicaApplication {
     fn show_preferences(&self) {
         let window = self.active_window().unwrap();
         let prefs = Preferences::new(
-            self.imp().sender.clone(),
-            self.imp().client.clone().get_client_state(),
+            self.imp().client.clone(),
             self.imp().cache.clone()
         );
         prefs.present(Some(&window));

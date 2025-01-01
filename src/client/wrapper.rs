@@ -27,7 +27,7 @@ const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once
 // They should only be used for cross-thread communication.
 // One for each command in mpd's protocol plus a few special ones such
 // as Connect and Toggle.
-pub enum MpdMessage {
+pub enum AsyncClientMessage {
     Connect, // Host and port are always read from gsettings
     Update, // Update DB
     Output(u32, bool), // Set output state. Specify target ID and state to set to.
@@ -139,9 +139,9 @@ pub enum BackgroundTask {
 
 mod background {
     use super::*;
-    pub fn update_mpd_database(client: &mut mpd::Client, sender_to_fg: &Sender<MpdMessage>) {
+    pub fn update_mpd_database(client: &mut mpd::Client, sender_to_fg: &Sender<AsyncClientMessage>) {
         if let Ok(_) = client.update() {
-            let _ = sender_to_fg.send_blocking(MpdMessage::DBUpdated);
+            let _ = sender_to_fg.send_blocking(AsyncClientMessage::DBUpdated);
         }
     }
 
@@ -182,7 +182,7 @@ mod background {
         query: &Query,
         respond: F
     ) where
-        F: Fn(AlbumInfo) -> Result<(), SendError<MpdMessage>>
+        F: Fn(AlbumInfo) -> Result<(), SendError<AsyncClientMessage>>
     {
         // TODO: batched windowed retrieval
         // Get list of unique album tags
@@ -211,7 +211,7 @@ mod background {
         query: &Query,
         respond: F
     ) where
-        F: Fn(Vec<SongInfo>) -> Result<(), SendError<MpdMessage>>
+        F: Fn(Vec<SongInfo>) -> Result<(), SendError<AsyncClientMessage>>
     {
         // TODO: batched windowed retrieval
         let mut curr_len: u32 = 0;
@@ -237,14 +237,14 @@ mod background {
 
     pub fn fetch_all_albums(
         client: &mut mpd::Client,
-        sender_to_fg: &Sender<MpdMessage>
+        sender_to_fg: &Sender<AsyncClientMessage>
     ) {
         fetch_albums_by_query(
             client,
             &Query::new(),
             |info| {
                 sender_to_fg.send_blocking(
-                    MpdMessage::AlbumBasicInfoDownloaded(
+                    AsyncClientMessage::AlbumBasicInfoDownloaded(
                         info
                     )
                 )
@@ -254,7 +254,7 @@ mod background {
 
     pub fn fetch_albums_of_artist(
         client: &mut mpd::Client,
-        sender_to_fg: &Sender<MpdMessage>,
+        sender_to_fg: &Sender<AsyncClientMessage>,
         artist_name: String,
     ) {
         fetch_albums_by_query(
@@ -266,7 +266,7 @@ mod background {
             ),
             |info| {
                 sender_to_fg.send_blocking(
-                    MpdMessage::ArtistAlbumBasicInfoDownloaded(
+                    AsyncClientMessage::ArtistAlbumBasicInfoDownloaded(
                         artist_name.clone(),
                         info
                     )
@@ -277,7 +277,7 @@ mod background {
 
     pub fn fetch_album_songs(
         client: &mut mpd::Client,
-        sender_to_fg: &Sender<MpdMessage>,
+        sender_to_fg: &Sender<AsyncClientMessage>,
         tag: String
     ) {
         fetch_songs_by_query(
@@ -285,7 +285,7 @@ mod background {
             Query::new().and(Term::Tag(Cow::Borrowed("album")), tag.clone()),
             |songs| {
                 sender_to_fg.send_blocking(
-                    MpdMessage::AlbumSongInfoDownloaded(
+                    AsyncClientMessage::AlbumSongInfoDownloaded(
                         tag.clone(),
                         songs
                     )
@@ -296,7 +296,7 @@ mod background {
 
     pub fn fetch_artists(
         client: &mut mpd::Client,
-        sender_to_fg: &Sender<MpdMessage>,
+        sender_to_fg: &Sender<AsyncClientMessage>,
         use_album_artist: bool
     ) {
         // Fetching artists is a bit more involved: artist tags usually contain multiple artists.
@@ -325,7 +325,7 @@ mod background {
                             if already_parsed.insert(artist.name.clone()) {
                                 // println!("Never seen {artist:?} before, inserting...");
                                 let _ = sender_to_fg.send_blocking(
-                                    MpdMessage::ArtistBasicInfoDownloaded(
+                                    AsyncClientMessage::ArtistBasicInfoDownloaded(
                                         artist
                                     )
                                 );
@@ -339,7 +339,7 @@ mod background {
 
     pub fn fetch_songs_of_artist(
         client: &mut mpd::Client,
-        sender_to_fg: &Sender<MpdMessage>,
+        sender_to_fg: &Sender<AsyncClientMessage>,
         name: String
     ) {
         fetch_songs_by_query(
@@ -352,7 +352,7 @@ mod background {
                 ),
             |songs| {
                 sender_to_fg.send_blocking(
-                    MpdMessage::ArtistSongInfoDownloaded(
+                    AsyncClientMessage::ArtistSongInfoDownloaded(
                         name.clone(),
                         songs
                     )
@@ -363,12 +363,12 @@ mod background {
 
     pub fn fetch_folder_contents(
         client: &mut mpd::Client,
-        sender_to_fg: &Sender<MpdMessage>,
+        sender_to_fg: &Sender<AsyncClientMessage>,
         path: String
     ) {
         if let Ok(contents) = client.lsinfo(&path) {
             println!("Downloaded {} folder entries", contents.len());
-            let _ = sender_to_fg.send_blocking(MpdMessage::FolderContentsDownloaded(
+            let _ = sender_to_fg.send_blocking(AsyncClientMessage::FolderContentsDownloaded(
                 path,
                 contents
             ));
@@ -379,7 +379,7 @@ mod background {
 #[derive(Debug)]
 pub struct MpdWrapper {
     // Corresponding sender, for cloning into child thread.
-    sender: Sender<MpdMessage>,
+    main_sender: Sender<AsyncClientMessage>,
     // The main client living on the main thread. Every single method of
     // mpd::Client is mutating so we'll just rely on a RefCell for now.
     main_client: RefCell<Option<Client>>,
@@ -401,11 +401,11 @@ impl MpdWrapper {
         let (
             sender,
             receiver
-        ): (Sender<MpdMessage>, Receiver<MpdMessage>) = async_channel::unbounded();
+        ): (Sender<AsyncClientMessage>, Receiver<AsyncClientMessage>) = async_channel::unbounded();
         let ch_name = Uuid::new_v4().simple().to_string();
         println!("Channel name: {}", &ch_name);
         let wrapper = Rc::new(Self {
-            sender,
+            main_sender: sender,
             state: ClientState::default(),
             main_client: RefCell::new(None),  // Must be initialised later
             bg_handle: RefCell::new(None),  // Will be spawned later
@@ -420,16 +420,16 @@ impl MpdWrapper {
         wrapper
     }
 
-    pub fn get_sender(self: Rc<Self>) -> Sender<MpdMessage> {
-        self.sender.clone()
-    }
-
     pub fn get_client_state(self: Rc<Self>) -> ClientState {
         self.state.clone()
     }
 
+    pub fn get_sender(self: Rc<Self>) -> Sender<AsyncClientMessage> {
+        self.main_sender.clone()
+    }
+
     fn start_bg_thread(self: Rc<Self>, addr: &str) {
-        let sender_to_fg = self.sender.clone();
+        let sender_to_fg = self.main_sender.clone();
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
         let meta_sender = self.meta_sender.clone();
         self.bg_sender.replace(Some(bg_sender));
@@ -446,7 +446,7 @@ impl MpdWrapper {
                         if prev_size == 0 {
                             // We have tasks now, set state to busy
                             prev_size = bg_receiver.len();
-                            let _ = sender_to_fg.send_blocking(MpdMessage::Busy(true));
+                            let _ = sender_to_fg.send_blocking(AsyncClientMessage::Busy(true));
                         }
                         // TODO: Take one task for each loop
                         if let Ok(task) = bg_receiver.recv_blocking() {
@@ -498,7 +498,7 @@ impl MpdWrapper {
                         if prev_size > 0 {
                             // No more tasks
                             prev_size = 0;
-                            let _ = sender_to_fg.send_blocking(MpdMessage::Busy(false));
+                            let _ = sender_to_fg.send_blocking(AsyncClientMessage::Busy(false));
                         }
                         // If not, go into idle mode
                         if let Ok(changes) = client.wait(&[]) {
@@ -516,7 +516,7 @@ impl MpdWrapper {
                                     }
                                 }
                             }
-                            let _ = sender_to_fg.send_blocking(MpdMessage::Idle(changes));
+                            let _ = sender_to_fg.send_blocking(AsyncClientMessage::Idle(changes));
                         }
                     }
                 }
@@ -530,7 +530,7 @@ impl MpdWrapper {
         }
     }
 
-    fn setup_channel(self: Rc<Self>, receiver: Receiver<MpdMessage>) {
+    fn setup_channel(self: Rc<Self>, receiver: Receiver<AsyncClientMessage>) {
         // Set up a listener to the receiver we got from Application.
         // This will be the loop that handles user interaction and idle updates.
         glib::MainContext::default().spawn_local(clone!(
@@ -573,58 +573,58 @@ impl MpdWrapper {
         }));
     }
 
-    async fn respond(self: Rc<Self>, request: MpdMessage) -> glib::ControlFlow {
+    async fn respond(self: Rc<Self>, request: AsyncClientMessage) -> glib::ControlFlow {
         // println!("Received MpdMessage {:?}", request);
         match request {
-            MpdMessage::Connect => self.connect().await,
-            MpdMessage::Update => self.queue_task(BackgroundTask::Update),
-            MpdMessage::Output(id, state) => self.set_output(id, state),
-            MpdMessage::Volume(vol) => self.volume(vol),
-            MpdMessage::Crossfade(fade) => self.set_crossfade(fade),
-            MpdMessage::MixRampDb(db) => self.set_mixramp_db(db),
-            MpdMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
-            MpdMessage::Status => self.get_status(),
-            MpdMessage::Add(uri, recursive) => self.add(uri, recursive),
-            MpdMessage::AddMulti(uris) => self.add_multi(&uris),
-            MpdMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
-            MpdMessage::ReplayGain(mode) => self.set_replaygain(mode),
-            MpdMessage::Random(state) => self.set_random(state),
-            MpdMessage::Consume(state) => self.set_consume(state),
-            MpdMessage::Play => self.pause(false),
-            MpdMessage::PlayId(id) => self.play_at(id, true),
-            MpdMessage::Swap(pos1, pos2) => self.swap(pos1, pos2, false),
-            MpdMessage::DeleteId(id) => self.delete_at(id, true),
-            MpdMessage::PlayPos(pos) => self.play_at(pos, false),
-            MpdMessage::Pause => self.pause(true),
-            MpdMessage::Stop => self.stop(),
-            MpdMessage::Prev => self.prev(),
-            MpdMessage::Next => self.next(),
-            MpdMessage::Clear => self.clear_queue(),
-            MpdMessage::Idle(changes) => self.handle_idle_changes(changes).await,
-            MpdMessage::SeekCur(position) => self.seek_current_song(position),
-            MpdMessage::Queue => self.get_current_queue(),
-            MpdMessage::FetchAlbums => self.fetch_albums(),
-            MpdMessage::FetchArtists(use_albumartists) => self.fetch_artists(use_albumartists),
-            MpdMessage::Albums => self.queue_task(BackgroundTask::FetchAlbums),
-            MpdMessage::AlbumArt(folder_uri, key, path, thumbnail_path) => {
-                self.queue_task(
+            AsyncClientMessage::Connect => self.connect_async().await,
+            AsyncClientMessage::Update => self.queue_background(BackgroundTask::Update),
+            AsyncClientMessage::Output(id, state) => self.set_output(id, state),
+            AsyncClientMessage::Volume(vol) => self.volume(vol),
+            AsyncClientMessage::Crossfade(fade) => self.set_crossfade(fade),
+            AsyncClientMessage::MixRampDb(db) => self.set_mixramp_db(db),
+            AsyncClientMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
+            AsyncClientMessage::Status => self.get_status(),
+            AsyncClientMessage::Add(uri, recursive) => self.add(uri, recursive),
+            AsyncClientMessage::AddMulti(uris) => self.add_multi(&uris),
+            AsyncClientMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
+            AsyncClientMessage::ReplayGain(mode) => self.set_replaygain(mode),
+            AsyncClientMessage::Random(state) => self.set_random(state),
+            AsyncClientMessage::Consume(state) => self.set_consume(state),
+            AsyncClientMessage::Play => self.pause(false),
+            AsyncClientMessage::PlayId(id) => self.play_at(id, true),
+            AsyncClientMessage::Swap(pos1, pos2) => self.swap(pos1, pos2, false),
+            AsyncClientMessage::DeleteId(id) => self.delete_at(id, true),
+            AsyncClientMessage::PlayPos(pos) => self.play_at(pos, false),
+            AsyncClientMessage::Pause => self.pause(true),
+            AsyncClientMessage::Stop => self.stop(),
+            AsyncClientMessage::Prev => self.prev(),
+            AsyncClientMessage::Next => self.next(),
+            AsyncClientMessage::Clear => self.clear_queue(),
+            AsyncClientMessage::Idle(changes) => self.handle_idle_changes(changes).await,
+            AsyncClientMessage::SeekCur(position) => self.seek_current_song(position),
+            AsyncClientMessage::Queue => self.get_current_queue(),
+            AsyncClientMessage::FetchAlbums => self.fetch_albums(),
+            AsyncClientMessage::FetchArtists(use_albumartists) => self.fetch_artists(use_albumartists),
+            AsyncClientMessage::Albums => self.queue_background(BackgroundTask::FetchAlbums),
+            AsyncClientMessage::AlbumArt(folder_uri, key, path, thumbnail_path) => {
+                self.queue_background(
                     BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), key, path, thumbnail_path)
                 );
             },
-            MpdMessage::AlbumContent(tag) => {
+            AsyncClientMessage::AlbumContent(tag) => {
                 // For now we only have songs.
                 // In the future we might want to have additional types of per-album content,
                 // such as participant artists.
-                self.queue_task(BackgroundTask::FetchAlbumSongs(tag))
+                self.queue_background(BackgroundTask::FetchAlbumSongs(tag))
             }
-            MpdMessage::Artists(use_albumartist) => {
-                self.queue_task(BackgroundTask::FetchArtists(use_albumartist));
+            AsyncClientMessage::Artists(use_albumartist) => {
+                self.queue_background(BackgroundTask::FetchArtists(use_albumartist));
             }
-            MpdMessage::ArtistContent(name) => self.get_artist_content(name),
-            MpdMessage::FindAdd(terms) => self.find_add(terms),
-            MpdMessage::LsInfo(uri) => self.queue_task(BackgroundTask::FetchFolderContents(uri)),
+            AsyncClientMessage::ArtistContent(name) => self.get_artist_content(name),
+            AsyncClientMessage::FindAdd(terms) => self.find_add(terms),
+            AsyncClientMessage::LsInfo(uri) => self.queue_background(BackgroundTask::FetchFolderContents(uri)),
             // Result messages from child thread
-            MpdMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
+            AsyncClientMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
                 &[
                     &folder_uri,
@@ -632,63 +632,63 @@ impl MpdWrapper {
                     &BoxedAnyObject::new(thumb),
                 ]
             ),
-            MpdMessage::GetSticker(typ, uri, name) => self.get_sticker(&typ, &uri, &name),
-            MpdMessage::SetSticker(typ, uri, name, value) => self.set_sticker(&typ, &uri, &name, &value),
-            MpdMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
+            AsyncClientMessage::GetSticker(typ, uri, name) => self.get_sticker(&typ, &uri, &name),
+            AsyncClientMessage::SetSticker(typ, uri, name, value) => self.set_sticker(&typ, &uri, &name, &value),
+            AsyncClientMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
                 "album-art-not-available",
                 folder_uri
             ),
-            MpdMessage::AlbumBasicInfoDownloaded(info) => self.on_album_downloaded(
+            AsyncClientMessage::AlbumBasicInfoDownloaded(info) => self.on_album_downloaded(
                 "album-basic-info-downloaded",
                 None,
                 info
             ),
-            MpdMessage::AlbumSongInfoDownloaded(tag, songs) => self.on_songs_downloaded(
+            AsyncClientMessage::AlbumSongInfoDownloaded(tag, songs) => self.on_songs_downloaded(
                 "album-songs-downloaded",
                 tag,
                 songs
             ),
-            MpdMessage::ArtistBasicInfoDownloaded(info) => self.state.emit_result(
+            AsyncClientMessage::ArtistBasicInfoDownloaded(info) => self.state.emit_result(
                 "artist-basic-info-downloaded",
                 Artist::from(info)
             ),
-            MpdMessage::ArtistSongInfoDownloaded(name, songs) => self.on_songs_downloaded(
+            AsyncClientMessage::ArtistSongInfoDownloaded(name, songs) => self.on_songs_downloaded(
                 "artist-songs-downloaded",
                 name,
                 songs
             ),
-            MpdMessage::ArtistAlbumBasicInfoDownloaded(artist_name, album_info) => self.on_album_downloaded(
+            AsyncClientMessage::ArtistAlbumBasicInfoDownloaded(artist_name, album_info) => self.on_album_downloaded(
                 "artist-album-basic-info-downloaded",
                 Some(artist_name),
                 album_info
             ),
-            MpdMessage::FolderContentsDownloaded(uri, contents) => self.on_folder_contents_downloaded(uri, contents),
-            MpdMessage::DBUpdated => {},
-            MpdMessage::Busy(busy) => self.state.set_busy(busy),
+            AsyncClientMessage::FolderContentsDownloaded(uri, contents) => self.on_folder_contents_downloaded(uri, contents),
+            AsyncClientMessage::DBUpdated => {},
+            AsyncClientMessage::Busy(busy) => self.state.set_busy(busy),
         }
         glib::ControlFlow::Continue
     }
 
-    async fn handle_idle_changes(&self, changes: Vec<Subsystem>) {
+    async fn handle_idle_changes(self: Rc<Self>, changes: Vec<Subsystem>) {
         for subsystem in changes {
             match subsystem {
                 Subsystem::Player | Subsystem::Options => {
                     // No need to get current song separately as we'll just pull it
                     // from the queue.
                     // Delegate efficient queue updating to the player controller too.
-                    self.get_status();
+                    self.clone().get_status();
                 }
                 Subsystem::Queue => {
-                    self.get_queue_changes();
+                    self.clone().get_queue_changes();
                 }
                 Subsystem::Output => {
-                    self.get_outputs();
+                    self.clone().get_outputs();
                 }
                 Subsystem::Database => {
                     // Database changed after updating. Perform a reconnection,
                     // which will also trigger views to refresh their contents.
                     self.state.emit_by_name::<()>("database-updated", &[]);
-                    let _ = self.sender.send_blocking(MpdMessage::Connect);
+                    let _ = self.main_sender.send_blocking(AsyncClientMessage::Connect);
                 }
                 // More to come
                 _ => {}
@@ -696,7 +696,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn queue_task(&self, task: BackgroundTask) {
+    pub fn queue_background(&self, task: BackgroundTask) {
         if let Some(sender) = self.bg_sender.borrow().as_ref() {
             sender.send_blocking(task).expect("Cannot queue background task");
             if let Some(client) = self.main_client.borrow_mut().as_mut() {
@@ -712,22 +712,30 @@ impl MpdWrapper {
         }
     }
 
-    fn init_state(&self) {
-        self.get_outputs();
+    pub fn run_async(&self, task: AsyncClientMessage) {
+        self.main_sender.send_blocking(task).expect("Cannot queue async task");
+    }
+
+    fn init_state(self: Rc<Self>) {
+        self.clone().get_outputs();
         // Get queue first so we can look for current song in it later
-        self.get_current_queue();
+        self.clone().get_current_queue();
         self.get_status();
     }
 
-    pub fn fetch_albums(&self) {
-        self.queue_task(BackgroundTask::FetchAlbums);
+    pub fn fetch_albums(self: Rc<Self>) {
+        self.queue_background(BackgroundTask::FetchAlbums);
     }
 
-    pub fn fetch_artists(&self, use_albumartists: bool) {
-        self.queue_task(BackgroundTask::FetchArtists(use_albumartists));
+    pub fn fetch_artists(self: Rc<Self>, use_albumartists: bool) {
+        self.queue_background(BackgroundTask::FetchArtists(use_albumartists));
     }
 
-    async fn connect(self: Rc<Self>) {
+    pub fn queue_connect(self: Rc<Self>) {
+        self.run_async(AsyncClientMessage::Connect);
+    }
+
+    async fn connect_async(self: Rc<Self>) {
         // Close current clients
         if let Some(mut main_client) = self.main_client.borrow_mut().take() {
             println!("Closing existing clients");
@@ -760,7 +768,7 @@ impl MpdWrapper {
                 .subscribe(self.bg_channel.clone())
                 .expect("Could not connect to an inter-client channel for child thread wakeups!");
             self.clone().start_bg_thread(addr.as_ref());
-            self.init_state();
+            self.clone().init_state();
             self.state.set_connection_state(ConnectionState::Connected);
         }
         else {
@@ -768,7 +776,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn add(&self, uri: String, recursive: bool) {
+    pub fn add(self: Rc<Self>, uri: String, recursive: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if recursive {
                 let _ = client.findadd(Query::new().and(Term::Base, uri));
@@ -779,20 +787,20 @@ impl MpdWrapper {
         }
     }
 
-    pub fn add_multi(&self, uris: &[String]) {
+    pub fn add_multi(self: Rc<Self>, uris: &[String]) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let ids = client.push_multiple(uris);
             println!("{:?}", ids);
         }
     }
 
-    pub fn volume(&self, vol: i8) {
+    pub fn volume(self: Rc<Self>, vol: i8) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.volume(vol);
         }
     }
 
-    fn get_outputs(&self) {
+    fn get_outputs(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(outputs) = client.outputs() {
                 self.state.emit_boxed_result("outputs-changed", outputs);
@@ -800,14 +808,14 @@ impl MpdWrapper {
         }
     }
 
-    fn set_output(&self, id: u32, state: bool) {
+    pub fn set_output(self: Rc<Self>, id: u32, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             println!("Setting output ID {} to {}", id, state);
             let _ = client.output(id, state);
         }
     }
 
-    fn get_sticker(&self, typ: &str, uri: &str, name: &str) {
+    fn get_sticker(self: Rc<Self>, typ: &str, uri: &str, name: &str) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let res = client.sticker(typ, uri, name);
             if let Ok(sticker) = res {
@@ -840,13 +848,13 @@ impl MpdWrapper {
         }
     }
 
-    fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
+    fn set_sticker(self: Rc<Self>, typ: &str, uri: &str, name: &str, value: &str) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.set_sticker(typ, uri, name, value);
         }
     } 
 
-    pub fn get_status(&self) {
+    pub fn get_status(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
                 let _ = self.queue_version.replace(status.queue_version);
@@ -860,7 +868,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn set_playback_flow(&self, flow: PlaybackFlow) {
+    pub fn set_playback_flow(self: Rc<Self>, flow: PlaybackFlow) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             match flow {
                 PlaybackFlow::Sequential => {
@@ -883,37 +891,37 @@ impl MpdWrapper {
         }
     }
 
-    pub fn set_crossfade(&self, fade: f64) {
+    pub fn set_crossfade(self: Rc<Self>, fade: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.crossfade(fade as i64);
         }
     }
 
-    pub fn set_replaygain(&self, mode: mpd::status::ReplayGain) {
+    pub fn set_replaygain(self: Rc<Self>, mode: mpd::status::ReplayGain) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.replaygain(mode);
         }
     }
 
-    pub fn set_mixramp_db(&self, db: f32) {
+    pub fn set_mixramp_db(self: Rc<Self>, db: f32) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.mixrampdb(db);
         }
     }
 
-    pub fn set_mixramp_delay(&self, delay: f64) {
+    pub fn set_mixramp_delay(self: Rc<Self>, delay: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.mixrampdelay(delay);
         }
     }
 
-    pub fn set_random(&self, state: bool) {
+    pub fn set_random(self: Rc<Self>, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.random(state);
         }
     }
 
-    pub fn set_consume(&self, state: bool) {
+    pub fn set_consume(self: Rc<Self>, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.consume(state);
         }
@@ -996,7 +1004,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_queue_changes(&self) {
+    pub fn get_queue_changes(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: move to background thread
             if let Ok(mut changes) = client.changes(self.queue_version.get()) {
@@ -1009,14 +1017,14 @@ impl MpdWrapper {
         }
     }
 
-    pub fn seek_current_song(&self, position: f64) {
+    pub fn seek_current_song(self: Rc<Self>, position: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.rewind(position);
             // If successful, should trigger an idle message for Player
         }
     }
 
-    pub fn get_current_queue(&self) {
+    pub fn get_current_queue(self: Rc<Self>) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(mut queue) = client.queue() {
                 let songs: Vec<Song> = queue
@@ -1029,7 +1037,7 @@ impl MpdWrapper {
     }
 
     fn on_songs_downloaded(
-        &self,
+        self: Rc<Self>,
         signal_name: &str,
         tag: String,
         songs: Vec<SongInfo>
@@ -1047,7 +1055,7 @@ impl MpdWrapper {
     }
 
     fn on_album_downloaded(
-        &self,
+        self: Rc<Self>,
         signal_name: &str,
         tag: Option<String>,
         info: AlbumInfo
@@ -1073,7 +1081,7 @@ impl MpdWrapper {
     }
 
     fn on_artist_downloaded(
-        &self,
+        self: Rc<Self>,
         signal_name: &str,
         tag: Option<String>,  // For future features, such as fetching artists in album content view
         info: ArtistInfo
@@ -1098,14 +1106,14 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_artist_content(&self, name: String) {
+    pub fn get_artist_content(self: Rc<Self>, name: String) {
         // For artists, we will need to find by substring to include songs and albums that they
         // took part in
-        self.queue_task(BackgroundTask::FetchArtistSongs(name.clone()));
-        self.queue_task(BackgroundTask::FetchArtistAlbums(name.clone()));
+        self.queue_background(BackgroundTask::FetchArtistSongs(name.clone()));
+        self.queue_background(BackgroundTask::FetchArtistAlbums(name.clone()));
     }
 
-    pub fn find_add(&self, query: Query) {
+    pub fn find_add(self: Rc<Self>, query: Query) {
         // Convert back to mpd::search::Query
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // println!("Running findadd query: {:?}", &terms);
@@ -1117,7 +1125,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn on_folder_contents_downloaded(&self, uri: String, contents: Vec<LsInfoEntry>) {
+    pub fn on_folder_contents_downloaded(self: Rc<Self>, uri: String, contents: Vec<LsInfoEntry>) {
         self.state.emit_by_name::<()>("folder-contents-downloaded", &[
             &uri.to_value(),
             &BoxedAnyObject::new(contents.into_iter().map(INode::from).collect::<Vec<INode>>()).to_value()
