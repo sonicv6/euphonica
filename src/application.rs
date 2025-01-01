@@ -70,7 +70,6 @@ mod imp {
 
             // Create client instance (not connected yet)
             let client = MpdWrapper::new(meta_sender.clone());
-            let sender = client.clone().get_sender();
 
             // Create controllers
             // These two are GObjects (already refcounted by GLib)

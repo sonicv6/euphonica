@@ -23,57 +23,9 @@ const BATCH_SIZE: u32 = 4096;
 const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once (same
 // folder, same tag, etc)
 
-// Big TODO: Reduce dependency on enums & async_channels for calls that happen right on the main thread.
-// They should only be used for cross-thread communication.
-// One for each command in mpd's protocol plus a few special ones such
-// as Connect and Toggle.
-pub enum AsyncClientMessage {
+// Messages to be sent from child thread or synchronous methods
+enum AsyncClientMessage {
     Connect, // Host and port are always read from gsettings
-    Update, // Update DB
-    Output(u32, bool), // Set output state. Specify target ID and state to set to.
-    SetPlaybackFlow(PlaybackFlow),
-    Random(bool),
-    Play,
-    Pause,
-    Stop,
-    Add(String, bool), // Add by URI. If true, treat URI as folder-level and add recursively.
-    AddMulti(Vec<String>), // Batch-add URIs. This will create a command list to maintain efficiency.
-    PlayPos(u32), // Play song at queue position
-    PlayId(u32), // Play song at queue ID
-    DeleteId(u32),
-    Swap(u32, u32), // Swap queue pos of two songs given by queue positions
-    Clear, // Clear queue
-    Prev,
-    Next,
-    Status,
-    SeekCur(f64), // Seek current song to last position set by PrepareSeekCur. For some reason the mpd crate calls this "rewind".
-    FindAdd(Query<'static>),
-    Queue, // Get songs in current queue
-    Albums, // Get albums. Will return one by one
-    Artists(bool), // Get artists. Will return one by one. If bool flag is true, will parse AlbumArtist tag.
-    AlbumContent(String), // Get list of songs with given album tag
-    ArtistContent(String), // Get songs and albums of artist with given name
-    Volume(i8),
-    MixRampDb(f32),
-    MixRampDelay(f64),
-    Crossfade(f64),
-    ReplayGain(mpd::status::ReplayGain),
-    Consume(bool),
-    GetSticker(String, String, String), // Type, URI, name
-    SetSticker(String, String, String, String), // Type, URI, name, value
-    LsInfo(String),  // URI
-
-    // For initialising views upon new connection
-    FetchAlbums,
-    FetchArtists(bool),
-
-    // Reserved for cache controller
-    // folder-level URI, key doc & paths to write the hires & thumbnail versions
-    // Key doc is here so we can query fetching from remote sources with the cache controller in case MPD can't
-    // give us an album art.
-    AlbumArt(String, bson::Document, PathBuf, PathBuf),
-
-	// Reserved for child thread
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
     // Return downloaded & resized album arts (hires and thumbnail respectively)
@@ -577,53 +529,7 @@ impl MpdWrapper {
         // println!("Received MpdMessage {:?}", request);
         match request {
             AsyncClientMessage::Connect => self.connect_async().await,
-            AsyncClientMessage::Update => self.queue_background(BackgroundTask::Update),
-            AsyncClientMessage::Output(id, state) => self.set_output(id, state),
-            AsyncClientMessage::Volume(vol) => self.volume(vol),
-            AsyncClientMessage::Crossfade(fade) => self.set_crossfade(fade),
-            AsyncClientMessage::MixRampDb(db) => self.set_mixramp_db(db),
-            AsyncClientMessage::MixRampDelay(delay) => self.set_mixramp_delay(delay),
-            AsyncClientMessage::Status => self.get_status(),
-            AsyncClientMessage::Add(uri, recursive) => self.add(uri, recursive),
-            AsyncClientMessage::AddMulti(uris) => self.add_multi(&uris),
-            AsyncClientMessage::SetPlaybackFlow(flow) => self.set_playback_flow(flow),
-            AsyncClientMessage::ReplayGain(mode) => self.set_replaygain(mode),
-            AsyncClientMessage::Random(state) => self.set_random(state),
-            AsyncClientMessage::Consume(state) => self.set_consume(state),
-            AsyncClientMessage::Play => self.pause(false),
-            AsyncClientMessage::PlayId(id) => self.play_at(id, true),
-            AsyncClientMessage::Swap(pos1, pos2) => self.swap(pos1, pos2, false),
-            AsyncClientMessage::DeleteId(id) => self.delete_at(id, true),
-            AsyncClientMessage::PlayPos(pos) => self.play_at(pos, false),
-            AsyncClientMessage::Pause => self.pause(true),
-            AsyncClientMessage::Stop => self.stop(),
-            AsyncClientMessage::Prev => self.prev(),
-            AsyncClientMessage::Next => self.next(),
-            AsyncClientMessage::Clear => self.clear_queue(),
             AsyncClientMessage::Idle(changes) => self.handle_idle_changes(changes).await,
-            AsyncClientMessage::SeekCur(position) => self.seek_current_song(position),
-            AsyncClientMessage::Queue => self.get_current_queue(),
-            AsyncClientMessage::FetchAlbums => self.fetch_albums(),
-            AsyncClientMessage::FetchArtists(use_albumartists) => self.fetch_artists(use_albumartists),
-            AsyncClientMessage::Albums => self.queue_background(BackgroundTask::FetchAlbums),
-            AsyncClientMessage::AlbumArt(folder_uri, key, path, thumbnail_path) => {
-                self.queue_background(
-                    BackgroundTask::DownloadAlbumArt(folder_uri.to_owned(), key, path, thumbnail_path)
-                );
-            },
-            AsyncClientMessage::AlbumContent(tag) => {
-                // For now we only have songs.
-                // In the future we might want to have additional types of per-album content,
-                // such as participant artists.
-                self.queue_background(BackgroundTask::FetchAlbumSongs(tag))
-            }
-            AsyncClientMessage::Artists(use_albumartist) => {
-                self.queue_background(BackgroundTask::FetchArtists(use_albumartist));
-            }
-            AsyncClientMessage::ArtistContent(name) => self.get_artist_content(name),
-            AsyncClientMessage::FindAdd(terms) => self.find_add(terms),
-            AsyncClientMessage::LsInfo(uri) => self.queue_background(BackgroundTask::FetchFolderContents(uri)),
-            // Result messages from child thread
             AsyncClientMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
                 &[
@@ -632,8 +538,6 @@ impl MpdWrapper {
                     &BoxedAnyObject::new(thumb),
                 ]
             ),
-            AsyncClientMessage::GetSticker(typ, uri, name) => self.get_sticker(&typ, &uri, &name),
-            AsyncClientMessage::SetSticker(typ, uri, name, value) => self.set_sticker(&typ, &uri, &name, &value),
             AsyncClientMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
                 "album-art-not-available",
                 folder_uri
