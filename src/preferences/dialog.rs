@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use async_channel::Sender;
 
 
 use adw::subclass::prelude::*;

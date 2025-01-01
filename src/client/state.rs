@@ -153,9 +153,6 @@ mod imp {
                             Album::static_type()
                         ])
                         .build(),
-                    Signal::builder("status-changed")
-                        .param_types([BoxedAnyObject::static_type()])
-                        .build(),
                     Signal::builder("queue-changed")
                         .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
                         .build(),

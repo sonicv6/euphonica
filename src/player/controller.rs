@@ -2,7 +2,7 @@ extern crate mpd;
 use crate::{
     application::EuphonicaApplication,
     cache::Cache,
-    client::{ClientState, MpdWrapper},
+    client::{ClientState, ConnectionState, MpdWrapper},
     common::{AlbumInfo, QualityGrade, Song},
     utils::{prettify_audio_format, settings_manager}
 };
@@ -368,23 +368,24 @@ impl Player {
         let _ = self.imp().client.set(client);
         let _ = self.imp().cache.set(cache);
         let _ = self.imp().app.set(application);
-        // Connect to ClientState signals that announce completion of requests
-        client_state.connect_closure(
-            "status-changed",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    this.update_status(&boxed.borrow());
+        // Connect to ClientState signals
+        client_state.connect_notify_local(Some("connection-state"), clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |state, _| {
+                if state.get_connection_state() == ConnectionState::Connected {
+                    // Newly-connected? Get initial status
+                    if let Some(status) = this.client().get_status() {
+                        this.update_status(&status);
+                    }
                 }
-            ),
-        );
+            }
+        ));
         client_state.connect_closure(
             "queue-changed",
             false,
             closure_local!(
-                #[strong(rename_to = this)]
+                #[weak(rename_to = this)]
                 self,
                 move |_: ClientState, boxed: BoxedAnyObject| {
                     this.update_queue(boxed.borrow::<Vec<Song>>().as_ref(), false);
@@ -395,7 +396,7 @@ impl Player {
             "queue-replaced",
             false,
             closure_local!(
-                #[strong(rename_to = this)]
+                #[weak(rename_to = this)]
                 self,
                 move |_: ClientState, boxed: BoxedAnyObject| {
                     this.update_queue(boxed.borrow::<Vec<Song>>().as_ref(), true);
@@ -406,7 +407,7 @@ impl Player {
             "outputs-changed",
             false,
             closure_local!(
-                #[strong(rename_to = this)]
+                #[weak(rename_to = this)]
                 self,
                 move |_: ClientState, boxed: BoxedAnyObject| {
                     // Forward to bar
@@ -478,18 +479,6 @@ impl Player {
             ),
         );
     }
-
-    // // Utility functions
-    // fn send(&self, msg: BackgroundReply) -> Result<(), &str> {
-    //     if let Some(sender) = self.imp().client_sender.get() {
-    //         let res = sender.send_blocking(msg);
-    //         if res.is_err() {
-    //             return Err("Sender error");
-    //         }
-    //         return Ok(());
-    //     }
-    //     Err("Could not borrow sender")
-    // }
 
     // Update functions
     // These all have side-effects of notifying listeners of changes to the
@@ -1028,7 +1017,9 @@ impl Player {
                 loop {
                     // Don't poll if not playing
                     if this.imp().state.get() == PlaybackState::Playing {
-                        let _ = client.clone().get_status();
+                        if let Some(status) = client.clone().get_status() {
+                            this.update_status(&status);
+                        }
                     }
                     glib::timeout_future_seconds(1).await;
                 }

@@ -624,7 +624,6 @@ impl MpdWrapper {
         self.clone().get_outputs();
         // Get queue first so we can look for current song in it later
         self.clone().get_current_queue();
-        self.get_status();
     }
 
     pub fn fetch_albums(self: Rc<Self>) {
@@ -758,18 +757,15 @@ impl MpdWrapper {
         }
     } 
 
-    pub fn get_status(self: Rc<Self>) {
+    pub fn get_status(self: Rc<Self>) -> Option<mpd::Status> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(status) = client.status() {
-                let _ = self.queue_version.replace(status.queue_version);
-                // Let each state update their respective properties
-                self.state.emit_boxed_result("status-changed", status);
+                self.queue_version.replace(status.queue_version);
+                return Some(status);
             }
-            // TODO: handle error
+            return None;
         }
-        else {
-            // TODO: handle error
-        }
+        return None;
     }
 
     pub fn set_playback_flow(self: Rc<Self>, flow: PlaybackFlow) {

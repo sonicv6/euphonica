@@ -1,6 +1,6 @@
 [package]
 name = "euphonica"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2021"
 
 [dependencies]
@@ -29,6 +29,7 @@ musicbrainz_rs = { version = "0.5.0", features = ["blocking"], default-features 
 mpris-server = "0.8.1"
 async-lock = "3.4.0"
 libblur = "0.14.4"
+keyring = { version = "3", features = ["linux-native-sync-persistent"] }
 
 
 [dependencies.gtk]

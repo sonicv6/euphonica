@@ -1,10 +1,8 @@
 use chrono::NaiveDate;
 use gtk::prelude::SettingsExt;
-use musicbrainz_rs::{
-    entity::{
+use musicbrainz_rs::entity::{
         artist::{Artist, ArtistType, Gender}, relations::RelationContent, release::Release, tag::Tag
-    }, prelude::*
-};
+    };
 use crate::{meta_providers::models::{ImageMeta, ImageSize}, utils::meta_provider_settings};
 
 use super::{super::{
