@@ -103,6 +103,10 @@ mod imp {
             anim.set_alternate(true);  // Back and forth
             let _ = self.animation.set(anim);
         }
+
+        fn dispose(&self) {
+            self.animation.get().unwrap().reset();
+        }
     }
 
     impl WidgetImpl for Marquee {

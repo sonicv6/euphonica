@@ -405,6 +405,10 @@ impl Player {
                             if let Some(songs) = this.client().get_queue_changes() {
                                 this.update_queue(&songs, false);
                             }
+                            // Need to also update queue length
+                            if let Some(status) = this.client().get_status() {
+                                this.update_status(&status);
+                            }
                         }
                         Subsystem::Output => {
                             if let Some(outs) = this.client().get_outputs() {
@@ -621,7 +625,7 @@ impl Player {
         if let Some(new_queue_place) = status.song {
             // There is now a playing song.
             // Check if there was one and whether it is different from the one playing now.
-            let new_id: u32 = new_queue_place.id.0;
+            // let new_id: u32 = new_queue_place.id.0;
             let new_pos: u32 = new_queue_place.pos;
             let new_song = self
                 .imp()
@@ -632,39 +636,46 @@ impl Player {
                 .expect("Queue has to contain common::Song objects");
             // Set playing status
             new_song.set_is_playing(true); // this whole thing would only run if playback state is not Stopped
-            let exists_and_different = self.imp().current_song.borrow().as_ref().is_some_and(|song| {
-                song.get_queue_id() != new_id
-            });
-            let previously_none = self.imp().current_song.borrow().is_none();
-            if exists_and_different || previously_none {
-                // Requires change notification
-                let old_song = self.imp().current_song.replace(Some(new_song.clone()));
-                if let Some(song) = &old_song {
-                    song.set_is_playing(false);
+            // Always replace current song to ensure we're pointing at something on the queue.
+            // This is because a partial queue update may replace the current song with another instance of the
+            // same song (for example, when deleting a song before it from the queue).
+            let maybe_old_song = self.imp().current_song.replace(Some(new_song.clone()));
+            if let Some(old_song) = maybe_old_song {
+                if old_song.get_queue_id() != new_song.get_queue_id() {
+                    old_song.set_is_playing(false);
+                    // There was nothing playing previously. Update the following now:
+                    self.notify("title");
+                    self.notify("artist");
+                    self.notify("duration");
+                    self.notify("quality-grade");
+                    self.notify("format-desc");
+                    // Avoid needlessly changing album art as background blur updates are expensive.
+                    if new_song.get_album_title() != old_song.get_album_title() {
+                        self.notify("album");
+                        self.notify("album-art");
+                    }
+                    // Update MPRIS side
+                    if self.imp().mpris_enabled.get() {
+                        mpris_changes.push(Property::Metadata(new_song.get_mpris_metadata(
+                            self.imp().cache.get().unwrap().clone())
+                        ));
+                    }
                 }
-                // Remove playing status
+            }
+            else {
+                // There was nothing playing previously. Update the following now:
                 self.notify("title");
                 self.notify("artist");
                 self.notify("duration");
                 self.notify("quality-grade");
                 self.notify("format-desc");
-                // Avoid needlessly changing album art as background blur updates are expensive.
-                if (old_song.is_none()) || (new_song.get_album_title() != old_song.unwrap().get_album_title()) {
-                    self.notify("album");
-                    self.notify("album-art");
-                }
-
-                // Update MPRIS side
-                if self.imp().mpris_enabled.get() {
-                    mpris_changes.push(Property::Metadata(new_song.get_mpris_metadata(
-                        self.imp().cache.get().unwrap().clone())
-                    ));
-                }
+                self.notify("album");
+                self.notify("album-art");
             }
-            else if let Some(song) = self.imp().current_song.borrow().as_ref() {
-                // Just update pos. It's cheap so no need to check.
-                song.set_queue_pos(new_pos);
-            }
+            // else if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            //     // Just update pos. It's cheap so no need to check.
+            //     song.set_queue_pos(new_pos);
+            // }
         } else {
             // No song is playing. Update state accordingly.
             let was_playing = self.imp().current_song.borrow().as_ref().is_some(); // end borrow
