@@ -30,6 +30,7 @@ mod imp {
         ParamSpecBoolean,
         ParamSpecEnum
     };
+    
     use super::*;
     use once_cell::sync::Lazy;
 
@@ -88,6 +89,11 @@ mod imp {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
             SIGNALS.get_or_init(|| {
                 vec![
+                    Signal::builder("idle")
+                        .param_types([
+                            BoxedAnyObject::static_type()  // mpd::Subsystem::to_str
+                        ])
+                        .build(),
                     Signal::builder("database-updated")
                         .build(),
                     Signal::builder("sticker-downloaded")
@@ -119,9 +125,6 @@ mod imp {
                             String::static_type(),  // folder URI
                         ])
                         .build(),
-                    Signal::builder("outputs-changed")
-                        .param_types([BoxedAnyObject::static_type()])  // Vec<mpd::output::Output>
-                        .build(),
                     // Enough information about this album has been downloaded to display it
                     // as a thumbnail in the album view
                     Signal::builder("album-basic-info-downloaded")
@@ -152,12 +155,6 @@ mod imp {
                             String::static_type(),
                             Album::static_type()
                         ])
-                        .build(),
-                    Signal::builder("queue-changed")
-                        .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
-                        .build(),
-                    Signal::builder("queue-replaced")
-                        .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
                         .build(),
                     Signal::builder("folder-contents-downloaded")
                         .param_types([

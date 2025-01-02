@@ -8,7 +8,7 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client, error::Error, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Subsystem
+    client::Client, error::Error, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Output, Subsystem
 };
 use image::DynamicImage;
 use uuid::Uuid;
@@ -376,10 +376,6 @@ impl MpdWrapper {
         self.state.clone()
     }
 
-    pub fn get_sender(self: Rc<Self>) -> Sender<AsyncClientMessage> {
-        self.main_sender.clone()
-    }
-
     fn start_bg_thread(self: Rc<Self>, addr: &str) {
         let sender_to_fg = self.main_sender.clone();
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
@@ -575,19 +571,9 @@ impl MpdWrapper {
 
     async fn handle_idle_changes(self: Rc<Self>, changes: Vec<Subsystem>) {
         for subsystem in changes {
+            self.state.emit_boxed_result("idle", subsystem);
+            // Handle some directly here
             match subsystem {
-                Subsystem::Player | Subsystem::Options => {
-                    // No need to get current song separately as we'll just pull it
-                    // from the queue.
-                    // Delegate efficient queue updating to the player controller too.
-                    self.clone().get_status();
-                }
-                Subsystem::Queue => {
-                    self.clone().get_queue_changes();
-                }
-                Subsystem::Output => {
-                    self.clone().get_outputs();
-                }
                 Subsystem::Database => {
                     // Database changed after updating. Perform a reconnection,
                     // which will also trigger views to refresh their contents.
@@ -616,10 +602,6 @@ impl MpdWrapper {
         }
     }
 
-    pub fn run_async(&self, task: AsyncClientMessage) {
-        self.main_sender.send_blocking(task).expect("Cannot queue async task");
-    }
-
     fn init_state(self: Rc<Self>) {
         self.clone().get_outputs();
         // Get queue first so we can look for current song in it later
@@ -635,7 +617,7 @@ impl MpdWrapper {
     }
 
     pub fn queue_connect(self: Rc<Self>) {
-        self.run_async(AsyncClientMessage::Connect);
+        self.main_sender.send_blocking(AsyncClientMessage::Connect).expect("Cannot call reconnection asynchronously");
     }
 
     async fn connect_async(self: Rc<Self>) {
@@ -703,12 +685,14 @@ impl MpdWrapper {
         }
     }
 
-    fn get_outputs(self: Rc<Self>) {
+    pub fn get_outputs(self: Rc<Self>) -> Option<Vec<Output>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(outputs) = client.outputs() {
-                self.state.emit_boxed_result("outputs-changed", outputs);
+                return Some(outputs);
             }
+            return None;
         }
+        return None;
     }
 
     pub fn set_output(self: Rc<Self>, id: u32, state: bool) {
@@ -904,17 +888,20 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_queue_changes(self: Rc<Self>) {
+    pub fn get_queue_changes(self: Rc<Self>) -> Option<Vec<Song>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: move to background thread
             if let Ok(mut changes) = client.changes(self.queue_version.get()) {
-                let songs: Vec<Song> = changes
+                return Some(
+                    changes
                     .iter_mut()
                     .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
-                    .collect();
-                self.state.emit_boxed_result("queue-changed", songs);
+                    .collect()
+                );
             }
+            return None;
         }
+        return None;
     }
 
     pub fn seek_current_song(self: Rc<Self>, position: f64) {
@@ -924,16 +911,18 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_current_queue(self: Rc<Self>) {
+    pub fn get_current_queue(self: Rc<Self>) -> Option<Vec<Song>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(mut queue) = client.queue() {
-                let songs: Vec<Song> = queue
+                return Some(queue
                     .iter_mut()
                     .map(|mpd_song| {Song::from(std::mem::take(mpd_song))})
-                    .collect();
-                self.state.emit_boxed_result("queue-replaced", songs);
+                    .collect()
+                );
             }
+            return None;
         }
+        return None;
     }
 
     fn on_songs_downloaded(

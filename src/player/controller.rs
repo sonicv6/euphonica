@@ -19,9 +19,9 @@ use adw::subclass::prelude::*;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject};
 use gtk::{gdk::Texture, glib::clone};
 use gtk::{gio, glib, prelude::*};
-use mpd::{status::{AudioFormat, State, Status}, ReplayGain};
+use mpd::{status::{AudioFormat, State, Status}, ReplayGain, Subsystem};
 use std::{
-    cell::{Cell, OnceCell, RefCell}, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
+    cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
 };
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
@@ -375,45 +375,46 @@ impl Player {
             move |state, _| {
                 if state.get_connection_state() == ConnectionState::Connected {
                     // Newly-connected? Get initial status
+                    // Remember to get queue before status so status parsing has something to read off.
+                    if let Some(songs) = this.client().get_current_queue() {
+                        this.update_queue(&songs, true);
+                    }
                     if let Some(status) = this.client().get_status() {
                         this.update_status(&status);
+                    }
+                    if let Some(outs) = this.client().get_outputs() {
+                        this.update_outputs(glib::BoxedAnyObject::new(outs));
                     }
                 }
             }
         ));
         client_state.connect_closure(
-            "queue-changed",
+            "idle",
             false,
             closure_local!(
                 #[weak(rename_to = this)]
                 self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    this.update_queue(boxed.borrow::<Vec<Song>>().as_ref(), false);
+                move |_: ClientState, subsys: glib::BoxedAnyObject| {
+                    match subsys.borrow::<Subsystem>().deref() {
+                        Subsystem::Player | Subsystem::Options => {
+                            if let Some(status) = this.client().get_status() {
+                                this.update_status(&status);
+                            }
+                        }
+                        Subsystem::Queue => {
+                            if let Some(songs) = this.client().get_queue_changes() {
+                                this.update_queue(&songs, false);
+                            }
+                        }
+                        Subsystem::Output => {
+                            if let Some(outs) = this.client().get_outputs() {
+                                this.update_outputs(glib::BoxedAnyObject::new(outs));
+                            }
+                        }
+                        _ => {}
+                    }
                 }
-            ),
-        );
-        client_state.connect_closure(
-            "queue-replaced",
-            false,
-            closure_local!(
-                #[weak(rename_to = this)]
-                self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    this.update_queue(boxed.borrow::<Vec<Song>>().as_ref(), true);
-                }
-            ),
-        );
-        client_state.connect_closure(
-            "outputs-changed",
-            false,
-            closure_local!(
-                #[weak(rename_to = this)]
-                self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    // Forward to bar
-                    this.update_outputs(boxed);
-                }
-            ),
+            )
         );
 
         let settings = settings_manager().child("player");
