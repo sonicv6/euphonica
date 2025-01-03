@@ -84,6 +84,12 @@ impl ClientPreferences {
                     self.imp().reconnect.set_sensitive(true);
                 }
             },
+            ConnectionState::WrongPassword => {
+                self.imp().mpd_status.set_subtitle("Incorrect password");
+                if !self.imp().mpd_port.has_css_class("error") {
+                    self.imp().reconnect.set_sensitive(true);
+                }
+            },
             ConnectionState::Connected => {
                 self.imp().mpd_status.set_subtitle("Connected");
                 if !self.imp().mpd_port.has_css_class("error") {

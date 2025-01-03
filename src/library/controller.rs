@@ -88,8 +88,8 @@ impl Library {
         let _ = self.imp().client.set(client);
     }
 
-    fn client(&self) -> Rc<MpdWrapper> {
-        self.imp().client.get().unwrap().clone()
+    fn client(&self) -> &Rc<MpdWrapper> {
+        self.imp().client.get().unwrap()
     }
 
     /// Get all the information available about an album & its contents (won't block;

@@ -8,7 +8,7 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client, error::Error, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Output, Subsystem
+    client::Client, error::{Error, ErrorCode}, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Output, Subsystem
 };
 use image::DynamicImage;
 use uuid::Uuid;
@@ -26,6 +26,7 @@ const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once
 // Messages to be sent from child thread or synchronous methods
 enum AsyncClientMessage {
     Connect, // Host and port are always read from gsettings
+    Disconnect,
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
     // Return downloaded & resized album arts (hires and thumbnail respectively)
@@ -372,16 +373,38 @@ impl MpdWrapper {
         wrapper
     }
 
-    pub fn get_client_state(self: Rc<Self>) -> ClientState {
+    pub fn get_client_state(&self) -> ClientState {
         self.state.clone()
     }
 
-    fn start_bg_thread(self: Rc<Self>, addr: &str) {
+    fn handle_error(&self, error: &Error) {
+        let state = self.get_client_state();
+        match error {
+            Error::Server(server_error) => {
+                match server_error.code {
+                    ErrorCode::Password => {
+                        state.set_connection_state(ConnectionState::WrongPassword);
+                    }
+                    ErrorCode::Permission => {
+                        state.set_connection_state(ConnectionState::Unauthenticated);
+                    }
+                    _ => {}
+                }
+            }
+            _ => {
+                // TODO
+            }
+        }
+    }
+
+    fn start_bg_thread(&self, addr: &str) {
         let sender_to_fg = self.main_sender.clone();
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
         let meta_sender = self.meta_sender.clone();
         self.bg_sender.replace(Some(bg_sender));
         if let Ok(mut client) =  Client::connect(addr) {
+            // If we're unauthenticated, this will fail and no child thread
+            // will be spawned.
             client.subscribe(self.bg_channel.clone()).expect(
                 "Child thread could not subscribe to inter-client channel!"
             );
@@ -458,13 +481,21 @@ impl MpdWrapper {
                                         println!("Received msg: {}", content);
                                         match content {
                                             // More to come
-                                            "STOP" => {break 'outer}
+                                            "STOP" => {
+                                                client.close();
+                                                break 'outer;
+                                            }
                                             _ => {}
                                         }
                                     }
                                 }
                             }
                             let _ = sender_to_fg.send_blocking(AsyncClientMessage::Idle(changes));
+                        }
+                        else {
+                            client.close();
+                            println!("Child thread encountered a client error while idling. Stopping...");
+                            break 'outer;
                         }
                     }
                 }
@@ -490,7 +521,7 @@ impl MpdWrapper {
             // See Receiver::next doc for why this is needed.
             let mut receiver = std::pin::pin!(receiver);
             while let Some(request) = receiver.next().await {
-                this.clone().respond(request).await;
+                this.respond(request).await;
             }
         }));
 
@@ -521,10 +552,11 @@ impl MpdWrapper {
         }));
     }
 
-    async fn respond(self: Rc<Self>, request: AsyncClientMessage) -> glib::ControlFlow {
+    async fn respond(&self, request: AsyncClientMessage) -> glib::ControlFlow {
         // println!("Received MpdMessage {:?}", request);
         match request {
             AsyncClientMessage::Connect => self.connect_async().await,
+            AsyncClientMessage::Disconnect => self.disconnect_async().await,
             AsyncClientMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             AsyncClientMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
                 "album-art-downloaded",
@@ -569,7 +601,7 @@ impl MpdWrapper {
         glib::ControlFlow::Continue
     }
 
-    async fn handle_idle_changes(self: Rc<Self>, changes: Vec<Subsystem>) {
+    async fn handle_idle_changes(&self, changes: Vec<Subsystem>) {
         for subsystem in changes {
             self.state.emit_boxed_result("idle", subsystem);
             // Handle some directly here
@@ -577,7 +609,6 @@ impl MpdWrapper {
                 Subsystem::Database => {
                     // Database changed after updating. Perform a reconnection,
                     // which will also trigger views to refresh their contents.
-                    self.state.emit_by_name::<()>("database-updated", &[]);
                     let _ = self.main_sender.send_blocking(AsyncClientMessage::Connect);
                 }
                 // More to come
@@ -602,26 +633,19 @@ impl MpdWrapper {
         }
     }
 
-    fn init_state(self: Rc<Self>) {
-        self.clone().get_outputs();
-        // Get queue first so we can look for current song in it later
-        self.clone().get_current_queue();
-    }
-
-    pub fn fetch_albums(self: Rc<Self>) {
+    pub fn fetch_albums(&self) {
         self.queue_background(BackgroundTask::FetchAlbums);
     }
 
-    pub fn fetch_artists(self: Rc<Self>, use_albumartists: bool) {
+    pub fn fetch_artists(&self, use_albumartists: bool) {
         self.queue_background(BackgroundTask::FetchArtists(use_albumartists));
     }
 
-    pub fn queue_connect(self: Rc<Self>) {
+    pub fn queue_connect(&self) {
         self.main_sender.send_blocking(AsyncClientMessage::Connect).expect("Cannot call reconnection asynchronously");
     }
 
-    async fn connect_async(self: Rc<Self>) {
-        // Close current clients
+    async fn disconnect_async(&self) {
         if let Some(mut main_client) = self.main_client.borrow_mut().take() {
             println!("Closing existing clients");
             // Stop child thread by sending a "STOP" message through mpd itself
@@ -629,12 +653,18 @@ impl MpdWrapper {
             // Now close the main client
             let _ = main_client.close();
         }
-        // self.state.set_connection_state(ConnectionState::NotConnected);
         // Wait for child client to stop.
         if let Some(handle) = self.bg_handle.take() {
             let _ = handle.await;
             println!("Stopped all clients successfully.");
         }
+        self.state.set_connection_state(ConnectionState::NotConnected);
+    }
+
+    async fn connect_async(&self) {
+        // Close current clients
+        self.disconnect_async().await;
+
         let conn = utils::settings_manager().child("client");
 
         let addr = format!("{}:{}", conn.string("mpd-host"), conn.uint("mpd-port"));
@@ -644,24 +674,26 @@ impl MpdWrapper {
         let handle = gio::spawn_blocking(move || {
             mpd::Client::connect(addr_clone)
         }).await;
-        if let Ok(Ok(client)) = handle {
-            self.main_client.replace(Some(client));
-            self.main_client
-                .borrow_mut()
-                .as_mut()
-                .unwrap()
-                .subscribe(self.bg_channel.clone())
-                .expect("Could not connect to an inter-client channel for child thread wakeups!");
-            self.clone().start_bg_thread(addr.as_ref());
-            self.clone().init_state();
-            self.state.set_connection_state(ConnectionState::Connected);
+        if let Ok(Ok(mut client)) = handle {
+            // Doubles as a litmus test to see if we are authenticated.
+            let res = client
+                .subscribe(self.bg_channel.clone());
+            if res.is_err() {
+                self.handle_error(&res.err().unwrap());
+                client.close();
+            }
+            else {
+                self.main_client.replace(Some(client));
+                self.clone().start_bg_thread(addr.as_ref());
+                self.state.set_connection_state(ConnectionState::Connected);
+            }
         }
         else {
             self.state.set_connection_state(ConnectionState::NotConnected);
         }
     }
 
-    pub fn add(self: Rc<Self>, uri: String, recursive: bool) {
+    pub fn add(&self, uri: String, recursive: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if recursive {
                 let _ = client.findadd(Query::new().and(Term::Base, uri));
@@ -672,20 +704,20 @@ impl MpdWrapper {
         }
     }
 
-    pub fn add_multi(self: Rc<Self>, uris: &[String]) {
+    pub fn add_multi(&self, uris: &[String]) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let ids = client.push_multiple(uris);
             println!("{:?}", ids);
         }
     }
 
-    pub fn volume(self: Rc<Self>, vol: i8) {
+    pub fn volume(&self, vol: i8) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.volume(vol);
         }
     }
 
-    pub fn get_outputs(self: Rc<Self>) -> Option<Vec<Output>> {
+    pub fn get_outputs(&self) -> Option<Vec<Output>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(outputs) = client.outputs() {
                 return Some(outputs);
@@ -695,14 +727,14 @@ impl MpdWrapper {
         return None;
     }
 
-    pub fn set_output(self: Rc<Self>, id: u32, state: bool) {
+    pub fn set_output(&self, id: u32, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             println!("Setting output ID {} to {}", id, state);
             let _ = client.output(id, state);
         }
     }
 
-    fn get_sticker(self: Rc<Self>, typ: &str, uri: &str, name: &str) {
+    fn get_sticker(&self, typ: &str, uri: &str, name: &str) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let res = client.sticker(typ, uri, name);
             if let Ok(sticker) = res {
@@ -735,24 +767,30 @@ impl MpdWrapper {
         }
     }
 
-    fn set_sticker(self: Rc<Self>, typ: &str, uri: &str, name: &str, value: &str) {
+    fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.set_sticker(typ, uri, name, value);
         }
     } 
 
-    pub fn get_status(self: Rc<Self>) -> Option<mpd::Status> {
+    pub fn get_status(&self) -> Option<mpd::Status> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(status) = client.status() {
-                self.queue_version.replace(status.queue_version);
-                return Some(status);
+            let res = client.status();
+            match res {
+                Ok(status) => {
+                    self.queue_version.replace(status.queue_version);
+                    return Some(status);
+                }
+                Err(e) => {
+                    println!("{:?}", e);
+                    return None;
+                }
             }
-            return None;
         }
         return None;
     }
 
-    pub fn set_playback_flow(self: Rc<Self>, flow: PlaybackFlow) {
+    pub fn set_playback_flow(&self, flow: PlaybackFlow) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             match flow {
                 PlaybackFlow::Sequential => {
@@ -775,55 +813,55 @@ impl MpdWrapper {
         }
     }
 
-    pub fn set_crossfade(self: Rc<Self>, fade: f64) {
+    pub fn set_crossfade(&self, fade: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.crossfade(fade as i64);
         }
     }
 
-    pub fn set_replaygain(self: Rc<Self>, mode: mpd::status::ReplayGain) {
+    pub fn set_replaygain(&self, mode: mpd::status::ReplayGain) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.replaygain(mode);
         }
     }
 
-    pub fn set_mixramp_db(self: Rc<Self>, db: f32) {
+    pub fn set_mixramp_db(&self, db: f32) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.mixrampdb(db);
         }
     }
 
-    pub fn set_mixramp_delay(self: Rc<Self>, delay: f64) {
+    pub fn set_mixramp_delay(&self, delay: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.mixrampdelay(delay);
         }
     }
 
-    pub fn set_random(self: Rc<Self>, state: bool) {
+    pub fn set_random(&self, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.random(state);
         }
     }
 
-    pub fn set_consume(self: Rc<Self>, state: bool) {
+    pub fn set_consume(&self, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.consume(state);
         }
     }
 
-    pub fn pause(self: Rc<Self>, is_pause: bool) {
+    pub fn pause(&self, is_pause: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.pause(is_pause);
         }
     }
 
-    pub fn stop(self: Rc<Self>) {
+    pub fn stop(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.stop();
         }
     }
 
-    pub fn prev(self: Rc<Self>) {
+    pub fn prev(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
             let _ = client.prev();
@@ -834,7 +872,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn next(self: Rc<Self>) {
+    pub fn next(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: Make it stop/play base on toggle
             let _ = client.next();
@@ -845,7 +883,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn play_at(self: Rc<Self>, id_or_pos: u32, is_id: bool) {
+    pub fn play_at(&self, id_or_pos: u32, is_id: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if is_id {
                 client.switch(Id(id_or_pos)).expect("Could not switch song");
@@ -856,7 +894,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn swap(self: Rc<Self>, id1: u32, id2: u32, is_id: bool) {
+    pub fn swap(&self, id1: u32, id2: u32, is_id: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if is_id {
                 client.swap(Id(id1), Id(id2)).expect("Could not swap songs by ID");
@@ -867,7 +905,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn delete_at(self: Rc<Self>, id_or_pos: u32, is_id: bool) {
+    pub fn delete_at(&self, id_or_pos: u32, is_id: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if is_id {
                 client.delete(Id(id_or_pos)).expect("Could not delete song from queue");
@@ -878,7 +916,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn clear_queue(self: Rc<Self>) {
+    pub fn clear_queue(&self) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.clear();
             // TODO: handle error
@@ -888,7 +926,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_queue_changes(self: Rc<Self>) -> Option<Vec<Song>> {
+    pub fn get_queue_changes(&self) -> Option<Vec<Song>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // TODO: move to background thread
             if let Ok(mut changes) = client.changes(self.queue_version.get()) {
@@ -904,14 +942,14 @@ impl MpdWrapper {
         return None;
     }
 
-    pub fn seek_current_song(self: Rc<Self>, position: f64) {
+    pub fn seek_current_song(&self, position: f64) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let _ = client.rewind(position);
             // If successful, should trigger an idle message for Player
         }
     }
 
-    pub fn get_current_queue(self: Rc<Self>) -> Option<Vec<Song>> {
+    pub fn get_current_queue(&self) -> Option<Vec<Song>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             if let Ok(mut queue) = client.queue() {
                 return Some(queue
@@ -926,7 +964,7 @@ impl MpdWrapper {
     }
 
     fn on_songs_downloaded(
-        self: Rc<Self>,
+        &self,
         signal_name: &str,
         tag: String,
         songs: Vec<SongInfo>
@@ -944,7 +982,7 @@ impl MpdWrapper {
     }
 
     fn on_album_downloaded(
-        self: Rc<Self>,
+        &self,
         signal_name: &str,
         tag: Option<String>,
         info: AlbumInfo
@@ -970,7 +1008,7 @@ impl MpdWrapper {
     }
 
     fn on_artist_downloaded(
-        self: Rc<Self>,
+        &self,
         signal_name: &str,
         tag: Option<String>,  // For future features, such as fetching artists in album content view
         info: ArtistInfo
@@ -995,14 +1033,14 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_artist_content(self: Rc<Self>, name: String) {
+    pub fn get_artist_content(&self, name: String) {
         // For artists, we will need to find by substring to include songs and albums that they
         // took part in
         self.queue_background(BackgroundTask::FetchArtistSongs(name.clone()));
         self.queue_background(BackgroundTask::FetchArtistAlbums(name.clone()));
     }
 
-    pub fn find_add(self: Rc<Self>, query: Query) {
+    pub fn find_add(&self, query: Query) {
         // Convert back to mpd::search::Query
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             // println!("Running findadd query: {:?}", &terms);
@@ -1014,7 +1052,7 @@ impl MpdWrapper {
         }
     }
 
-    pub fn on_folder_contents_downloaded(self: Rc<Self>, uri: String, contents: Vec<LsInfoEntry>) {
+    pub fn on_folder_contents_downloaded(&self, uri: String, contents: Vec<LsInfoEntry>) {
         self.state.emit_by_name::<()>("folder-contents-downloaded", &[
             &uri.to_value(),
             &BoxedAnyObject::new(contents.into_iter().map(INode::from).collect::<Vec<INode>>()).to_value()

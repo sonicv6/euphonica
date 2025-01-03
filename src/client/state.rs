@@ -20,7 +20,8 @@ pub enum ConnectionState {
     #[default]
     NotConnected,
     Connecting,
-    Unauthenticated,  // TCP stream set up but no/wrong password.
+    Unauthenticated,  // Either no password is provided or the one provided is insufficiently privileged
+    WrongPassword,    // The provided password does not match any of the configured passwords
     Connected
 }
 
@@ -93,8 +94,6 @@ mod imp {
                         .param_types([
                             BoxedAnyObject::static_type()  // mpd::Subsystem::to_str
                         ])
-                        .build(),
-                    Signal::builder("database-updated")
                         .build(),
                     Signal::builder("sticker-downloaded")
                         .param_types([

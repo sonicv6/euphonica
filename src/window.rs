@@ -18,17 +18,18 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::{cell::RefCell, path::PathBuf, thread, time::Duration};
+use std::{cell::RefCell, ops::Deref, path::PathBuf, thread, time::Duration};
 use adw::{
     prelude::*,
     subclass::prelude::*
 };
 use gtk::{
-    gdk, gio, glib::{self, clone, closure_local}
+    gdk, gio, glib::{self, clone, closure_local, BoxedAnyObject}
 };
 use glib::signal::SignalHandlerId;
 use image::{imageops::FilterType, DynamicImage};
 use libblur::{stack_blur, FastBlurChannels, ThreadingPolicy};
+use mpd::Subsystem;
 use crate::{
     application::EuphonicaApplication,
     client::{ClientState, ConnectionState},
@@ -461,16 +462,46 @@ impl EuphonicaWindow {
         let player = app.get_player();
         win.queue_new_background();
         client_state.connect_closure(
-            "database-updated",
+            "idle",
             false,
             closure_local!(
                 #[weak(rename_to = this)]
                 win,
-                move |_: ClientState| {
-                    this.send_simple_toast("Database updated with changes", 3);
+                move |_: ClientState, subsys: BoxedAnyObject| {
+                    match subsys.borrow::<Subsystem>().deref() {
+                        Subsystem::Database => {
+                            this.send_simple_toast("Database updated with changes", 3);
+                        }
+                        _ => {}
+                    }
                 }
             )
         );
+        client_state.connect_notify_local(
+            Some("connection-state"),
+            clone!(
+                #[weak(rename_to = this)]
+                win,
+                move |state: &ClientState, _| {
+                    match state.get_connection_state() {
+                        ConnectionState::WrongPassword => {
+                            this.show_preferences_error_dialog(
+                                "Incorrect password",
+                                "MPD has refused the provided password. Please note that if your MPD instance is not password-protected, providing one will also cause this error."
+                            );
+                        }
+                        ConnectionState::Unauthenticated => {
+                            this.show_preferences_error_dialog(
+                                "Authentication Failed",
+                                "Your MPD instance requires a password, which was either not provided or lacks the necessary privileges for Euphonica to function correctly."
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            )
+        );
+
         player.connect_notify_local(
             Some("album-art"),
             clone!(
@@ -547,6 +578,28 @@ impl EuphonicaWindow {
             .timeout(timeout)
             .build();
         self.imp().toast_overlay.add_toast(toast);
+    }
+
+    fn show_preferences_error_dialog(&self, heading: &str, body: &str) {
+        // Show an alert ONLY IF the preferences dialog is not already open.
+        if !self.visible_dialog().is_some() {
+            let diag = adw::AlertDialog::builder()
+                .heading(heading)
+                .body(body)
+                .build();
+            diag.add_response("close", "_Close");
+            diag.add_response("prefs", "Open _Preferences");
+            diag.set_response_appearance("prefs", adw::ResponseAppearance::Suggested);
+            diag.choose(self, Option::<gio::Cancellable>::None.as_ref(), clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |resp| {
+                    if resp == "prefs" {
+                        this.downcast_application().show_preferences();
+                    }
+                }
+            ));
+        }
     }
 
     fn update_player_bar_visibility(&self) {
@@ -656,7 +709,7 @@ impl EuphonicaWindow {
                 match state {
                     ConnectionState::NotConnected => Some("Not connected"),
                     ConnectionState::Connecting => Some("Connecting"),
-                    ConnectionState::Unauthenticated => Some("Unauthenticated"),
+                    ConnectionState::Unauthenticated | ConnectionState::WrongPassword => Some("Unauthenticated"),
                     ConnectionState::Connected => Some("Connected")
                 }
             })

@@ -784,8 +784,8 @@ impl Player {
         // Downstream widgets should now receive an item-changed signal.
     }
 
-    fn client(&self) -> Rc<MpdWrapper> {
-        self.imp().client.get().unwrap().clone()
+    fn client(&self) -> &Rc<MpdWrapper> {
+        self.imp().client.get().unwrap()
     }
 
     fn update_outputs(&self, outputs: BoxedAnyObject) {
@@ -1023,7 +1023,7 @@ impl Player {
     /// Won't start a new loop if there is already one or when polling is blocked by a seekbar.
     pub fn maybe_start_polling(&self) {
         let this = self.clone();
-        let client = self.client();
+        let client = self.client().clone();
         if self.imp().poller_handle.borrow().is_none() && !self.imp().poll_blocked.get() {
             let poller_handle = glib::MainContext::default().spawn_local(async move {
                 loop {

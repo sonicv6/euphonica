@@ -230,7 +230,7 @@ impl EuphonicaApplication {
         self.imp().client.clone().queue_background(BackgroundTask::Update);
     }
 
-    fn show_about(&self) {
+    pub fn show_about(&self) {
         let window = self.active_window().unwrap();
         let about = adw::AboutDialog::builder()
             .application_name("Euphonica")
@@ -248,7 +248,7 @@ impl EuphonicaApplication {
         about.present(Some(&window));
     }
 
-    fn show_preferences(&self) {
+    pub fn show_preferences(&self) {
         let window = self.active_window().unwrap();
         let prefs = Preferences::new(
             self.imp().client.clone(),
