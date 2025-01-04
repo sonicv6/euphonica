@@ -12,7 +12,12 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client, error::{Error as MpdError, ErrorCode as MpdErrorCode}, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Output, Playlist, Subsystem
+    client::Client,
+    error::{Error as MpdError, ErrorCode as MpdErrorCode},
+    lsinfo::LsInfoEntry,
+    search::{Operation as QueryOperation, Query, Term, Window},
+    song::Id,
+    Channel, Idle, Output, Playlist, Subsystem, SaveMode
 };
 use uuid::Uuid;
 
@@ -829,24 +834,29 @@ impl MpdWrapper {
         return Vec::with_capacity(0);
     }
 
-    pub fn save_queue_as_playlist(&self, name: &str) {
+    pub fn save_queue_as_playlist(&self, name: &str, save_mode: SaveMode) -> Result<(), Option<MpdError>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            match client.save(name) {
+            match client.save(name, Some(save_mode)) {
                 Ok(()) => {
                     self.state.set_supports_playlists(true);
+                    return Ok(());
                 }
-                Err(e) => match e {
-                    MpdError::Server(server_err) => {
-                        if server_err.detail.contains("disabled") {
-                            self.state.set_supports_playlists(false);
+                Err(e) => {
+                    match &e {
+                        MpdError::Server(server_err) => {
+                            if server_err.detail.contains("disabled") {
+                                self.state.set_supports_playlists(false);
+                            }
+                        }
+                        _ => {
+                            // Not handled yet
                         }
                     }
-                    _ => {
-                        // Not handled yet
-                    }
+                    return Err(Some(e));
                 }
             }
         }
+        return Err(None);
     }
 
     pub fn get_status(&self) -> Option<mpd::Status> {

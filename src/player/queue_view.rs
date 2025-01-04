@@ -2,20 +2,17 @@ use std::rc::Rc;
 
 use adw::subclass::prelude::*;
 use gtk::{
-    prelude::*,
-    gio,
-    glib,
-    CompositeTemplate,
-    SingleSelection,
-    SignalListItemFactory,
-    ListItem,
+    gio, glib::{self, closure_local}, prelude::*, CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection
 };
+use adw::prelude::*;
 use glib::clone;
+use mpd::{error::{Error as MpdError, ErrorCode as MpdErrorCode, ServerError}, SaveMode};
+
 use super::PlayerPane;
 
 use crate::{
     cache::Cache,
-    common::Song
+    common::Song, window::EuphonicaWindow
 };
 
 use super::{
@@ -24,7 +21,7 @@ use super::{
 };
 
 mod imp {
-    use std::cell::Cell;
+    use std::cell::{Cell, OnceCell};
 
     use glib::Properties;
 
@@ -48,12 +45,19 @@ mod imp {
         pub consume: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub clear_queue: TemplateChild<gtk::Button>,
-        #[template_child]
-        pub save: TemplateChild<gtk::MenuButton>,
         #[property(get, set)]
         pub collapsed: Cell<bool>,
         #[property(get, set)]
-        pub show_content: Cell<bool>
+        pub show_content: Cell<bool>,
+
+        #[template_child]
+        pub save: TemplateChild<gtk::MenuButton>,
+        #[template_child]
+        pub save_name: TemplateChild<gtk::Entry>,
+        #[template_child]
+        pub save_confirm: TemplateChild<gtk::Button>,
+
+        pub window: OnceCell<EuphonicaWindow>
     }
 
     #[glib::object_subclass]
@@ -230,12 +234,34 @@ impl QueueView {
         });
     }
 
+    fn show_save_error_dialog(&self, name: String, player: Player) {
+        // TODO: translatable
+        let diag = adw::AlertDialog::builder()
+            .heading("Playlist Exists")
+            .body(format!("A playlist named \"{}\" already exists. Would you like to overwrite or append to it?", &name))
+            .build();
+        diag.add_response("cancel", "_Cancel");
+        diag.add_response("append", "_Append");
+        diag.add_response("overwrite", "_Overwrite");
+        diag.set_response_appearance("append", adw::ResponseAppearance::Suggested);
+        diag.set_response_appearance("overwrite", adw::ResponseAppearance::Destructive);
+        diag.choose(self.imp().window.get().unwrap(), Option::<gio::Cancellable>::None.as_ref(), move |resp| {
+            match resp.as_str() {
+                "append" => {let _ = player.save_queue(&name, SaveMode::Append);}
+                "overwrite" => {let _ = player.save_queue(&name, SaveMode::Replace);}
+                _ => {}
+            }
+        });
+    }
+
     pub fn bind_state(&self, player: Player) {
         let player_queue = player.queue();
         let queue_title = self.imp().queue_title.get();
         let clear_queue_btn = self.imp().clear_queue.get();
         let consume = self.imp().consume.get();
         let save = self.imp().save.get();
+        let save_name = self.imp().save_name.get();
+        let save_confirm = self.imp().save_confirm.get();
         player_queue
             .bind_property(
                 "n-items",
@@ -265,6 +291,42 @@ impl QueueView {
             )
             .sync_create()
             .build();
+
+        save_name
+            .connect_closure(
+                "changed",
+                false,
+                closure_local!(
+                    #[weak]
+                    save_confirm,
+                    move |entry: gtk::Entry| {
+                        save_confirm.set_sensitive(entry.text_length() > 0)
+                    }
+                )
+            );
+
+        save_confirm.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[weak]
+            player,
+            #[weak]
+            save,
+            move |_| {
+                // Close the popover first, then save.
+                save.set_active(false);
+                let name = save_name.buffer().text().as_str().to_owned();
+                match player.save_queue(&name, SaveMode::Create) {
+                    Ok(()) => {}
+                    Err(e) => match e {
+                        Some(MpdError::Server(ServerError {code: MpdErrorCode::Exist, pos: _, command: _, detail: _})) => {
+                            this.show_save_error_dialog(name, player);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        ));
 
         player
             .bind_property(
@@ -308,7 +370,7 @@ impl QueueView {
         }));
     }
 
-    pub fn setup(&self, player: Player, cache: Rc<Cache>) {
+    pub fn setup(&self, player: Player, cache: Rc<Cache>, window: EuphonicaWindow) {        let _ = self.imp().window.set(window);
         self.setup_listview(player.clone(), cache);
         self.imp().player_pane.setup(player.clone());
         self.bind_state(player);

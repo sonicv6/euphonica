@@ -19,7 +19,13 @@ use adw::subclass::prelude::*;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject};
 use gtk::{gdk::Texture, glib::clone};
 use gtk::{gio, glib, prelude::*};
-use mpd::{status::{AudioFormat, State, Status}, ReplayGain, Subsystem};
+use mpd::{
+    status::{AudioFormat, State, Status},
+    ReplayGain,
+    Subsystem,
+    SaveMode,
+    error::Error as MpdError
+};
 use std::{
     cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
 };
@@ -1039,6 +1045,10 @@ impl Player {
                 }
             }
         }
+    }
+
+    pub fn save_queue(&self, name: &str, save_mode: SaveMode) -> Result<(), Option<MpdError>> {
+        return self.client().save_queue_as_playlist(name, save_mode);
     }
 
     /// Periodically poll for player progress to update seekbar.
