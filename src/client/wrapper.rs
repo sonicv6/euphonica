@@ -37,9 +37,6 @@ enum AsyncClientMessage {
     Disconnect,
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
-    // Return downloaded & resized album arts (hires and thumbnail respectively)
-	// AlbumArtDownloaded(String, DynamicImage, DynamicImage),
-    // AlbumArtNotAvailable(String), // For triggering downloading from other sources
     AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model.
     AlbumSongInfoDownloaded(String, Vec<SongInfo>), // Return songs in the album with the given tag (batched)
     ArtistBasicInfoDownloaded(ArtistInfo), // Return new artist to be added to the list model.
@@ -549,18 +546,6 @@ impl MpdWrapper {
             AsyncClientMessage::Connect => self.connect_async().await,
             AsyncClientMessage::Disconnect => self.disconnect_async().await,
             AsyncClientMessage::Idle(changes) => self.handle_idle_changes(changes).await,
-            // AsyncClientMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
-            //     "album-art-downloaded",
-            //     &[
-            //         &folder_uri,
-            //         &BoxedAnyObject::new(hires),
-            //         &BoxedAnyObject::new(thumb),
-            //     ]
-            // ),
-            // AsyncClientMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
-            //     "album-art-not-available",
-            //     folder_uri
-            // ),
             AsyncClientMessage::AlbumBasicInfoDownloaded(info) => self.on_album_downloaded(
                 "album-basic-info-downloaded",
                 None,
