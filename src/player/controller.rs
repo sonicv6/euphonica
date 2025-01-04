@@ -184,7 +184,8 @@ mod imp {
         pub poll_blocked: Cell<bool>,
         pub mpris_server: AsyncOnceCell<LocalServer<super::Player>>,
         pub mpris_enabled: Cell<bool>,
-        pub app: OnceCell<EuphonicaApplication>
+        pub app: OnceCell<EuphonicaApplication>,
+        pub supports_playlists: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -198,6 +199,7 @@ mod imp {
                 position: Cell::new(0.0),
                 random: Cell::new(false),
                 consume: Cell::new(false),
+                supports_playlists: Cell::new(false),
                 replaygain: Cell::new(ReplayGain::Off),
                 crossfade: Cell::new(0.0),
                 mixramp_db: Cell::new(0.0),
@@ -234,6 +236,7 @@ mod imp {
                     ParamSpecDouble::builder("mixramp-delay").build(), // seconds
                     ParamSpecBoolean::builder("random").build(),
                     ParamSpecBoolean::builder("consume").build(),
+                    ParamSpecBoolean::builder("supports-playlists").build(),
                     ParamSpecDouble::builder("position").build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
@@ -259,6 +262,7 @@ mod imp {
                 "playback-flow" => self.flow.get().to_value(),
                 "random" => self.random.get().to_value(),
                 "consume" => self.consume.get().to_value(),
+                "supports-playlists" => self.supports_playlists.get().to_value(),
                 "crossfade" => self.crossfade.get().to_value(),
                 "mixramp-db" => self.mixramp_db.get().to_value(),
                 "mixramp-delay" => self.mixramp_delay.get().to_value(),
@@ -312,6 +316,12 @@ mod imp {
                         obj.set_consume(state);
                         // Don't actually set the property here yet.
                         // Idle status will update it later.
+                    }
+                }
+                "supports-playlists" => {
+                    if let Ok(state) = value.get::<bool>() {
+                        self.supports_playlists.replace(state);
+                        obj.notify("supports-playlists");
                     }
                 }
                 _ => unimplemented!(),
@@ -385,9 +395,21 @@ impl Player {
                     if let Some(outs) = this.client().get_outputs() {
                         this.update_outputs(glib::BoxedAnyObject::new(outs));
                     }
+
+                    // TODO: actual playlists widget
+                    let _ = this.client().get_playlists();
                 }
             }
         ));
+        client_state
+            .bind_property(
+                "supports-playlists",
+                self,
+                "supports-playlists"
+            )
+            .sync_create()
+            .build();
+
         client_state.connect_closure(
             "idle",
             false,

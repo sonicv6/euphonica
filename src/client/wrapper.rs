@@ -12,12 +12,7 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client,
-    error::{Error as MpdError, ErrorCode as MpdErrorCode},
-    lsinfo::LsInfoEntry,
-    search::{Operation as QueryOperation, Query, Term, Window},
-    song::Id,
-    Channel, Idle, Output, Subsystem
+    client::Client, error::{Error as MpdError, ErrorCode as MpdErrorCode}, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Output, Playlist, Subsystem
 };
 use uuid::Uuid;
 
@@ -760,29 +755,39 @@ impl MpdWrapper {
         }
     }
 
-    fn get_sticker(&self, typ: &str, uri: &str, name: &str) {
+    pub fn get_sticker(&self, typ: &str, uri: &str, name: &str) -> Option<String> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let res = client.sticker(typ, uri, name);
-            if let Ok(sticker) = res {
-                self.state.emit_by_name::<()>("sticker-downloaded", &[
-                    &typ.to_value(),
-                    &uri.to_value(),
-                    &name.to_value(),
-                    &sticker.to_value()
-                ]);
-            }
-            else if let Err(error) = res {
-                match error {
+            match client.sticker(typ, uri, name) {
+                Ok(sticker) => {
+                    self.state.set_supports_stickers(true);
+                    return Some(sticker);
+                }
+                Err(error) => {
+                    match error {
                     MpdError::Server(server_err) => {
                         if server_err.detail.contains("disabled") {
-                            self.state.emit_by_name::<()>("sticker-db-disabled", &[]);
+                            self.state.set_supports_stickers(false);
                         }
-                        else if server_err.detail.contains("no such sticker") {
-                            self.state.emit_by_name::<()>("sticker-not-found", &[
-                                &typ.to_value(),
-                                &uri.to_value(),
-                                &name.to_value(),
-                            ]);
+                    }
+                    _ => {
+                        // Not handled yet
+                    }
+                };
+                return None;
+                }
+            }
+        }
+        return None;
+    }
+
+    pub fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.set_sticker(typ, uri, name, value) {
+                Ok(()) => self.state.set_supports_stickers(true),
+                Err(err) => match err {
+                    MpdError::Server(server_err) => {
+                        if server_err.detail.contains("disabled") {
+                            self.state.set_supports_stickers(false);
                         }
                     }
                     _ => {
@@ -793,11 +798,56 @@ impl MpdWrapper {
         }
     }
 
-    fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
+    pub fn get_playlists(&self) -> Vec<Playlist> {
+        // TODO: Might want to move to child thread
+        println!("GETTING PLAYLISTS");
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let _ = client.set_sticker(typ, uri, name, value);
+            match client.playlists() {
+                Ok(playlists) => {
+                    println!("Playlists are supported!");
+                    self.state.set_supports_playlists(true);
+                    return playlists;
+                }
+                Err(e) => match e {
+                    MpdError::Server(server_err) => {
+                        self.state.set_supports_playlists(false);
+                        if server_err.detail.contains("disabled") {
+                            println!("Playlists are not supported.");
+
+                        }
+                        else {
+                            println!("get_playlists: {:?}", server_err);
+                        }
+                    }
+                    _ => {
+                        println!("get_playlists: {:?}", e);
+                        // Not handled yet
+                    }
+                }
+            }
         }
-    } 
+        return Vec::with_capacity(0);
+    }
+
+    pub fn save_queue_as_playlist(&self, name: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.save(name) {
+                Ok(()) => {
+                    self.state.set_supports_playlists(true);
+                }
+                Err(e) => match e {
+                    MpdError::Server(server_err) => {
+                        if server_err.detail.contains("disabled") {
+                            self.state.set_supports_playlists(false);
+                        }
+                    }
+                    _ => {
+                        // Not handled yet
+                    }
+                }
+            }
+        }
+    }
 
     pub fn get_status(&self) -> Option<mpd::Status> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
@@ -1028,32 +1078,6 @@ impl MpdWrapper {
                 signal_name,
                 &[
                     &Album::from(info)
-                ]
-            );
-        }
-    }
-
-    fn on_artist_downloaded(
-        &self,
-        signal_name: &str,
-        tag: Option<String>,  // For future features, such as fetching artists in album content view
-        info: ArtistInfo
-    ) {
-        // Append to listener lists
-        if let Some(tag) = tag {
-            self.state.emit_by_name::<()>(
-                signal_name,
-                &[
-                    &tag,
-                    &BoxedAnyObject::new(Artist::from(info))
-                ]
-            );
-        }
-        else {
-            self.state.emit_by_name::<()>(
-                signal_name,
-                &[
-                    &BoxedAnyObject::new(Artist::from(info))
                 ]
             );
         }

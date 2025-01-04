@@ -48,6 +48,8 @@ mod imp {
         pub consume: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub clear_queue: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub save: TemplateChild<gtk::MenuButton>,
         #[property(get, set)]
         pub collapsed: Cell<bool>,
         #[property(get, set)]
@@ -233,6 +235,7 @@ impl QueueView {
         let queue_title = self.imp().queue_title.get();
         let clear_queue_btn = self.imp().clear_queue.get();
         let consume = self.imp().consume.get();
+        let save = self.imp().save.get();
         player_queue
             .bind_property(
                 "n-items",
@@ -251,6 +254,42 @@ impl QueueView {
             )
             // TODO: l10n
             .transform_to(|_, size: u32| {format_song_count(size)})
+            .sync_create()
+            .build();
+
+        player
+            .bind_property(
+                "supports-playlists",
+                &save,
+                "visible"
+            )
+            .sync_create()
+            .build();
+
+        player
+            .bind_property(
+                "consume",
+                &consume,
+                "icon-name"
+            )
+            .transform_to(|_, is_consuming: bool| {
+                if is_consuming {Some("consume-on-symbolic")}
+                else {Some("consume-off-symbolic")}
+            })
+            .sync_create()
+            .build();
+
+        player
+            .bind_property(
+                "consume",
+                &consume,
+                "tooltip-text"
+            )
+            .transform_to(|_, is_consuming: bool| {
+                // TODO: translatable
+                if !is_consuming {Some("Consume mode: off")}
+                else {Some("Consume mode: on. Songs will be removed from the queue once played.")}
+            })
             .sync_create()
             .build();
 
