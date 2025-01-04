@@ -1,7 +1,4 @@
-use std::{
-    cell::{RefCell, OnceCell},
-    rc::Rc
-};
+use std::cell::{RefCell, OnceCell};
 use gtk::{
     glib,
     prelude::*,
@@ -10,14 +7,10 @@ use gtk::{
 };
 use glib::{
     clone,
-    Object,
-    SignalHandlerId
+    Object
 };
 
-use crate::{
-    cache::Cache,
-    common::{INode, INodeType}
-};
+use crate::common::INode;
 
 use super::Library;
 

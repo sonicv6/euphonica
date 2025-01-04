@@ -1,4 +1,5 @@
-use async_channel::Sender;
+use std::rc::Rc;
+use keyring::Entry;
 
 use adw::subclass::prelude::*;
 use adw::prelude::*;
@@ -10,7 +11,7 @@ use gtk::{
 use glib::clone;
 
 use crate::{
-    client::{MpdMessage, ClientState, ConnectionState},
+    client::{ClientState, ConnectionState, MpdWrapper},
     utils
 };
 
@@ -24,6 +25,8 @@ mod imp {
         pub mpd_host: TemplateChild<adw::EntryRow>,
         #[template_child]
         pub mpd_port: TemplateChild<adw::EntryRow>,
+        #[template_child]
+        pub mpd_password: TemplateChild<adw::PasswordEntryRow>,
         #[template_child]
         pub mpd_status: TemplateChild<adw::ActionRow>,
         #[template_child]
@@ -84,6 +87,18 @@ impl ClientPreferences {
                     self.imp().reconnect.set_sensitive(true);
                 }
             },
+            ConnectionState::CredentialStoreError => {
+                self.imp().mpd_status.set_subtitle("Credential store error");
+                if !self.imp().mpd_port.has_css_class("error") {
+                    self.imp().reconnect.set_sensitive(true);
+                }
+            }
+            ConnectionState::WrongPassword => {
+                self.imp().mpd_status.set_subtitle("Incorrect password");
+                if !self.imp().mpd_port.has_css_class("error") {
+                    self.imp().reconnect.set_sensitive(true);
+                }
+            },
             ConnectionState::Connected => {
                 self.imp().mpd_status.set_subtitle("Connected");
                 if !self.imp().mpd_port.has_css_class("error") {
@@ -93,8 +108,9 @@ impl ClientPreferences {
         }
     }
 
-    pub fn setup(&self, sender: Sender<MpdMessage>, client_state: ClientState) {
+    pub fn setup(&self, client: Rc<MpdWrapper>) {
         let imp = self.imp();
+        let client_state = client.clone().get_client_state();
         // Populate with current gsettings values
         let settings = utils::settings_manager();
         // These should only be saved when the Apply button is clicked.
@@ -102,6 +118,19 @@ impl ClientPreferences {
         let conn_settings = settings.child("client");
         imp.mpd_host.set_text(&conn_settings.string("mpd-host"));
         imp.mpd_port.set_text(&conn_settings.uint("mpd-port").to_string());
+        let maybe_keyring_entry = Entry::new("euphonica", "mpd-password");
+        if let Ok(ref keyring_entry) = maybe_keyring_entry {
+            // At startup the password entry is disabled with a tooltip stating that
+            // the credential store is not available.
+            imp.mpd_password.set_sensitive(true);
+            imp.mpd_password.set_tooltip_text(None);
+            match keyring_entry.get_password() {
+                Ok(password) => {
+                    imp.mpd_password.set_text(&password);
+                }
+                _ => {}
+            }
+        }
 
         // TODO: more input validation
         // Prevent entering anything other than digits into the port entry row
@@ -141,12 +170,26 @@ impl ClientPreferences {
             self,
             #[strong]
             conn_settings,
-            #[strong]
-            sender,
+            #[weak]
+            client,
             move |_| {
                 let _ = conn_settings.set_string("mpd-host", &this.imp().mpd_host.text());
                 let _ = conn_settings.set_uint("mpd-port", this.imp().mpd_port.text().parse::<u32>().unwrap());
-                let _ = sender.send_blocking(MpdMessage::Connect);
+
+                if let Ok(ref keyring_entry) = maybe_keyring_entry {
+                    let password = this.imp().mpd_password.text();
+                    if password.is_empty() {
+                        keyring_entry
+                            .delete_credential()
+                            .expect("Unable to clear saved MPD password from keyring");
+                    }
+                    else {
+                        keyring_entry
+                            .set_password(password.as_str())
+                            .expect("Unable to save MPD password to keyring");
+                    }
+                }
+                let _ = client.queue_connect();
             }
         ));
         let mpd_download_album_art = imp.mpd_download_album_art.get();

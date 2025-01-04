@@ -1,21 +1,13 @@
-use std::{
-    cell::Cell,
-    sync::OnceLock
-};
-use gtk::{
-    glib,
-    gdk::Texture
-};
+use std::sync::OnceLock;
+use gtk::glib;
 use glib::{
     prelude::*,
     subclass::{
         prelude::*,
         Signal
-    },
-    BoxedAnyObject
+    }
 };
 
-use crate::common::Album;
 
 mod imp {
     // use glib::{
@@ -24,7 +16,7 @@ mod imp {
     //     ParamSpecEnum
     // };
     use super::*;
-    use once_cell::sync::Lazy;
+    
 
     #[derive(Debug, Default)]
     pub struct CacheState {}

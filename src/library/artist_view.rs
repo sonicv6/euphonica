@@ -6,7 +6,7 @@ use std::{
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{
-    gio, glib::{self, closure_local}, CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection, Widget
+    gio, glib::{self, closure_local}, CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection
 };
 
 use glib::clone;
@@ -21,9 +21,9 @@ use crate::{
 };
 
 mod imp {
-    use std::{cell::OnceCell, sync::OnceLock};
+    
 
-    use glib::subclass::Signal;
+    
 
     use super::*;
 

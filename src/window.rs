@@ -18,19 +18,26 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::{cell::RefCell, path::PathBuf, thread, time::Duration};
+use std::{cell::RefCell, ops::Deref, path::PathBuf, thread, time::Duration};
 use adw::{
     prelude::*,
     subclass::prelude::*
 };
 use gtk::{
-    gdk, gio, glib::{self, clone, closure_local}
+    gdk, gio, glib::{self, clone, closure_local, BoxedAnyObject}
 };
 use glib::signal::SignalHandlerId;
 use image::{imageops::FilterType, DynamicImage};
 use libblur::{stack_blur, FastBlurChannels, ThreadingPolicy};
+use mpd::Subsystem;
 use crate::{
-    application::EuphonicaApplication, client::{ClientState, ConnectionState}, common::Album, library::{AlbumView, ArtistContentView, ArtistView}, player::{PlayerBar, QueueView}, sidebar::Sidebar, utils::{self, settings_manager}
+    application::EuphonicaApplication,
+    client::{ClientState, ConnectionState},
+    common::Album,
+    library::{AlbumView, ArtistContentView, ArtistView},
+    player::{PlayerBar, QueueView},
+    sidebar::Sidebar,
+    utils::{self, settings_manager}
 };
 
 #[derive(Debug)]
@@ -455,16 +462,55 @@ impl EuphonicaWindow {
         let player = app.get_player();
         win.queue_new_background();
         client_state.connect_closure(
-            "database-updated",
+            "idle",
             false,
             closure_local!(
                 #[weak(rename_to = this)]
                 win,
-                move |_: ClientState| {
-                    this.send_simple_toast("Database updated with changes", 3);
+                move |_: ClientState, subsys: BoxedAnyObject| {
+                    match subsys.borrow::<Subsystem>().deref() {
+                        Subsystem::Database => {
+                            this.send_simple_toast("Database updated with changes", 3);
+                        }
+                        _ => {}
+                    }
                 }
             )
         );
+        client_state.connect_notify_local(
+            Some("connection-state"),
+            clone!(
+                #[weak(rename_to = this)]
+                win,
+                move |state: &ClientState, _| {
+                    match state.get_connection_state() {
+                        ConnectionState::WrongPassword => {
+                            this.show_error_dialog(
+                                "Incorrect password",
+                                "MPD has refused the provided password. Please note that if your MPD instance is not password-protected, providing one will also cause this error.",
+                                true
+                            );
+                        }
+                        ConnectionState::Unauthenticated => {
+                            this.show_error_dialog(
+                                "Authentication Failed",
+                                "Your MPD instance requires a password, which was either not provided or lacks the necessary privileges for Euphonica to function correctly.",
+                                true
+                            );
+                        }
+                        ConnectionState::CredentialStoreError => {
+                            this.show_error_dialog(
+                                "Credential Store Error",
+                                "Your MPD instance requires a password, but Euphonica could not access your default credential store to retrieve it. Please ensure that it has been unlocked before starting Euphonica.",
+                                false
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            )
+        );
+
         player.connect_notify_local(
             Some("album-art"),
             clone!(
@@ -543,6 +589,33 @@ impl EuphonicaWindow {
         self.imp().toast_overlay.add_toast(toast);
     }
 
+    fn show_error_dialog(&self, heading: &str, body: &str, suggest_open_preferences: bool) {
+        // Show an alert ONLY IF the preferences dialog is not already open.
+        if !self.visible_dialog().is_some() {
+            let diag = adw::AlertDialog::builder()
+                .heading(heading)
+                .body(body)
+                .build();
+            diag.add_response("close", "_Close");
+            if suggest_open_preferences {
+                diag.add_response("prefs", "Open _Preferences");
+                diag.set_response_appearance("prefs", adw::ResponseAppearance::Suggested);
+                diag.choose(self, Option::<gio::Cancellable>::None.as_ref(), clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |resp| {
+                        if resp == "prefs" {
+                            this.downcast_application().show_preferences();
+                        }
+                    }
+                ));
+            }
+            else {
+                diag.present(Some(self));
+            }
+        }
+    }
+
     fn update_player_bar_visibility(&self) {
         let revealer = self.imp().player_bar_revealer.get();
         if self.imp().sidebar.showing_queue_view() {
@@ -580,9 +653,7 @@ impl EuphonicaWindow {
         if let Some(player) = self.imp().player.get() {
             if let Some(sender) =  self.imp().sender_to_bg.get() {
                 if let Some(path) = player.current_song_album_art_path(true) {
-                    println!("Got path: {:?}", &path);
                     if path.exists() {
-                        println!("Path exists!");
                         let settings = settings_manager().child("player");
                         let config = BlurConfig {
                             width: self.width() as u32,
@@ -652,7 +723,9 @@ impl EuphonicaWindow {
                 match state {
                     ConnectionState::NotConnected => Some("Not connected"),
                     ConnectionState::Connecting => Some("Connecting"),
-                    ConnectionState::Unauthenticated => Some("Unauthenticated"),
+                    ConnectionState::Unauthenticated |
+                    ConnectionState::WrongPassword |
+                    ConnectionState::CredentialStoreError => Some("Unauthenticated"),
                     ConnectionState::Connected => Some("Connected")
                 }
             })

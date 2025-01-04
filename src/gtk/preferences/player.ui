@@ -16,7 +16,7 @@
         <child>
           <object class="AdwSpinRow" id="bg_blur_radius">
             <property name="title" translatable="true">Background blur radius (pixels)</property>
-            <property name="subtitle" translatable="true">Higher values may affect performance. Set to 0 to disable blur.</property>
+            <property name="subtitle" translatable="true">Set to 0 to disable blur.</property>
             <property name="adjustment">
               <object class="GtkAdjustment">
                 <property name="lower">0</property>
@@ -99,7 +99,7 @@
     <child>
       <object class="AdwPreferencesGroup">
         <property name="title" translatable="true">MPRIS</property>
-        <property name="description" translatable="true">Euphonica can be controlled from your shell or other applications via the MPRIS protocol.</property>
+        <property name="description" translatable="true">Control Euphonica from your shell or other applications via the MPRIS protocol.</property>
         <child>
           <object class="AdwSwitchRow" id="enable_mpris">
             <property name="title" translatable="true">Enable MPRIS integration</property>

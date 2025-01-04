@@ -2,12 +2,11 @@ extern crate mpd;
 use crate::{
     application::EuphonicaApplication,
     cache::Cache,
-    client::{ClientState, MpdMessage},
+    client::{ClientState, ConnectionState, MpdWrapper},
     common::{AlbumInfo, QualityGrade, Song},
     utils::{prettify_audio_format, settings_manager}
 };
 use async_lock::OnceCell as AsyncOnceCell;
-use image::DynamicImage;
 use mpris_server::{
     zbus::{self, fdo},
     LocalPlayerInterface, LocalRootInterface, LocalServer,
@@ -17,13 +16,12 @@ use mpris_server::{
 };
 
 use adw::subclass::prelude::*;
-use async_channel::Sender;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject};
 use gtk::{gdk::Texture, glib::clone};
 use gtk::{gio, glib, prelude::*};
-use mpd::{status::{AudioFormat, State, Status}, ReplayGain};
+use mpd::{status::{AudioFormat, State, Status}, ReplayGain, Subsystem};
 use std::{
-    cell::{Cell, OnceCell, RefCell}, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
+    cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
 };
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
@@ -173,7 +171,7 @@ mod imp {
         // Changes not big enough to cause an integer change
         // will not be sent to MPD.
         pub volume: Cell<i8>,
-        pub client_sender: OnceCell<Sender<MpdMessage>>,
+        pub client: OnceCell<Rc<MpdWrapper>>,
         // Direct reference to the cache object for fast path to
         // album arts (else we'd have to wait for signals, then
         // loop through the whole queue & search for songs matching
@@ -208,7 +206,7 @@ mod imp {
                 current_song: RefCell::new(None),
                 format: RefCell::new(None),
                 flow: Cell::default(),
-                client_sender: OnceCell::new(),
+                client: OnceCell::new(),
                 cache: OnceCell::new(),
                 volume: Cell::new(0),
                 poller_handle: RefCell::new(None),
@@ -363,58 +361,64 @@ impl Player {
     pub fn setup(
         &self,
         application: EuphonicaApplication,
-        client_sender: Sender<MpdMessage>,
-        client_state: ClientState,
+        client: Rc<MpdWrapper>,
         cache: Rc<Cache>
     ) {
-        let _ = self.imp().client_sender.set(client_sender);
+        let client_state = client.clone().get_client_state();
+        let _ = self.imp().client.set(client);
         let _ = self.imp().cache.set(cache);
         let _ = self.imp().app.set(application);
-        // Connect to ClientState signals that announce completion of requests
+        // Connect to ClientState signals
+        client_state.connect_notify_local(Some("connection-state"), clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |state, _| {
+                if state.get_connection_state() == ConnectionState::Connected {
+                    // Newly-connected? Get initial status
+                    // Remember to get queue before status so status parsing has something to read off.
+                    if let Some(songs) = this.client().get_current_queue() {
+                        this.update_queue(&songs, true);
+                    }
+                    if let Some(status) = this.client().get_status() {
+                        this.update_status(&status);
+                    }
+                    if let Some(outs) = this.client().get_outputs() {
+                        this.update_outputs(glib::BoxedAnyObject::new(outs));
+                    }
+                }
+            }
+        ));
         client_state.connect_closure(
-            "status-changed",
+            "idle",
             false,
             closure_local!(
-                #[strong(rename_to = this)]
+                #[weak(rename_to = this)]
                 self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    this.update_status(&boxed.borrow());
+                move |_: ClientState, subsys: glib::BoxedAnyObject| {
+                    match subsys.borrow::<Subsystem>().deref() {
+                        Subsystem::Player | Subsystem::Options => {
+                            if let Some(status) = this.client().get_status() {
+                                this.update_status(&status);
+                            }
+                        }
+                        Subsystem::Queue => {
+                            if let Some(songs) = this.client().get_queue_changes() {
+                                this.update_queue(&songs, false);
+                            }
+                            // Need to also update queue length
+                            if let Some(status) = this.client().get_status() {
+                                this.update_status(&status);
+                            }
+                        }
+                        Subsystem::Output => {
+                            if let Some(outs) = this.client().get_outputs() {
+                                this.update_outputs(glib::BoxedAnyObject::new(outs));
+                            }
+                        }
+                        _ => {}
+                    }
                 }
-            ),
-        );
-        client_state.connect_closure(
-            "queue-changed",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    this.update_queue(boxed.borrow::<Vec<Song>>().as_ref(), false);
-                }
-            ),
-        );
-        client_state.connect_closure(
-            "queue-replaced",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    this.update_queue(boxed.borrow::<Vec<Song>>().as_ref(), true);
-                }
-            ),
-        );
-        client_state.connect_closure(
-            "outputs-changed",
-            false,
-            closure_local!(
-                #[strong(rename_to = this)]
-                self,
-                move |_: ClientState, boxed: BoxedAnyObject| {
-                    // Forward to bar
-                    this.update_outputs(boxed);
-                }
-            ),
+            )
         );
 
         let settings = settings_manager().child("player");
@@ -479,18 +483,6 @@ impl Player {
                 }
             ),
         );
-    }
-
-    // Utility functions
-    fn send(&self, msg: MpdMessage) -> Result<(), &str> {
-        if let Some(sender) = self.imp().client_sender.get() {
-            let res = sender.send_blocking(msg);
-            if res.is_err() {
-                return Err("Sender error");
-            }
-            return Ok(());
-        }
-        Err("Could not borrow sender")
     }
 
     // Update functions
@@ -633,7 +625,7 @@ impl Player {
         if let Some(new_queue_place) = status.song {
             // There is now a playing song.
             // Check if there was one and whether it is different from the one playing now.
-            let new_id: u32 = new_queue_place.id.0;
+            // let new_id: u32 = new_queue_place.id.0;
             let new_pos: u32 = new_queue_place.pos;
             let new_song = self
                 .imp()
@@ -644,39 +636,46 @@ impl Player {
                 .expect("Queue has to contain common::Song objects");
             // Set playing status
             new_song.set_is_playing(true); // this whole thing would only run if playback state is not Stopped
-            let exists_and_different = self.imp().current_song.borrow().as_ref().is_some_and(|song| {
-                song.get_queue_id() != new_id
-            });
-            let previously_none = self.imp().current_song.borrow().is_none();
-            if exists_and_different || previously_none {
-                // Requires change notification
-                let old_song = self.imp().current_song.replace(Some(new_song.clone()));
-                if let Some(song) = &old_song {
-                    song.set_is_playing(false);
+            // Always replace current song to ensure we're pointing at something on the queue.
+            // This is because a partial queue update may replace the current song with another instance of the
+            // same song (for example, when deleting a song before it from the queue).
+            let maybe_old_song = self.imp().current_song.replace(Some(new_song.clone()));
+            if let Some(old_song) = maybe_old_song {
+                if old_song.get_queue_id() != new_song.get_queue_id() {
+                    old_song.set_is_playing(false);
+                    // There was nothing playing previously. Update the following now:
+                    self.notify("title");
+                    self.notify("artist");
+                    self.notify("duration");
+                    self.notify("quality-grade");
+                    self.notify("format-desc");
+                    // Avoid needlessly changing album art as background blur updates are expensive.
+                    if new_song.get_album_title() != old_song.get_album_title() {
+                        self.notify("album");
+                        self.notify("album-art");
+                    }
+                    // Update MPRIS side
+                    if self.imp().mpris_enabled.get() {
+                        mpris_changes.push(Property::Metadata(new_song.get_mpris_metadata(
+                            self.imp().cache.get().unwrap().clone())
+                        ));
+                    }
                 }
-                // Remove playing status
+            }
+            else {
+                // There was nothing playing previously. Update the following now:
                 self.notify("title");
                 self.notify("artist");
                 self.notify("duration");
                 self.notify("quality-grade");
                 self.notify("format-desc");
-                // Avoid needlessly changing album art as background blur updates are expensive.
-                if (old_song.is_none()) || (new_song.get_album_title() != old_song.unwrap().get_album_title()) {
-                    self.notify("album");
-                    self.notify("album-art");
-                }
-
-                // Update MPRIS side
-                if self.imp().mpris_enabled.get() {
-                    mpris_changes.push(Property::Metadata(new_song.get_mpris_metadata(
-                        self.imp().cache.get().unwrap().clone())
-                    ));
-                }
+                self.notify("album");
+                self.notify("album-art");
             }
-            else if let Some(song) = self.imp().current_song.borrow().as_ref() {
-                // Just update pos. It's cheap so no need to check.
-                song.set_queue_pos(new_pos);
-            }
+            // else if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            //     // Just update pos. It's cheap so no need to check.
+            //     song.set_queue_pos(new_pos);
+            // }
         } else {
             // No song is playing. Update state accordingly.
             let was_playing = self.imp().current_song.borrow().as_ref().is_some(); // end borrow
@@ -785,12 +784,16 @@ impl Player {
         // Downstream widgets should now receive an item-changed signal.
     }
 
+    fn client(&self) -> &Rc<MpdWrapper> {
+        self.imp().client.get().unwrap()
+    }
+
     fn update_outputs(&self, outputs: BoxedAnyObject) {
         self.emit_by_name::<()>("outputs-changed", &[&outputs]);
     }
 
     pub fn set_output(&self, id: u32, state: bool) {
-        self.send(MpdMessage::Output(id, state)).ok();
+        self.client().set_output(id, state);
     }
 
     // Here we try to define getters and setters in terms of the GObject
@@ -798,32 +801,32 @@ impl Player {
     // internal fields.
     pub fn cycle_playback_flow(&self) {
         let next_flow = self.imp().flow.get().next_in_cycle();
-        self.send(MpdMessage::SetPlaybackFlow(next_flow)).ok();
+        self.client().set_playback_flow(next_flow);
     }
 
     pub fn cycle_replaygain(&self) {
         let next_rg = cycle_replaygain(self.imp().replaygain.get());
-        self.send(MpdMessage::ReplayGain(next_rg)).ok();
+        self.client().set_replaygain(next_rg);
     }
 
     pub fn set_random(&self, new: bool) {
-        self.send(MpdMessage::Random(new)).ok();
+        self.client().set_random(new);
     }
 
     pub fn set_consume(&self, new: bool) {
-        self.send(MpdMessage::Consume(new)).ok();
+        self.client().set_consume(new);
     }
 
     pub fn set_crossfade(&self, new: f64) {
-        self.send(MpdMessage::Crossfade(new)).ok();
+        self.client().set_crossfade(new);
     }
 
     pub fn set_mixramp_db(&self, new: f32) {
-        self.send(MpdMessage::MixRampDb(new)).ok();
+        self.client().set_mixramp_db(new);
     }
 
     pub fn set_mixramp_delay(&self, new: f64) {
-        self.send(MpdMessage::MixRampDelay(new)).ok();
+        self.client().set_mixramp_delay(new);
     }
 
     pub fn title(&self) -> Option<String> {
@@ -934,7 +937,7 @@ impl Player {
 
     /// Seek to current position. Called when the seekbar is released.
     pub fn send_seek(&self) {
-        self.send(MpdMessage::SeekCur(self.position())).ok();
+        self.client().seek_current_song(self.position());
     }
 
     pub fn queue(&self) -> gio::ListStore {
@@ -942,11 +945,11 @@ impl Player {
     }
 
     fn send_play(&self) {
-        self.send(MpdMessage::Play).ok();
+        self.client().pause(false);
     }
 
     fn send_pause(&self) {
-        self.send(MpdMessage::Pause).ok();
+        self.client().pause(true);
     }
 
     pub fn toggle_playback(&self) {
@@ -960,7 +963,7 @@ impl Player {
                 // Check if queue is not empty
                 if self.queue().n_items() > 0 {
                     // Start playing first song in queue.
-                    self.send(MpdMessage::PlayPos(0)).ok();
+                    self.client().play_at(0, false);
                 } else {
                     println!("Queue is empty; nothing to play");
                 }
@@ -975,42 +978,42 @@ impl Player {
     }
 
     pub fn prev_song(&self) {
-        self.send(MpdMessage::Prev).ok();
+        self.client().prev();
     }
 
     pub fn next_song(&self) {
-        self.send(MpdMessage::Next).ok();
+        self.client().next();
     }
 
     pub fn clear_queue(&self) {
-        self.send(MpdMessage::Clear).ok();
+        self.client().clear_queue();
     }
 
     pub fn send_set_volume(&self, val: i8) {
         let old_vol = self.imp().volume.replace(val);
         if old_vol != val {
-            self.send(MpdMessage::Volume(val)).ok();
+            self.client().volume(val);
         }
     }
 
     pub fn on_song_clicked(&self, song: Song) {
-        self.send(MpdMessage::PlayId(song.get_queue_id())).ok();
+        self.client().play_at(song.get_queue_id(), true);
     }
 
     pub fn remove_song_id(&self, id: u32) {
-        self.send(MpdMessage::DeleteId(id)).ok();
+        self.client().delete_at(id, true);
     }
 
     pub fn swap_dir(&self, pos: u32, direction: SwapDirection) {
         match direction {
             SwapDirection::Up => {
                 if pos > 0 {
-                    self.send(MpdMessage::Swap(pos, pos - 1)).ok();
+                    self.client().swap(pos, pos - 1, false);
                 }
             }
             SwapDirection::Down => {
                 if pos < self.imp().queue.n_items() - 1 {
-                    self.send(MpdMessage::Swap(pos, pos + 1)).ok();
+                    self.client().swap(pos, pos + 1, false);
                 }
             }
         }
@@ -1020,14 +1023,14 @@ impl Player {
     /// Won't start a new loop if there is already one or when polling is blocked by a seekbar.
     pub fn maybe_start_polling(&self) {
         let this = self.clone();
-        let sender = self.imp().client_sender.get().expect("Fatal: Player controller not set up").clone();
+        let client = self.client().clone();
         if self.imp().poller_handle.borrow().is_none() && !self.imp().poll_blocked.get() {
             let poller_handle = glib::MainContext::default().spawn_local(async move {
                 loop {
                     // Don't poll if not playing
                     if this.imp().state.get() == PlaybackState::Playing {
-                        if !sender.is_full() {
-                            let _ = sender.send_blocking(MpdMessage::Status);
+                        if let Some(status) = client.clone().get_status() {
+                            this.update_status(&status);
                         }
                     }
                     glib::timeout_future_seconds(1).await;
@@ -1139,7 +1142,7 @@ impl LocalPlayerInterface for Player {
     }
 
     async fn stop(&self) -> fdo::Result<()> {
-        let _ = self.send(MpdMessage::Stop);
+        let _ = self.client().stop();
         Ok(())
     }
 
@@ -1179,7 +1182,7 @@ impl LocalPlayerInterface for Player {
 
     async fn set_loop_status(&self, loop_status: LoopStatus) -> zbus::Result<()> {
         let flow: PlaybackFlow = loop_status.into();
-        let _ = self.send(MpdMessage::SetPlaybackFlow(flow));
+        let _ = self.client().set_playback_flow(flow);
         Ok(())
     }
 

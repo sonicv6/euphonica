@@ -1,48 +1,55 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<requires lib="gtk" version="4.0" />
-	<requires lib="Adw" version="1.0" />
-	<template class="EuphonicaClientPreferences" parent="AdwPreferencesPage">
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="Adw" version="1.0"/>
+  <template class="EuphonicaClientPreferences" parent="AdwPreferencesPage">
     <property name="title" translatable="true">Database</property>
-		<property name="icon-name">server-pick-symbolic</property>
-		<child>
-			<object class="AdwPreferencesGroup">
-				<property name="title" translatable="true">Music Player Daemon</property>
-				<property name="description" translatable="true">Change how Euphonica connects to your Music Player Daemon instance. Click Reconnect to save these settings and initiate a new connection.</property>
-				<child>
-					<object class="AdwEntryRow" id="mpd_host">
-						<property name="title" translatable="true">Host address</property>
-					</object>
-				</child>
-				<child>
-					<object class="AdwEntryRow" id="mpd_port">
-						<property name="title" translatable="true">Port</property>
-					</object>
-				</child>
-				<child>
-					<object class="AdwSwitchRow" id="mpd_download_album_art">
-						<property name="title" translatable="true">Download album art</property>
-					</object>
-				</child>
+    <property name="icon-name">server-pick-symbolic</property>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">Music Player Daemon</property>
+        <property name="description" translatable="true">Change how Euphonica connects to your Music Player Daemon instance. Click Reconnect to save these settings and initiate a new connection.</property>
         <child>
-					<object class="AdwActionRow" id="mpd_status">
+          <object class="AdwEntryRow" id="mpd_host">
+            <property name="title" translatable="true">Host address</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwEntryRow" id="mpd_port">
+            <property name="title" translatable="true">Port</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPasswordEntryRow" id="mpd_password">
+            <property name="title" translatable="true">Password (optional)</property>
+            <property name="sensitive">false</property>
+            <property name="tooltip-text" translatable="true">Default credential store is not available</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSwitchRow" id="mpd_download_album_art">
+            <property name="title" translatable="true">Download album art</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow" id="mpd_status">
             <style>
               <class name="property"/>
             </style>
-						<property name="title" translatable="true">Status</property>
+            <property name="title" translatable="true">Status</property>
             <property name="subtitle">Not connected</property>
             <child type="suffix">
               <object class="GtkButton" id="reconnect">
-						    <property name="label" translatable="true">Reconnect</property>
+                <property name="label" translatable="true">Reconnect</property>
                 <property name="valign">center</property>
-						    <style>
-							    <class name="suggested-action"/>
-						    </style>
-					    </object>
+                <style>
+                  <class name="suggested-action"/>
+                </style>
+              </object>
             </child>
-					</object>
-				</child>
-			</object>
-		</child>
+          </object>
+        </child>
+      </object>
+    </child>
   </template>
 </interface>

@@ -5,9 +5,10 @@ use std::{
     sync::OnceLock,
     borrow::Cow
 };
-use async_channel::Sender;
 use crate::{
-    cache::Cache, client::MpdMessage, common::{
+    cache::Cache,
+    client::{MpdWrapper, BackgroundTask},
+    common::{
         Album,
         Artist, Song
     }
@@ -28,7 +29,7 @@ mod imp {
 
     #[derive(Debug)]
     pub struct Library {
-        pub sender: OnceCell<Sender<MpdMessage>>,
+        pub client: OnceCell<Rc<MpdWrapper>>,
         // Each view gets their own list.
         // Album retrieval routine:
         // 1. Library sends request for albums to wrapper
@@ -51,7 +52,7 @@ mod imp {
 
         fn new() -> Self {
             Self {
-                sender: OnceCell::new(),
+                client: OnceCell::new(),
                 cache: OnceCell::new()
             }
         }
@@ -82,9 +83,13 @@ impl Default for Library {
 }
 
 impl Library {
-    pub fn setup(&self, sender: Sender<MpdMessage>, cache: Rc<Cache>) {
+    pub fn setup(&self, client: Rc<MpdWrapper>, cache: Rc<Cache>) {
         let _ = self.imp().cache.set(cache);
-        let _ = self.imp().sender.set(sender);
+        let _ = self.imp().client.set(client);
+    }
+
+    fn client(&self) -> &Rc<MpdWrapper> {
+        self.imp().client.get().unwrap()
     }
 
     /// Get all the information available about an album & its contents (won't block;
@@ -94,61 +99,50 @@ impl Library {
         if let Some(cache) = self.imp().cache.get() {
             cache.ensure_cached_album_meta(album.get_info());
         }
-        if let Some(sender) = self.imp().sender.get() {
-            let _ = sender.send_blocking(MpdMessage::AlbumContent(album.get_title().to_owned()));
-        }
+        self.client().queue_background(BackgroundTask::FetchAlbumSongs(album.get_title().to_owned()));
     }
 
     /// Queue specific songs
     pub fn queue_songs(&self, songs: &[Song], replace: bool, play: bool) {
-        if let Some(sender) = self.imp().sender.get() {
-            if replace {
-                let _ = sender.send_blocking(MpdMessage::Clear);
-            }
-            let _ = sender.send_blocking(
-                MpdMessage::AddMulti(
-                    songs.iter().map(|s| s.get_uri().to_owned()).collect()
-                )
-            );
-            if replace && play {
-                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
-            }
+        // TODO: support executing this atomically as a command list
+        if replace {
+            self.client().clear_queue();
+        }
+        self.client().add_multi(&songs.iter().map(|s| s.get_uri().to_owned()).collect::<Vec<String>>());
+        if replace && play {
+            self.client().play_at(0, false);
         }
     }
 
     /// Queue all songs in a given album by track order.
     pub fn queue_album(&self, album: Album, replace: bool, play: bool) {
-        if let Some(sender) = self.imp().sender.get() {
-            if replace {
-                let _ = sender.send_blocking(MpdMessage::Clear);
-            }
-            let mut query = Query::new();
-            query.and(Term::Tag(Cow::Borrowed("album")), album.get_title().to_owned());
-            let _ = sender.send_blocking(MpdMessage::FindAdd(query));
-            if replace && play {
-                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
-            }
+        if replace {
+            self.client().clear_queue();
+        }
+        let mut query = Query::new();
+        query.and(Term::Tag(Cow::Borrowed("album")), album.get_title().to_owned());
+        self.client().find_add(query);
+        if replace && play {
+            self.client().play_at(0, false);
         }
     }
 
     /// Queue all songs of an artist. TODO: allow specifying order.
     pub fn queue_artist(&self, artist: Artist, use_albumartist: bool, replace: bool, play: bool) {
-        if let Some(sender) = self.imp().sender.get() {
-            if replace {
-                let _ = sender.send_blocking(MpdMessage::Clear);
-            }
-            let mut query = Query::new();
-            query.and_with_op(
-                Term::Tag(Cow::Borrowed(
-                    if use_albumartist { "albumartist" } else { "artist" }
-                )),
-                Operation::Contains,
-                artist.get_name().to_owned()
-            );
-            let _ = sender.send_blocking(MpdMessage::FindAdd(query));
-            if replace && play {
-                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
-            }
+        if replace {
+            self.client().clear_queue();
+        }
+        let mut query = Query::new();
+        query.and_with_op(
+            Term::Tag(Cow::Borrowed(
+                if use_albumartist { "albumartist" } else { "artist" }
+            )),
+            Operation::Contains,
+            artist.get_name().to_owned()
+        );
+        self.client().find_add(query);
+        if replace && play {
+            self.client().play_at(0, false);
         }
     }
 
@@ -159,41 +153,29 @@ impl Library {
         if let Some(cache) = self.imp().cache.get() {
             cache.ensure_cached_artist_meta(artist.get_info());
         }
-        if let Some(sender) = self.imp().sender.get() {
-            // Will get both albums (Discography sub-view) and songs (All Songs sub-view)
-            let _ = sender.send_blocking(MpdMessage::ArtistContent(artist.get_name().to_owned()));
-        }
+        self.client().get_artist_content(artist.get_name().to_owned());
     }
 
     /// Queue a song or folder (when recursive == true) for playback.
     pub fn queue_uri(&self, uri: &str, replace: bool, play: bool, recursive: bool) {
-        if let Some(sender) = self.imp().sender.get() {
-            if replace {
-                let _ = sender.send_blocking(MpdMessage::Clear);
-            }
-            let _ = sender.send_blocking(MpdMessage::Add(uri.to_owned(), recursive));
-            if replace && play {
-                let _ = sender.send_blocking(MpdMessage::PlayPos(0));
-            }
+        if replace {
+            self.client().clear_queue();
+        }
+        self.client().add(uri.to_owned(), recursive);
+        if replace && play {
+            self.client().play_at(0, false);
         }
     }
 
-    // TODO: Lsinfo interface
     pub fn get_folder_contents(&self, uri: &str) {
-        if let Some(sender) = self.imp().sender.get() {
-            let _ = sender.send_blocking(MpdMessage::LsInfo(uri.to_owned()));
-        }
+        self.client().queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()));
     }
 
     pub fn init_albums(&self) {
-        if let Some(sender) = self.imp().sender.get() {
-            let _ = sender.send_blocking(MpdMessage::FetchAlbums);
-        }
+        self.client().queue_background(BackgroundTask::FetchAlbums);
     }
 
     pub fn init_artists(&self, use_albumartists: bool) {
-        if let Some(sender) = self.imp().sender.get() {
-            let _ = sender.send_blocking(MpdMessage::FetchArtists(use_albumartists));
-        }
+        self.client().queue_background(BackgroundTask::FetchArtists(use_albumartists));
     }
 }

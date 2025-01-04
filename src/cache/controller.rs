@@ -15,7 +15,6 @@ extern crate fasthash;
 extern crate bson;
 extern crate polodb_core;
 use async_channel::{Sender, Receiver};
-use image::{io::Reader, DynamicImage};
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
 use std::{
@@ -31,14 +30,10 @@ use glib::clone;
 use fasthash::murmur2;
 
 use crate::{
-    client::MpdMessage,
+    client::{BackgroundTask, MpdWrapper},
     common::{AlbumInfo, ArtistInfo},
     meta_providers::{
-        prelude::*,
-        models,
-        utils::get_best_image,
-        Metadata,
-        MetadataChain
+        models, prelude::*, utils::get_best_image, Metadata, MetadataChain
     },
     utils::{resize_convert_image, settings_manager}
 };
@@ -86,7 +81,7 @@ pub struct Cache {
     // Embedded document database for caching responses from metadata providers.
     // Think MongoDB x SQLite x Rust.
     doc_cache: Arc<RwLock<polodb_core::Database>>,
-    mpd_sender: OnceCell<Sender<MpdMessage>>,
+    mpd_client: OnceCell<Rc<MpdWrapper>>,
     fg_sender: Sender<Metadata>,
     bg_sender: Sender<CacheTask>,
     meta_providers: Arc<RwLock<MetadataChain>>,
@@ -149,7 +144,7 @@ impl Cache {
                 polodb_core::Database::open_file(doc_path).expect("ERROR: cannot create a metadata database")
             )),
             meta_providers: Arc::new(RwLock::new(providers)),
-            mpd_sender: OnceCell::new(),
+            mpd_client: OnceCell::new(),
             fg_sender: fg_sender.clone(),
             bg_sender,
             state: CacheState::default()
@@ -165,8 +160,8 @@ impl Cache {
         *curr_providers = init_meta_provider_chain();
     }
 
-    pub fn set_mpd_sender(&self, sender: Sender<MpdMessage>) {
-        let _ = self.mpd_sender.set(sender);
+    pub fn set_mpd_client(&self, client: Rc<MpdWrapper>) {
+        let _ = self.mpd_client.set(client);
     }
 
     pub fn get_sender(&self) -> Sender<Metadata> {
@@ -359,6 +354,10 @@ impl Cache {
         self.state.clone()
     }
 
+    pub fn mpd_client(&self) -> Rc<MpdWrapper> {
+        self.mpd_client.get().unwrap().clone()
+    }
+
     pub fn get_path_for(&self, content_type: &Metadata) -> PathBuf {
         match content_type {
             // Returns the full-resolution path.
@@ -425,34 +424,34 @@ impl Cache {
         let path = self.get_path_for(&Metadata::AlbumArt(folder_uri.clone(), false));
         let bg_sender = self.bg_sender.clone();
         let fg_sender = self.fg_sender.clone();
-        if let (Some(sender), Ok(bson_key)) = (self.mpd_sender.get().cloned(), self.get_album_key(album)) {
-            gio::spawn_blocking(move || {
-                let settings = settings_manager().child("client");
-                // First, try to load from disk. Do this using the threadpool to avoid blocking UI.
-                let path_to_use = if thumbnail {&thumbnail_path} else {&path};
-                if path_to_use.exists() {
+        if let Ok(bson_key) = self.get_album_key(album) {
+            let settings = settings_manager().child("client");
+            // First, try to load from disk. Do this using the threadpool to avoid blocking UI.
+            let path_to_use = if thumbnail {thumbnail_path.clone()} else {path.clone()};
+            if path_to_use.exists() {
+                gio::spawn_blocking(move || {
                     if let Ok(tex) = Texture::from_filename(&path_to_use) {
                         IMAGE_CACHE.insert(stretto_key, tex.clone(), if thumbnail {1} else {16});
                         IMAGE_CACHE.wait().unwrap();
                         let _ = fg_sender.send_blocking(Metadata::AlbumArt(folder_uri, thumbnail));
                     }
-                }
-                // That failed, so try downloading it
-                else if settings.boolean("mpd-download-album-art") {
-                    let _ = sender.send_blocking(MpdMessage::AlbumArt(
-                        folder_uri.to_string(),
-                        bson_key,
-                        path,
-                        thumbnail_path
-                    ));
-                }
-                else {
-                    // Hop straight to remote providers. For this we'll need to have album metas ready,
-                    // so schedule that first.
-                    let _ = bg_sender.send_blocking(CacheTask::AlbumMeta(folder_uri.clone(), bson_key.clone()));
-                    let _ = bg_sender.send_blocking(CacheTask::AlbumArt(folder_uri, bson_key, path, thumbnail_path));
-                }
-            });
+                });
+            }
+            // That failed, so try downloading it
+            else if settings.boolean("mpd-download-album-art") {
+                self.mpd_client().queue_background(BackgroundTask::DownloadAlbumArt(
+                    folder_uri.to_string(),
+                    bson_key,
+                    path,
+                    thumbnail_path
+                ));
+            }
+            else {
+                // Hop straight to remote providers. For this we'll need to have album metas ready,
+                // so schedule that first.
+                let _ = bg_sender.send_blocking(CacheTask::AlbumMeta(folder_uri.clone(), bson_key.clone()));
+                let _ = bg_sender.send_blocking(CacheTask::AlbumArt(folder_uri, bson_key, path, thumbnail_path));
+            }
         }
     }
 

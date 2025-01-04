@@ -20,7 +20,9 @@ pub enum ConnectionState {
     #[default]
     NotConnected,
     Connecting,
-    Unauthenticated,  // TCP stream set up but no/wrong password.
+    Unauthenticated,      // Either no password is provided or the one provided is insufficiently privileged
+    CredentialStoreError, // Cannot access underlying credential store to fetch or save password
+    WrongPassword,        // The provided password does not match any of the configured passwords
     Connected
 }
 
@@ -30,6 +32,7 @@ mod imp {
         ParamSpecBoolean,
         ParamSpecEnum
     };
+    
     use super::*;
     use once_cell::sync::Lazy;
 
@@ -88,7 +91,10 @@ mod imp {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
             SIGNALS.get_or_init(|| {
                 vec![
-                    Signal::builder("database-updated")
+                    Signal::builder("idle")
+                        .param_types([
+                            BoxedAnyObject::static_type()  // mpd::Subsystem::to_str
+                        ])
                         .build(),
                     Signal::builder("sticker-downloaded")
                         .param_types([
@@ -118,9 +124,6 @@ mod imp {
                         .param_types([
                             String::static_type(),  // folder URI
                         ])
-                        .build(),
-                    Signal::builder("outputs-changed")
-                        .param_types([BoxedAnyObject::static_type()])  // Vec<mpd::output::Output>
                         .build(),
                     // Enough information about this album has been downloaded to display it
                     // as a thumbnail in the album view
@@ -152,15 +155,6 @@ mod imp {
                             String::static_type(),
                             Album::static_type()
                         ])
-                        .build(),
-                    Signal::builder("status-changed")
-                        .param_types([BoxedAnyObject::static_type()])
-                        .build(),
-                    Signal::builder("queue-changed")
-                        .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
-                        .build(),
-                    Signal::builder("queue-replaced")
-                        .param_types([BoxedAnyObject::static_type()])  // Vec<Song>
                         .build(),
                     Signal::builder("folder-contents-downloaded")
                         .param_types([

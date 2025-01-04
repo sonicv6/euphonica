@@ -1,5 +1,5 @@
 use std::cell::OnceCell;
-use mpd::{directory::Directory, lsinfo::LsInfoEntry};
+use mpd::lsinfo::LsInfoEntry;
 use gtk::glib;
 use glib::prelude::*;
 use gtk::subclass::prelude::*;

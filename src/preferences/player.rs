@@ -5,12 +5,7 @@ use gtk::{
     CompositeTemplate
 };
 
-use glib::clone;
-
-use crate::{
-    client::{MpdMessage, ClientState, ConnectionState},
-    utils
-};
+use crate::utils;
 
 mod imp {
     use super::*;
