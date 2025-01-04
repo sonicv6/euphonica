@@ -485,15 +485,24 @@ impl EuphonicaWindow {
                 move |state: &ClientState, _| {
                     match state.get_connection_state() {
                         ConnectionState::WrongPassword => {
-                            this.show_preferences_error_dialog(
+                            this.show_error_dialog(
                                 "Incorrect password",
-                                "MPD has refused the provided password. Please note that if your MPD instance is not password-protected, providing one will also cause this error."
+                                "MPD has refused the provided password. Please note that if your MPD instance is not password-protected, providing one will also cause this error.",
+                                true
                             );
                         }
                         ConnectionState::Unauthenticated => {
-                            this.show_preferences_error_dialog(
+                            this.show_error_dialog(
                                 "Authentication Failed",
-                                "Your MPD instance requires a password, which was either not provided or lacks the necessary privileges for Euphonica to function correctly."
+                                "Your MPD instance requires a password, which was either not provided or lacks the necessary privileges for Euphonica to function correctly.",
+                                true
+                            );
+                        }
+                        ConnectionState::CredentialStoreError => {
+                            this.show_error_dialog(
+                                "Credential Store Error",
+                                "Your MPD instance requires a password, but Euphonica could not access your default credential store to retrieve it. Please ensure that it has been unlocked before starting Euphonica.",
+                                false
                             );
                         }
                         _ => {}
@@ -580,7 +589,7 @@ impl EuphonicaWindow {
         self.imp().toast_overlay.add_toast(toast);
     }
 
-    fn show_preferences_error_dialog(&self, heading: &str, body: &str) {
+    fn show_error_dialog(&self, heading: &str, body: &str, suggest_open_preferences: bool) {
         // Show an alert ONLY IF the preferences dialog is not already open.
         if !self.visible_dialog().is_some() {
             let diag = adw::AlertDialog::builder()
@@ -588,17 +597,22 @@ impl EuphonicaWindow {
                 .body(body)
                 .build();
             diag.add_response("close", "_Close");
-            diag.add_response("prefs", "Open _Preferences");
-            diag.set_response_appearance("prefs", adw::ResponseAppearance::Suggested);
-            diag.choose(self, Option::<gio::Cancellable>::None.as_ref(), clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |resp| {
-                    if resp == "prefs" {
-                        this.downcast_application().show_preferences();
+            if suggest_open_preferences {
+                diag.add_response("prefs", "Open _Preferences");
+                diag.set_response_appearance("prefs", adw::ResponseAppearance::Suggested);
+                diag.choose(self, Option::<gio::Cancellable>::None.as_ref(), clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |resp| {
+                        if resp == "prefs" {
+                            this.downcast_application().show_preferences();
+                        }
                     }
-                }
-            ));
+                ));
+            }
+            else {
+                diag.present(Some(self));
+            }
         }
     }
 
@@ -709,7 +723,9 @@ impl EuphonicaWindow {
                 match state {
                     ConnectionState::NotConnected => Some("Not connected"),
                     ConnectionState::Connecting => Some("Connecting"),
-                    ConnectionState::Unauthenticated | ConnectionState::WrongPassword => Some("Unauthenticated"),
+                    ConnectionState::Unauthenticated |
+                    ConnectionState::WrongPassword |
+                    ConnectionState::CredentialStoreError => Some("Unauthenticated"),
                     ConnectionState::Connected => Some("Connected")
                 }
             })

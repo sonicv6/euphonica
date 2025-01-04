@@ -1,6 +1,10 @@
 use std::{
     borrow::Cow, cell::{Cell, RefCell}, path::PathBuf, rc::Rc
 };
+use keyring::{
+    Entry,
+    error::Error as KeyringError
+};
 use rustc_hash::FxHashSet;
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
 use futures::executor;
@@ -8,9 +12,13 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client, error::{Error, ErrorCode}, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, Idle, Output, Subsystem
+    client::Client,
+    error::{Error as MpdError, ErrorCode as MpdErrorCode},
+    lsinfo::LsInfoEntry,
+    search::{Operation as QueryOperation, Query, Term, Window},
+    song::Id,
+    Channel, Idle, Output, Subsystem
 };
-use image::DynamicImage;
 use uuid::Uuid;
 
 use crate::{
@@ -30,8 +38,8 @@ enum AsyncClientMessage {
 	Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
 	Idle(Vec<Subsystem>), // Will only be sent from the child thread
     // Return downloaded & resized album arts (hires and thumbnail respectively)
-	AlbumArtDownloaded(String, DynamicImage, DynamicImage),
-    AlbumArtNotAvailable(String), // For triggering downloading from other sources
+	// AlbumArtDownloaded(String, DynamicImage, DynamicImage),
+    // AlbumArtNotAvailable(String), // For triggering downloading from other sources
     AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model.
     AlbumSongInfoDownloaded(String, Vec<SongInfo>), // Return songs in the album with the given tag (batched)
     ArtistBasicInfoDownloaded(ArtistInfo), // Return new artist to be added to the list model.
@@ -377,27 +385,7 @@ impl MpdWrapper {
         self.state.clone()
     }
 
-    fn handle_error(&self, error: &Error) {
-        let state = self.get_client_state();
-        match error {
-            Error::Server(server_error) => {
-                match server_error.code {
-                    ErrorCode::Password => {
-                        state.set_connection_state(ConnectionState::WrongPassword);
-                    }
-                    ErrorCode::Permission => {
-                        state.set_connection_state(ConnectionState::Unauthenticated);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {
-                // TODO
-            }
-        }
-    }
-
-    fn start_bg_thread(&self, addr: &str) {
+    fn start_bg_thread(&self, addr: &str, password: Option<&str>) {
         let sender_to_fg = self.main_sender.clone();
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
         let meta_sender = self.meta_sender.clone();
@@ -405,8 +393,11 @@ impl MpdWrapper {
         if let Ok(mut client) =  Client::connect(addr) {
             // If we're unauthenticated, this will fail and no child thread
             // will be spawned.
+            if let Some(password) = password {
+                client.login(password).expect("Main client logged in successfully but child thread did not");
+            }
             client.subscribe(self.bg_channel.clone()).expect(
-                "Child thread could not subscribe to inter-client channel!"
+                "Child thread could not subscribe to inter-client channel"
             );
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting idle loop...");
@@ -482,7 +473,7 @@ impl MpdWrapper {
                                         match content {
                                             // More to come
                                             "STOP" => {
-                                                client.close();
+                                                let _ = client.close();
                                                 break 'outer;
                                             }
                                             _ => {}
@@ -493,7 +484,7 @@ impl MpdWrapper {
                             let _ = sender_to_fg.send_blocking(AsyncClientMessage::Idle(changes));
                         }
                         else {
-                            client.close();
+                            let _ = client.close();
                             println!("Child thread encountered a client error while idling. Stopping...");
                             break 'outer;
                         }
@@ -558,18 +549,18 @@ impl MpdWrapper {
             AsyncClientMessage::Connect => self.connect_async().await,
             AsyncClientMessage::Disconnect => self.disconnect_async().await,
             AsyncClientMessage::Idle(changes) => self.handle_idle_changes(changes).await,
-            AsyncClientMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
-                "album-art-downloaded",
-                &[
-                    &folder_uri,
-                    &BoxedAnyObject::new(hires),
-                    &BoxedAnyObject::new(thumb),
-                ]
-            ),
-            AsyncClientMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
-                "album-art-not-available",
-                folder_uri
-            ),
+            // AsyncClientMessage::AlbumArtDownloaded(folder_uri, hires, thumb) => self.state.emit_by_name::<()>(
+            //     "album-art-downloaded",
+            //     &[
+            //         &folder_uri,
+            //         &BoxedAnyObject::new(hires),
+            //         &BoxedAnyObject::new(thumb),
+            //     ]
+            // ),
+            // AsyncClientMessage::AlbumArtNotAvailable(folder_uri) => self.state.emit_result(
+            //     "album-art-not-available",
+            //     folder_uri
+            // ),
             AsyncClientMessage::AlbumBasicInfoDownloaded(info) => self.on_album_downloaded(
                 "album-basic-info-downloaded",
                 None,
@@ -675,16 +666,66 @@ impl MpdWrapper {
             mpd::Client::connect(addr_clone)
         }).await;
         if let Ok(Ok(mut client)) = handle {
+            // If there is a password configured, use it to authenticate.
+            let password_access_failed: bool;
+            let client_password: Option<String>;
+            match Entry::new("euphonica", "mpd-password") {
+                Ok(entry) => {
+                    password_access_failed = false;
+                    match entry.get_password() {
+                        Ok(password) => {
+                            let password_res = client.login(&password);
+                            client_password = Some(password);
+                            if let Err(MpdError::Server(se)) = password_res {
+                                let _ = client.close();
+                                if se.code == MpdErrorCode::Password {
+                                    self.state.set_connection_state(ConnectionState::WrongPassword);
+                                }
+                                else {
+                                    self.state.set_connection_state(ConnectionState::NotConnected);
+                                }
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            client_password = None;
+                            match e {
+                                KeyringError::NoEntry => {}
+                                _ => {
+                                    let _ = client.close();
+                                    self.state.set_connection_state(ConnectionState::CredentialStoreError);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    client_password = None;
+                    match e {
+                        KeyringError::NoStorageAccess(_) | KeyringError::PlatformFailure(_) => {
+                            // Note this down in case we really needed a password (different error
+                            // message).
+                            password_access_failed = true;
+                        }
+                        _ => {
+                            password_access_failed = false;
+                        }
+                    }
+                }
+            }
             // Doubles as a litmus test to see if we are authenticated.
-            let res = client
-                .subscribe(self.bg_channel.clone());
-            if res.is_err() {
-                self.handle_error(&res.err().unwrap());
-                client.close();
+            if let Err(MpdError::Server(se)) = client.subscribe(self.bg_channel.clone()) {
+                if se.code == MpdErrorCode::Permission {
+                    self.state.set_connection_state(
+                        if password_access_failed {ConnectionState::CredentialStoreError}
+                        else {ConnectionState::Unauthenticated}
+                    );
+                }
             }
             else {
                 self.main_client.replace(Some(client));
-                self.clone().start_bg_thread(addr.as_ref());
+                self.start_bg_thread(addr.as_ref(), client_password.as_deref());
                 self.state.set_connection_state(ConnectionState::Connected);
             }
         }
@@ -747,7 +788,7 @@ impl MpdWrapper {
             }
             else if let Err(error) = res {
                 match error {
-                    Error::Server(server_err) => {
+                    MpdError::Server(server_err) => {
                         if server_err.detail.contains("disabled") {
                             self.state.emit_by_name::<()>("sticker-db-disabled", &[]);
                         }
