@@ -36,8 +36,9 @@
                             <property name="model">
                               <object class="GtkStringList">
                                 <items>
-                                  <item translatable="yes">File name</item>
-                                  <item translatable="yes">Last modified</item>
+                                  <item translatable="yes">Album title</item>
+                                  <item translatable="yes">AlbumArtist</item>
+                                  <item translatable="yes">Release date</item>
                                 </items>
                               </object>
                             </property>
