@@ -28,9 +28,10 @@ use crate::{
 use super::Library;
 
 mod imp {
+    use std::cell::Cell;
+
     use glib::{
-        ParamSpec,
-        ParamSpecString
+        ParamSpec, ParamSpecBoolean, ParamSpecString
     };
     use once_cell::sync::Lazy;
     use super::*;
@@ -45,6 +46,12 @@ mod imp {
         #[template_child]
         pub append_queue: TemplateChild<gtk::Button>,
         #[template_child]
+        pub raise: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub lower: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub remove: TemplateChild<gtk::Button>,
+        #[template_child]
         pub thumbnail: TemplateChild<gtk::Image>,
         #[template_child]
         pub song_name: TemplateChild<gtk::Label>,
@@ -58,7 +65,9 @@ mod imp {
         pub replace_queue_id: RefCell<Option<SignalHandlerId>>,
         pub append_queue_id: RefCell<Option<SignalHandlerId>>,
         pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
-        pub library: OnceCell<Library>
+        pub library: OnceCell<Library>,
+        pub queue_controls_visible: Cell<bool>,
+        pub edit_controls_visible: Cell<bool>
     }
 
     // The central trait for subclassing a GObject
@@ -80,6 +89,39 @@ mod imp {
 
     // Trait shared by all GObjects
     impl ObjectImpl for PlaylistSongRow {
+        fn constructed(&self) {
+            self.parent_constructed();
+            let obj = self.obj();
+            for elem in [
+                self.replace_queue.get(),
+                self.append_queue.get()
+            ] {
+                obj
+                    .bind_property(
+                        "queue-controls-visible",
+                        &elem,
+                        "visible"
+                    )
+                    .sync_create()
+                    .build();
+            }
+
+            for elem in [
+                self.raise.get(),
+                self.lower.get(),
+                self.remove.get()
+            ] {
+                obj
+                    .bind_property(
+                        "edit-controls-visible",
+                        &elem,
+                        "visible"
+                    )
+                    .sync_create()
+                    .build();
+            }
+        }
+
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
@@ -88,7 +130,9 @@ mod imp {
                     ParamSpecString::builder("album").build(),
                     ParamSpecString::builder("duration").build(),
                     // ParamSpecInt64::builder("disc").build(),
-                    ParamSpecString::builder("quality-grade").build()
+                    ParamSpecString::builder("quality-grade").build(),
+                    ParamSpecBoolean::builder("queue-controls-visible").build(),
+                    ParamSpecBoolean::builder("edit-controls-visible").build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -103,6 +147,8 @@ mod imp {
                 "duration" => self.duration.label().to_value(),
                 // "disc" => self.disc.get_label().to_value(),
                 "quality-grade" => self.quality_grade.icon_name().to_value(),
+                "queue-controls-visible" => self.queue_controls_visible.get().to_value(),
+                "edit-controls-visible" => self.edit_controls_visible.get().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -139,6 +185,16 @@ mod imp {
                     else {
                         self.quality_grade.set_icon_name(None);
                         self.quality_grade.set_visible(false);
+                    }
+                }
+                "queue-controls-visible" => {
+                    if let Ok(new) = value.get::<bool>() {
+                        self.obj().set_queue_controls_visible(new);
+                    }
+                }
+                "edit-controls-visible" => {
+                    if let Ok(new) = value.get::<bool>() {
+                        self.obj().set_edit_controls_visible(new);
                     }
                 }
                 _ => unimplemented!(),
@@ -282,6 +338,28 @@ impl PlaylistSongRow {
         }
         if let Some(id) = self.imp().append_queue_id.borrow_mut().take() {
             self.imp().append_queue.disconnect(id);
+        }
+    }
+
+    pub fn get_queue_controls_visible(&self) -> bool {
+        self.imp().queue_controls_visible.get()
+    }
+
+    pub fn set_queue_controls_visible(&self, new: bool) {
+        let old = self.imp().queue_controls_visible.replace(new);
+        if old != new {
+            self.notify("queue-controls-visible");
+        }
+    }
+
+    pub fn get_edit_controls_visible(&self) -> bool {
+        self.imp().edit_controls_visible.get()
+    }
+
+    pub fn set_edit_controls_visible(&self, new: bool) {
+        let old = self.imp().edit_controls_visible.replace(new);
+        if old != new {
+            self.notify("edit-controls-visible");
         }
     }
 }

@@ -25,6 +25,12 @@ use crate::{
     }, client::ClientState, common::{INode, Song}, utils::format_secs_as_duration, window::EuphonicaWindow
 };
 
+// Playlist edit logic:
+// In order to reduce unnecessary updates, we pack all changes into one command list,
+// and update the playlist exactly once on our side upon receiving the single playlist
+// change idle signal resulting from that command list.
+// To facilitate this, we have to enter an "edit mode" with a separate song ListStore
+// and UI.
 mod imp {
     use std::cell::Cell;
 
@@ -52,6 +58,8 @@ mod imp {
         pub runtime: TemplateChild<gtk::Label>,
 
         #[template_child]
+        pub action_row: TemplateChild<gtk::Stack>,
+        #[template_child]
         pub replace_queue: TemplateChild<gtk::Button>,
         #[template_child]
         pub replace_queue_text: TemplateChild<gtk::Label>,
@@ -59,6 +67,12 @@ mod imp {
         pub append_queue: TemplateChild<gtk::Button>,
         #[template_child]
         pub append_queue_text: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub edit_playlist: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub edit_cancel: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub edit_apply: TemplateChild<gtk::Button>,
         #[template_child]
         pub sel_all: TemplateChild<gtk::Button>,
         #[template_child]
@@ -72,7 +86,9 @@ mod imp {
         pub delete: TemplateChild<gtk::Button>,
 
         pub song_list: gio::ListStore,
+        pub editing_song_list: gio::ListStore,
         pub sel_model: gtk::MultiSelection,
+        pub is_editing: Cell<bool>,
 
         pub playlist: RefCell<Option<INode>>,
         pub bindings: RefCell<Vec<Binding>>,
@@ -94,11 +110,17 @@ mod imp {
                 runtime: TemplateChild::default(),
                 content: TemplateChild::default(),
                 song_list: gio::ListStore::new::<Song>(),
+                editing_song_list: gio::ListStore::new::<Song>(),
+                is_editing: Cell::new(false),
                 sel_model: gtk::MultiSelection::new(Option::<gio::ListStore>::None),
+                action_row: TemplateChild::default(),
                 replace_queue: TemplateChild::default(),
                 append_queue: TemplateChild::default(),
                 replace_queue_text: TemplateChild::default(),
                 append_queue_text: TemplateChild::default(),
+                edit_playlist: TemplateChild::default(),
+                edit_cancel: TemplateChild::default(),
+                edit_apply: TemplateChild::default(),
                 sel_all: TemplateChild::default(),
                 sel_none: TemplateChild::default(),
                 rename: TemplateChild::default(),
@@ -142,6 +164,23 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+
+            let action_row = self.action_row.get();
+            action_row.set_visible_child_name("queue-mode");
+            self.edit_playlist.connect_clicked(clone!(
+                #[weak]
+                action_row,
+                move |_| {
+                    action_row.set_visible_child_name("edit-mode");
+                }
+            ));
+            self.edit_cancel.connect_clicked(clone!(
+                #[weak]
+                action_row,
+                move |_| {
+                    action_row.set_visible_child_name("queue-mode");
+                }
+            ));
 
             self.sel_model.set_model(Some(&self.song_list.clone()));
             self.content.set_model(Some(&self.sel_model));
@@ -434,6 +473,7 @@ impl PlaylistContentView {
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem");
             let row = PlaylistSongRow::new(library.clone(), &item);
+            row.set_queue_controls_visible(true);
             item.set_child(Some(&row));
         });
         // Tell factory how to bind `PlaylistSongRow` to one of our Playlist GObjects
