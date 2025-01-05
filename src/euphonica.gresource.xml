@@ -16,7 +16,9 @@
     <file preprocess="xml-stripblanks">gtk/library/artist-song-row.ui</file>
     <file preprocess="xml-stripblanks">gtk/library/artist-content-view.ui</file>
     <file preprocess="xml-stripblanks">gtk/library/folder-view.ui</file>
-    <file preprocess="xml-stripblanks">gtk/library/folder-row.ui</file>
+    <file preprocess="xml-stripblanks">gtk/library/generic-row.ui</file>
+    <file preprocess="xml-stripblanks">gtk/library/playlist-view.ui</file>
+    <file preprocess="xml-stripblanks">gtk/library/playlist-content-view.ui</file>
     <file preprocess="xml-stripblanks">gtk/player/queue-view.ui</file>
     <file preprocess="xml-stripblanks">gtk/player/queue-row.ui</file>
     <file preprocess="xml-stripblanks">gtk/player/bar.ui</file>
@@ -83,5 +85,6 @@
     <file preprocess="xml-stripblanks" alias="edit-select-none-symbolic.svg">gtk/icons/edit-select-none-symbolic.svg</file>
     <file preprocess="xml-stripblanks" alias="consume-off-symbolic.svg">gtk/icons/consume-off-symbolic.svg</file>
     <file preprocess="xml-stripblanks" alias="consume-on-symbolic.svg">gtk/icons/consume-on-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="text-insert-symbolic.svg">gtk/icons/text-insert-symbolic.svg</file>
   </gresource>
 </gresources>

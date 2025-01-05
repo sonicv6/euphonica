@@ -142,6 +142,14 @@ mod imp {
                             BoxedAnyObject::static_type() // Vec<INode>
                         ])
                         .build(),
+                    // A chunk of a playlist's songs have been retrieved. Emit this
+                    // to make PlaylistContentView append this chunk.
+                    Signal::builder("playlist-songs-downloaded")
+                        .param_types([
+                            String::static_type(),
+                            BoxedAnyObject::static_type()  // Vec<Song>
+                        ])
+                        .build(),
                 ]
             })
         }

@@ -160,6 +160,7 @@
 		<child schema="org.euphonica.Euphonica.state.albumview" name="albumview"/>
 		<child schema="org.euphonica.Euphonica.state.artistview" name="artistview"/>
 		<child schema="org.euphonica.Euphonica.state.folderview" name="folderview"/>
+		<child schema="org.euphonica.Euphonica.state.playlistview" name="playlistview"/>
 
 		<!-- Remember last window size -->
 		<key name="last-window-width" type="i">
@@ -201,6 +202,19 @@
 		<key name="sort-direction" enum='org.euphonica.Euphonica.sortdir'>
 			<default>'asc'</default>
 			<summary>Folder View sort direction</summary>
+		</key>
+	</schema>
+
+	<schema id="org.euphonica.Euphonica.state.playlistview" path="/org/euphonica/Euphonica/state/playlistview/">
+		<!-- Folder view state -->
+		<key name='sort-by' enum='org.euphonica.Euphonica.sortby'>
+			<default>'filename'</default>
+			<summary>Playlist View sort criterion</summary>
+		</key>
+
+		<key name="sort-direction" enum='org.euphonica.Euphonica.sortdir'>
+			<default>'asc'</default>
+			<summary>Playlist View sort direction</summary>
 		</key>
 	</schema>
 </schemalist>

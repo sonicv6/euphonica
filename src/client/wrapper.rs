@@ -17,7 +17,7 @@ use mpd::{
     lsinfo::LsInfoEntry,
     search::{Operation as QueryOperation, Query, Term, Window},
     song::Id,
-    Channel, Idle, Output, Playlist, Subsystem, SaveMode
+    Channel, Idle, Output, Subsystem, SaveMode
 };
 use uuid::Uuid;
 
@@ -43,6 +43,7 @@ enum AsyncClientMessage {
     ArtistSongInfoDownloaded(String, Vec<SongInfo>),  // Return songs of an artist (or had their participation)
     ArtistAlbumBasicInfoDownloaded(String, AlbumInfo),  // Return albums that had this artist in their AlbumArtist tag.
     FolderContentsDownloaded(String, Vec<LsInfoEntry>),
+    PlaylistSongInfoDownloaded(String, Vec<SongInfo>),
     DBUpdated
 }
 
@@ -58,6 +59,7 @@ pub enum BackgroundTask {
     FetchArtists(bool),  // Gradually get all artists. If bool flag is true, will parse AlbumArtist tag
     FetchArtistSongs(String),  // Get all songs of an artist with given name
     FetchArtistAlbums(String),  // Get all albums of an artist with given name
+    FetchPlaylistSongs(String),  // Get songs of playlist with given name
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -171,7 +173,6 @@ mod background {
     ) where
         F: Fn(Vec<SongInfo>) -> Result<(), SendError<AsyncClientMessage>>
     {
-        // TODO: batched windowed retrieval
         let mut curr_len: u32 = 0;
         let mut more: bool = true;
         while more && (curr_len as usize) < FETCH_LIMIT {
@@ -332,6 +333,32 @@ mod background {
             ));
         }
     }
+
+    pub fn fetch_playlist_songs(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<AsyncClientMessage>,
+        name: String
+    ) {
+        let mut curr_len: u32 = 0;
+        let mut more: bool = true;
+        while more && (curr_len as usize) < FETCH_LIMIT {
+            let songs: Vec<SongInfo> = client
+                .playlist(&name, curr_len..(curr_len + BATCH_SIZE - 1))
+                .unwrap()
+                .iter_mut()
+                .map(|mpd_song| {
+                    SongInfo::from(std::mem::take(mpd_song))
+                })
+                .collect();
+            if !songs.is_empty() {
+                let _ = sender_to_fg.send_blocking(AsyncClientMessage::PlaylistSongInfoDownloaded(name.clone(), songs));
+                curr_len += BATCH_SIZE;
+            }
+            else {
+                more = false;
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -449,6 +476,11 @@ impl MpdWrapper {
                                 }
                                 BackgroundTask::FetchFolderContents(uri) => {
                                     background::fetch_folder_contents(&mut client, &sender_to_fg, uri)
+                                }
+                                BackgroundTask::FetchPlaylistSongs(name) => {
+                                    background::fetch_playlist_songs(
+                                        &mut client, &sender_to_fg, name
+                                    )
                                 }
                             }
                         }
@@ -571,6 +603,11 @@ impl MpdWrapper {
                 album_info
             ),
             AsyncClientMessage::FolderContentsDownloaded(uri, contents) => self.on_folder_contents_downloaded(uri, contents),
+            AsyncClientMessage::PlaylistSongInfoDownloaded(name, songs) => self.on_songs_downloaded(
+                "playlist-songs-downloaded",
+                name,
+                songs
+            ),
             AsyncClientMessage::DBUpdated => {},
             AsyncClientMessage::Busy(busy) => self.state.set_busy(busy),
         }
@@ -803,15 +840,15 @@ impl MpdWrapper {
         }
     }
 
-    pub fn get_playlists(&self) -> Vec<Playlist> {
+    pub fn get_playlists(&self) -> Vec<INode> {
         // TODO: Might want to move to child thread
-        println!("GETTING PLAYLISTS");
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             match client.playlists() {
                 Ok(playlists) => {
-                    println!("Playlists are supported!");
                     self.state.set_supports_playlists(true);
-                    return playlists;
+
+                    // Convert mpd::Playlist to our INode GObject
+                    return playlists.into_iter().map(INode::from).collect::<Vec<INode>>();
                 }
                 Err(e) => match e {
                     MpdError::Server(server_err) => {
@@ -832,6 +869,31 @@ impl MpdWrapper {
             }
         }
         return Vec::with_capacity(0);
+    }
+
+    pub fn load_playlist(&self, name: &str) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.load(name, ..) {
+                Ok(()) => {
+                    self.state.set_supports_playlists(true);
+                    return Ok(());
+                }
+                Err(e) => {
+                    match &e {
+                        MpdError::Server(server_err) => {
+                            if server_err.detail.contains("disabled") {
+                                self.state.set_supports_playlists(false);
+                            }
+                        }
+                        _ => {
+                            // Not handled yet
+                        }
+                    }
+                    return Err(Some(e));
+                }
+            }
+        }
+        return Err(None);
     }
 
     pub fn save_queue_as_playlist(&self, name: &str, save_mode: SaveMode) -> Result<(), Option<MpdError>> {
@@ -857,6 +919,18 @@ impl MpdWrapper {
             }
         }
         return Err(None);
+    }
+
+    pub fn rename_playlist(&self, old_name: &str, new_name: &str) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.pl_rename(old_name, new_name) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Some(e))
+            }
+        }
+        else {
+            Err(None)
+        }
     }
 
     pub fn get_status(&self) -> Option<mpd::Status> {

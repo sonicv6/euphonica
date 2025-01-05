@@ -617,6 +617,14 @@ impl EuphonicaWindow {
         }
     }
 
+    pub fn show_dialog(&self, heading: &str, body: &str) {
+        let diag = adw::AlertDialog::builder()
+            .heading(heading)
+            .body(body)
+            .build();
+        diag.present(Some(self));
+    }
+
     fn update_player_bar_visibility(&self) {
         let revealer = self.imp().player_bar_revealer.get();
         if self.imp().sidebar.showing_queue_view() {

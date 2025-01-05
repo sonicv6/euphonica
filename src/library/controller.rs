@@ -7,10 +7,9 @@ use std::{
 };
 use crate::{
     cache::Cache,
-    client::{MpdWrapper, BackgroundTask},
+    client::{BackgroundTask, MpdWrapper},
     common::{
-        Album,
-        Artist, Song
+        Album, Artist, INode, Song
     }
 };
 use gtk::{
@@ -22,7 +21,7 @@ use glib::subclass::Signal;
 
 use adw::subclass::prelude::*;
 
-use mpd::{search::Operation, Query, Term};
+use mpd::{search::Operation, Query, Term, error::Error as MpdError};
 
 mod imp {
     use super::*;
@@ -165,6 +164,30 @@ impl Library {
         if replace && play {
             self.client().play_at(0, false);
         }
+    }
+
+    /// Queue a playlist for playback.
+    pub fn get_playlists(&self) -> Vec<INode> {
+        self.client().get_playlists()
+    }
+
+    pub fn init_playlist(&self, name: &str) {
+        self.client().queue_background(BackgroundTask::FetchPlaylistSongs(name.to_owned()));
+    }
+
+    /// Queue a playlist for playback.
+    pub fn queue_playlist(&self, name: &str, replace: bool, play: bool) {
+        if replace {
+            self.client().clear_queue();
+        }
+        let _ = self.client().load_playlist(name);
+        if replace && play {
+            self.client().play_at(0, false);
+        }
+    }
+
+    pub fn rename_playlist(&self, old_name: &str, new_name: &str) -> Result<(), Option<MpdError>>{
+        self.client().rename_playlist(old_name, new_name)
     }
 
     pub fn get_folder_contents(&self, uri: &str) {
