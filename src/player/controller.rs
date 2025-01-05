@@ -1,7 +1,7 @@
 extern crate mpd;
 use crate::{
     application::EuphonicaApplication,
-    cache::Cache,
+    cache::{Cache, CacheState},
     client::{ClientState, ConnectionState, MpdWrapper},
     common::{AlbumInfo, QualityGrade, Song},
     utils::{prettify_audio_format, settings_manager}
@@ -382,6 +382,28 @@ impl Player {
     ) {
         let client_state = client.clone().get_client_state();
         let _ = self.imp().client.set(client);
+
+        // Signal once for current songs in case the UI is initialised too quickly,
+        // causing the player pane & bar to be stuck without album art for the
+        // song playing at startup.
+        cache.get_cache_state().connect_closure(
+            "album-art-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: CacheState, folder_uri: String| {
+                    if let Some(song) = this.imp().current_song.borrow().as_ref() {
+                        if let Some(album) = song.get_album() {
+                            if album.uri.as_str() == folder_uri.as_str() {
+                                this.notify("album-art");
+                            }
+                        }
+                    }
+                }
+            )
+        );
+
         let _ = self.imp().cache.set(cache);
         let _ = self.imp().app.set(application);
         // Connect to ClientState signals

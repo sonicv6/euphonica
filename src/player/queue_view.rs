@@ -1,8 +1,15 @@
 use std::rc::Rc;
 
 use adw::subclass::prelude::*;
+use gio::glib::closure_local;
 use gtk::{
-    gio, glib::{self, closure_local}, prelude::*, CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection
+    prelude::*,
+    gio,
+    glib,
+    CompositeTemplate,
+    SingleSelection,
+    SignalListItemFactory,
+    ListItem,
 };
 use adw::prelude::*;
 use glib::clone;
@@ -370,7 +377,8 @@ impl QueueView {
         }));
     }
 
-    pub fn setup(&self, player: Player, cache: Rc<Cache>, window: EuphonicaWindow) {        let _ = self.imp().window.set(window);
+    pub fn setup(&self, player: Player, cache: Rc<Cache>, window: EuphonicaWindow) {
+        let _ = self.imp().window.set(window);
         self.setup_listview(player.clone(), cache);
         self.imp().player_pane.setup(player.clone());
         self.bind_state(player);
