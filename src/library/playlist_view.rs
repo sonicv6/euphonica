@@ -22,7 +22,7 @@ use crate::{
         ClientState,
         ConnectionState,
     }, common::{INode, INodeType},
-    utils::{g_cmp_str_options, g_search_substr, settings_manager}
+    utils::{g_cmp_str_options, g_search_substr, settings_manager}, window::EuphonicaWindow
 };
 
 // Playlist view implementation
@@ -64,7 +64,6 @@ mod imp {
         #[template_child]
         pub content_view: TemplateChild<PlaylistContentView>,
 
-        pub playlists: gio::ListStore,
         // Search & filter models
         pub search_filter: gtk::CustomFilter,
         pub sorter: gtk::CustomSorter,
@@ -92,7 +91,6 @@ mod imp {
                 list_view: TemplateChild::default(),
                 content_page: TemplateChild::default(),
                 content_view: TemplateChild::default(),
-                playlists: gio::ListStore::new::<INode>(),
                 // Search & filter models
                 search_filter: gtk::CustomFilter::default(),
                 sorter: gtk::CustomSorter::default(),
@@ -153,18 +151,24 @@ impl PlaylistView {
         res
     }
 
-    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
+    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState, window: EuphonicaWindow) {
+        let content_view = self.imp().content_view.get();
+        content_view.setup(library.clone(), client_state.clone(), cache.clone(), window);
+        self.imp().content_page.connect_hidden(move |_| {
+            content_view.unbind(true);
+        });
+        self.imp().library.set(library.clone()).expect("Cannot init PlaylistView with Library");
         self.setup_sort();
         self.setup_search();
-        self.setup_listview(cache.clone(), library.clone());
-        self.imp().library.set(library.clone()).expect("Cannot init PlaylistView with Library");
+        self.setup_listview(cache.clone());
+
         client_state.connect_notify_local(Some("connection-state"), clone!(
             #[weak(rename_to = this)]
             self,
             move |state, _| {
                 if state.get_connection_state() == ConnectionState::Connected {
                     // Newly-connected? Get all playlists.
-                    this.update_playlists(&this.imp().library.get().unwrap().get_playlists());
+                    this.imp().library.get().unwrap().init_playlists();
                 }
             }
         ));
@@ -178,8 +182,9 @@ impl PlaylistView {
                 move |_: ClientState, subsys: glib::BoxedAnyObject| {
                     match subsys.borrow::<Subsystem>().deref() {
                         Subsystem::Playlist => {
+                            let library = this.imp().library.get().unwrap();
                             // Reload playlists
-                            this.update_playlists(&this.imp().library.get().unwrap().get_playlists());
+                            library.init_playlists();
                             // Also try to reload content view too, if it's still bound to one.
                             // If its currently-bound playlist has just been deleted, don't rebind it.
                             // Instead, force-switch the nav view to this page.
@@ -193,10 +198,11 @@ impl PlaylistView {
                                 let curr_name = playlist.get_name();
                                 // Temporarily unbind
                                 content_view.unbind(true);
-                                if let Some(idx) = this.imp().playlists.find_with_equal_func(move |obj| {
+                                let playlists = library.playlists();
+                                if let Some(idx) = playlists.find_with_equal_func(move |obj| {
                                     obj.downcast_ref::<INode>().unwrap().get_name() == curr_name
                                 }) {
-                                    this.on_playlist_clicked(this.imp().playlists.item(idx).unwrap().downcast_ref::<INode>().unwrap());
+                                    this.on_playlist_clicked(playlists.item(idx).unwrap().downcast_ref::<INode>().unwrap());
                                 }
                                 else {
                                     this.imp().nav_view.pop();
@@ -406,11 +412,11 @@ impl PlaylistView {
     pub fn on_playlist_clicked(&self, inode: &INode) {
         let content_view = self.imp().content_view.get();
         content_view.bind(inode.clone());
-        self.imp().library.get().expect("PlaylistView is incorrectly set up (no Library reference)").init_playlist(inode.get_name().unwrap());
         self.imp().nav_view.push_by_tag("content");
     }
 
-    fn setup_listview(&self, cache: Rc<Cache>, library: Library) {
+    fn setup_listview(&self, cache: Rc<Cache>) {
+        let library = self.imp().library.get().unwrap();
         // client_state.connect_closure(
         //     "inode-basic-info-downloaded",
         //     false,
@@ -438,7 +444,8 @@ impl PlaylistView {
             .build();
 
         // Chain search & sort. Put sort after search to reduce number of sort items.
-        let search_model = gtk::FilterListModel::new(Some(self.imp().playlists.clone()), Some(self.imp().search_filter.clone()));
+        let playlists = library.playlists();
+        let search_model = gtk::FilterListModel::new(Some(playlists.clone()), Some(self.imp().search_filter.clone()));
         search_model.set_incremental(true);
         let sort_model = gtk::SortListModel::new(Some(search_model), Some(self.imp().sorter.clone()));
         sort_model.set_incremental(true);
@@ -493,12 +500,8 @@ impl PlaylistView {
                     .expect("The item has to be a `common::INode`.");
                 println!("Clicked on {:?}", &inode);
                 this.on_playlist_clicked(&inode);
+                this.imp().library.get().unwrap().init_playlist(inode.get_name().unwrap());
             })
         );
-    }
-
-    fn update_playlists(&self, playlists: &[INode]) {
-        self.imp().playlists.remove_all();
-        self.imp().playlists.extend_from_slice(playlists);
     }
 }

@@ -104,7 +104,7 @@ mod imp {
     use image::io::Reader;
     use utils::settings_manager;
 
-    use crate::{common::paintables::FadePaintable, library::FolderView, player::Player};
+    use crate::{common::paintables::FadePaintable, library::{FolderView, PlaylistView}, player::Player};
 
     use super::*;
 
@@ -126,6 +126,8 @@ mod imp {
         pub artist_view: TemplateChild<ArtistView>,
         #[template_child]
         pub folder_view: TemplateChild<FolderView>,
+        #[template_child]
+        pub playlist_view: TemplateChild<PlaylistView>,
         #[template_child]
         pub queue_view: TemplateChild<QueueView>,
 
@@ -544,10 +546,17 @@ impl EuphonicaWindow {
             app.get_cache(),
             app.get_client().get_client_state()
         );
+        win.imp().playlist_view.setup(
+            app.get_library(),
+            app.get_cache(),
+            app.get_client().get_client_state(),
+            win.clone()
+        );
         win.imp().sidebar.setup(
             win.imp().stack.get(),
             win.imp().split_view.get(),
-            app.get_player()
+            app.get_player(),
+            app.get_client().get_client_state()
         );
         win.imp().player_bar.setup(
             app.get_player()

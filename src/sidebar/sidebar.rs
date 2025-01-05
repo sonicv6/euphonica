@@ -2,7 +2,7 @@ use adw::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
 use glib::{Properties, clone};
 
-use crate::player::Player;
+use crate::{client::ClientState, player::Player};
 
 use super::SidebarButton;
 
@@ -21,6 +21,10 @@ mod imp {
         pub artists_btn: TemplateChild<SidebarButton>,
         #[template_child]
         pub folders_btn: TemplateChild<SidebarButton>,
+        #[template_child]
+        pub playlists_section: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub playlists_btn: TemplateChild<SidebarButton>,
         #[template_child]
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
@@ -76,7 +80,7 @@ impl Sidebar {
         Self::default()
     }
 
-    pub fn setup(&self, stack: gtk::Stack, split_view: adw::NavigationSplitView, player: Player) {
+    pub fn setup(&self, stack: gtk::Stack, split_view: adw::NavigationSplitView, player: Player, client_state: ClientState) {
         // Set default view. TODO: remember last view
         stack.set_visible_child_name("albums");
         stack
@@ -117,6 +121,24 @@ impl Sidebar {
                 stack.set_visible_child_name("folders");
             }
         }));
+
+        self.imp().playlists_btn.connect_toggled(clone!(
+            #[weak]
+            stack,
+            move |btn| {
+            if btn.is_active() {
+                stack.set_visible_child_name("playlists");
+            }
+        }));
+
+        client_state
+            .bind_property(
+                "supports-playlists",
+                &self.imp().playlists_section.get(),
+                "visible"
+            )
+            .sync_create()
+            .build();
 
         self.imp().queue_btn.connect_toggled(clone!(
             #[weak]

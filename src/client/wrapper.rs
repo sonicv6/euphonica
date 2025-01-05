@@ -27,7 +27,7 @@ use crate::{
 
 use super::state::{ClientState, ConnectionState};
 
-const BATCH_SIZE: u32 = 4096;
+const BATCH_SIZE: u32 = 4;
 const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once (same
 // folder, same tag, etc)
 
@@ -343,19 +343,17 @@ mod background {
         let mut more: bool = true;
         while more && (curr_len as usize) < FETCH_LIMIT {
             let songs: Vec<SongInfo> = client
-                .playlist(&name, curr_len..(curr_len + BATCH_SIZE - 1))
+                .playlist(&name, curr_len..(curr_len + BATCH_SIZE))
                 .unwrap()
                 .iter_mut()
                 .map(|mpd_song| {
                     SongInfo::from(std::mem::take(mpd_song))
                 })
                 .collect();
+            more = songs.len() >= BATCH_SIZE as usize;
             if !songs.is_empty() {
+                curr_len += songs.len() as u32;
                 let _ = sender_to_fg.send_blocking(AsyncClientMessage::PlaylistSongInfoDownloaded(name.clone(), songs));
-                curr_len += BATCH_SIZE;
-            }
-            else {
-                more = false;
             }
         }
     }

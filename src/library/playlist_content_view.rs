@@ -2,7 +2,6 @@ use std::{
     cell::{OnceCell, RefCell},
     rc::Rc,
 };
-use time::{Date, format_description};
 use adw::subclass::prelude::*;
 use gtk::{
     gio, glib, prelude::*, BitsetIter, CompositeTemplate, ListItem, SignalListItemFactory
@@ -502,7 +501,7 @@ impl PlaylistContentView {
         let mut bindings = self.imp().bindings.borrow_mut();
 
         let title_binding = playlist
-            .bind_property("name", &title_label, "label")
+            .bind_property("uri", &title_label, "label")
             .sync_create()
             .build();
         // Save binding
@@ -510,17 +509,6 @@ impl PlaylistContentView {
 
         let last_mod_binding = playlist
             .bind_property("last-modified", &last_mod_label, "label")
-            .transform_to(
-                |_, boxed_date: glib::BoxedAnyObject| {
-                    let format = format_description::parse("[year]-[month]-[day]").ok().unwrap();
-                    if let Some(release_date) = boxed_date.borrow::<Option<Date>>().as_ref() {
-                        return release_date.format(
-                            &format
-                        ).ok();
-                    }
-                    Some("-".to_owned())
-                }
-            )
             .sync_create()
             .build();
         // Save binding

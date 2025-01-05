@@ -29,18 +29,19 @@ mod imp {
     #[derive(Debug)]
     pub struct Library {
         pub client: OnceCell<Rc<MpdWrapper>>,
-        // Each view gets their own list.
-        // Album retrieval routine:
-        // 1. Library sends request for albums to wrapper
-        // 2. Wrapper forwards request to background client
+        pub playlists: gio::ListStore,
+        // Each view gets their own list, except Playlist View.
+        // This is due to the need to access playlists from other views.
+        //
+        // Album/Artist retrieval routine:
+        // 1. Library places a background task to fetch albums.
         // 3. Background client gets list of unique album tags
         // 4. For each album tag:
         // 4.1. Get the first song with that tag
         // 4.2. Infer folder_uri, sound quality, albumartist, etc. & pack into AlbumInfo class.
-        // 4.3. Send AlbumInfo class to main thread via MpdMessage.
+        // 4.3. Send AlbumInfo class to main thread via AsyncClientMessage.
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
-
         pub cache: OnceCell<Rc<Cache>>,
     }
 
@@ -51,6 +52,7 @@ mod imp {
 
         fn new() -> Self {
             Self {
+                playlists: gio::ListStore::new::<INode>(),
                 client: OnceCell::new(),
                 cache: OnceCell::new()
             }
@@ -167,11 +169,19 @@ impl Library {
     }
 
     /// Queue a playlist for playback.
-    pub fn get_playlists(&self) -> Vec<INode> {
-        self.client().get_playlists()
+    pub fn init_playlists(&self) {
+        self.imp().playlists.remove_all();
+        self.imp().playlists.extend_from_slice(&self.client().get_playlists());
     }
 
+    /// Get a reference to the local playlists store
+    pub fn playlists(&self) -> gio::ListStore {
+        self.imp().playlists.clone()
+    }
+
+    /// Retrieve songs in a playlist
     pub fn init_playlist(&self, name: &str) {
+        println!("Fetching songs for playlist");
         self.client().queue_background(BackgroundTask::FetchPlaylistSongs(name.to_owned()));
     }
 

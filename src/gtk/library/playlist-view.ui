@@ -51,12 +51,10 @@
                   <object class="GtkSearchBar" id="search_bar">
                     <property name="key-capture-widget">nav_view</property>
                     <child>
-                      <child>
-                        <object class="GtkSearchEntry" id="search_entry">
-                          <property name="search-delay">150</property>
-                          <property name="width-request">400</property>
-                        </object>
-                      </child>
+                      <object class="GtkSearchEntry" id="search_entry">
+                        <property name="search-delay">150</property>
+                        <property name="width-request">400</property>
+                      </object>
                     </child>
                   </object>
                 </child>

@@ -17,7 +17,6 @@
           <child>
             <object class="GtkButton" id="delete">
               <property name="label" translatable="true">Delete</property>
-              <property name="sensitive">false</property>
               <style>
                 <class name="destructive-action"/>
               </style>
@@ -58,7 +57,7 @@
                 <property name="title" translatable="true">Playlist Info</property>
               </object>
             </property>
-            <property name="end-widget">
+            <child type="end">
               <object class="GtkBox">
                 <property name="spacing">6</property>
                 <child>
@@ -79,7 +78,7 @@
                   </object>
                 </child>
               </object>
-            </property>
+            </child>
           </object>
         </child>
         <property name="content">
@@ -165,7 +164,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkLabel" id="last_modified">
+                                      <object class="GtkLabel" id="last_mod">
                                         <property name="label">-</property>
                                         <style>
                                           <class name="caption"/>

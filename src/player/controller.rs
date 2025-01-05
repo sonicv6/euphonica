@@ -401,9 +401,6 @@ impl Player {
                     if let Some(outs) = this.client().get_outputs() {
                         this.update_outputs(glib::BoxedAnyObject::new(outs));
                     }
-
-                    // TODO: actual playlists widget
-                    let _ = this.client().get_playlists();
                 }
             }
         ));

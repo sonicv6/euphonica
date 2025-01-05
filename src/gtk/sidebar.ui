@@ -25,28 +25,30 @@
 				<property name="icon_name">folder-symbolic</property>
 			</object>
 		</child>
+
+		<child>
+			<object class="GtkBox" id="playlists_section">
+				<property name="visible">false</property>
+				<property name="spacing">6</property>
+				<property name="orientation">1</property>
+				<child>
+					<object class="GtkSeparator"></object>
+				</child>
+
+				<child>
+					<object class="EuphonicaSidebarButton" id="playlists_btn">
+						<property name="group">albums_btn</property>
+						<property name="label" translatable="true">Saved Playlists</property>
+						<property name="icon_name">playlist-symbolic</property>
+					</object>
+				</child>
+			</object>
+		</child>
+
 		<child>
 			<object class="GtkSeparator"></object>
 		</child>
-		<!--
-		<child>
-			<object class="EuphonicaSidebarButton" id="playlist1_btn">
-				<property name="group">albums_btn</property>
-				<property name="label" translatable="true">Playlist 1</property>
-				<property name="icon_name">folder-symbolic</property>
-			</object>
-		</child>
-		<child>
-			<object class="EuphonicaSidebarButton" id="playlist2_btn">
-				<property name="group">albums_btn</property>
-				<property name="label" translatable="true">Playlist 2</property>
-				<property name="icon_name">folder-symbolic</property>
-			</object>
-		</child>
-		<child>
-			<object class="GtkSeparator"></object>
-		</child>
-		-->
+
 		<child>
 			<object class="GtkToggleButton" id="queue_btn">
 				<property name="group">albums_btn</property>

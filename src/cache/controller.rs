@@ -397,12 +397,12 @@ impl Cache {
         let folder_uri = album.uri.to_owned();
         let key = (format!("uri:{}", &folder_uri), thumbnail);
         if let Some(tex) = IMAGE_CACHE.get(&key) {
-            // println!("Cache hit:  {} (thumbnail: {})", folder_uri, thumbnail);
             // Cloning GObjects is cheap since they're just references
             return Some(tex.value().clone());
         }
         // If missed, try loading from disk into cache or fetch remotely
         if schedule {
+            println!("Cache miss:  {} (thumbnail: {})", folder_uri, thumbnail);
             self.ensure_cached_album_art(album, thumbnail);
         }
         None
