@@ -413,6 +413,7 @@ impl PlaylistView {
         let content_view = self.imp().content_view.get();
         content_view.bind(inode.clone());
         self.imp().nav_view.push_by_tag("content");
+        self.imp().library.get().unwrap().init_playlist(inode.get_name().unwrap());
     }
 
     fn setup_listview(&self, cache: Rc<Cache>) {
@@ -500,7 +501,6 @@ impl PlaylistView {
                     .expect("The item has to be a `common::INode`.");
                 println!("Clicked on {:?}", &inode);
                 this.on_playlist_clicked(&inode);
-                this.imp().library.get().unwrap().init_playlist(inode.get_name().unwrap());
             })
         );
     }

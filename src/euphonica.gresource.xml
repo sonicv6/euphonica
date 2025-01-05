@@ -36,6 +36,7 @@
     <file preprocess="xml-stripblanks">gtk/preferences/player.ui</file>
     <file>gtk/style.css</file>
     <file preprocess="xml-stripblanks" alias="albumart-placeholder.svg">gtk/textures/albumart-placeholder.svg</file>
+    <file alias="albumart-placeholder-thumb.png">gtk/textures/albumart-placeholder-thumb.png</file>
   </gresource>
   <gresource prefix="/org/euphonica/Euphonica/icons/scalable/actions/">
     <file preprocess="xml-stripblanks" alias="settings-symbolic.svg">gtk/icons/settings-symbolic.svg</file>

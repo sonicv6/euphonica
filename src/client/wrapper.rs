@@ -27,7 +27,7 @@ use crate::{
 
 use super::state::{ClientState, ConnectionState};
 
-const BATCH_SIZE: u32 = 4;
+const BATCH_SIZE: u32 = 1024;
 const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once (same
 // folder, same tag, etc)
 

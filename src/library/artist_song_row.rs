@@ -17,7 +17,7 @@ use glib::{
 
 use crate::{
     cache::{
-        placeholders::ALBUMART_PLACEHOLDER,
+        placeholders::ALBUMART_THUMBNAIL_PLACEHOLDER,
         Cache,
         CacheState
     },
@@ -192,7 +192,7 @@ impl ArtistSongRow {
                 return;
             }
         }
-        self.imp().thumbnail.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
+        self.imp().thumbnail.set_paintable(Some(&*ALBUMART_THUMBNAIL_PLACEHOLDER));
     }
 
     pub fn bind(&self, song: &Song, cache: Rc<Cache>) {

@@ -402,7 +402,6 @@ impl Cache {
         }
         // If missed, try loading from disk into cache or fetch remotely
         if schedule {
-            println!("Cache miss:  {} (thumbnail: {})", folder_uri, thumbnail);
             self.ensure_cached_album_art(album, thumbnail);
         }
         None
