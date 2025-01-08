@@ -25,7 +25,7 @@ use crate::{
     utils::format_secs_as_duration
 };
 
-use super::Library;
+use super::{Library, PlaylistContentView};
 
 mod imp {
     use std::cell::Cell;
@@ -34,6 +34,8 @@ mod imp {
         ParamSpec, ParamSpecBoolean, ParamSpecString
     };
     use once_cell::sync::Lazy;
+    use crate::library::PlaylistContentView;
+
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
@@ -65,7 +67,11 @@ mod imp {
         pub replace_queue_id: RefCell<Option<SignalHandlerId>>,
         pub append_queue_id: RefCell<Option<SignalHandlerId>>,
         pub thumbnail_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub raise_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub lower_signal_id: RefCell<Option<SignalHandlerId>>,
+        pub remove_signal_id: RefCell<Option<SignalHandlerId>>,
         pub library: OnceCell<Library>,
+        pub content_view: OnceCell<PlaylistContentView>,
         pub queue_controls_visible: Cell<bool>,
         pub edit_controls_visible: Cell<bool>
     }
@@ -216,15 +222,16 @@ glib::wrapper! {
 }
 
 impl PlaylistSongRow {
-    pub fn new(library: Library, item: &gtk::ListItem) -> Self {
+    pub fn new(library: Library, view: PlaylistContentView, item: &gtk::ListItem) -> Self {
         let res: Self = Object::builder().build();
-        res.setup(library, item);
+        res.setup(library, view, item);
         res
     }
 
     #[inline(always)]
-    pub fn setup(&self, library: Library, item: &gtk::ListItem) {
+    pub fn setup(&self, library: Library, view: PlaylistContentView, item: &gtk::ListItem) {
         let _ = self.imp().library.set(library);
+        let _ = self.imp().content_view.set(view);
         item
             .property_expression("item")
             .chain_property::<Song>("name")
@@ -329,6 +336,69 @@ impl PlaylistSongRow {
         ) {
             // Unbind old ID
             self.imp().append_queue.disconnect(old_id);
+        }
+
+        if let Some(old_id) = self.imp().raise_signal_id.replace(
+            Some(
+                self.imp().raise.connect_clicked(
+                    clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        #[strong]
+                        song,
+                        move |_| {
+                            if let Some(view) = this.imp().content_view.get() {
+                                view.shift_backward(song.get_queue_pos());
+                            }
+                        }
+                    )
+                )
+            )
+        ) {
+            // Unbind old ID
+            self.imp().raise.disconnect(old_id);
+        }
+
+        if let Some(old_id) = self.imp().lower_signal_id.replace(
+            Some(
+                self.imp().lower.connect_clicked(
+                    clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        #[strong]
+                        song,
+                        move |_| {
+                            if let Some(view) = this.imp().content_view.get() {
+                                view.shift_forward(song.get_queue_pos());
+                            }
+                        }
+                    )
+                )
+            )
+        ) {
+            // Unbind old ID
+            self.imp().lower.disconnect(old_id);
+        }
+
+        if let Some(old_id) = self.imp().remove_signal_id.replace(
+            Some(
+                self.imp().remove.connect_clicked(
+                    clone!(
+                        #[weak(rename_to = this)]
+                        self,
+                        #[strong]
+                        song,
+                        move |_| {
+                            if let Some(view) = this.imp().content_view.get() {
+                                view.remove(song.get_queue_pos());
+                            }
+                        }
+                    )
+                )
+            )
+        ) {
+            // Unbind old ID
+            self.imp().remove.disconnect(old_id);
         }
     }
 

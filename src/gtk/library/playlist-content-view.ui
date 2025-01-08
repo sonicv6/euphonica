@@ -353,9 +353,28 @@
                               <class name="padding-6"/>
                             </style>
                             <property name="start-widget">
-                              <object class="GtkButton" id="edit_cancel">
-                                <property name="label" translatable="true">Cancel</property>
-                                <property name="tooltip-text" translatable="true">Discard all changes</property>
+                              <object class="GtkBox">
+                                <property name="spacing">6</property>
+                                <child>
+                                  <object class="GtkButton" id="edit_cancel">
+                                    <property name="label" translatable="true">Cancel</property>
+                                    <property name="tooltip-text" translatable="true">Discard all changes</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton" id="edit_undo">
+                                    <property name="icon-name" translatable="true">edit-undo-symbolic</property>
+                                    <property name="tooltip-text" translatable="true">Undo</property>
+                                    <property name="sensitive">false</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton" id="edit_redo">
+                                    <property name="icon-name" translatable="true">edit-redo-symbolic</property>
+                                    <property name="tooltip-text" translatable="true">Redo</property>
+                                    <property name="sensitive">false</property>
+                                  </object>
+                                </child>
                               </object>
                             </property>
                             <property name="end-widget">
@@ -386,21 +405,57 @@
               </object>
             </child>
             <child>
-              <object class="GtkScrolledWindow">
-                <property name="height-request">50</property>
-                <property name="hscrollbar-policy">never</property>
-                <property name="vscrollbar-policy">automatic</property>
-                <property name="propagate-natural-height">true</property>
-                <property name="has-frame">false</property>
+              <object class="GtkStack" id="content_stack">
+                <property name="hexpand">true</property>
                 <property name="vexpand">true</property>
-                <property name="child">
-                  <object class="GtkListView" id="content">
-                    <property name="show-separators">true</property>
-                    <style>
-                      <class name="no-bg"/>
-                    </style>
+                <property name="transition-type">crossfade</property>
+                <child>
+                  <object class="GtkStackPage">
+                    <property name="name">queue-mode</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow" id="content_scroller">
+                        <property name="height-request">50</property>
+                        <property name="hscrollbar-policy">never</property>
+                        <property name="vscrollbar-policy">automatic</property>
+                        <property name="propagate-natural-height">true</property>
+                        <property name="has-frame">false</property>
+                        <property name="vexpand">true</property>
+                        <property name="child">
+                          <object class="GtkListView" id="content">
+                            <property name="show-separators">true</property>
+                            <style>
+                              <class name="no-bg"/>
+                            </style>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
                   </object>
-                </property>
+                </child>
+
+                <child>
+                  <object class="GtkStackPage">
+                    <property name="name">edit-mode</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow" id="editing_content_scroller">
+                        <property name="height-request">50</property>
+                        <property name="hscrollbar-policy">never</property>
+                        <property name="vscrollbar-policy">automatic</property>
+                        <property name="propagate-natural-height">true</property>
+                        <property name="has-frame">false</property>
+                        <property name="vexpand">true</property>
+                        <property name="child">
+                          <object class="GtkListView" id="editing_content">
+                            <property name="show-separators">true</property>
+                            <style>
+                              <class name="no-bg"/>
+                            </style>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
+                  </object>
+                </child>
               </object>
             </child>
           </object>

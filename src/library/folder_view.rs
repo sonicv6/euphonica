@@ -524,7 +524,6 @@ impl FolderView {
                         history.truncate(curr_idx);
                     }
                     history.push(name.to_owned());
-                    println!("History: {:?}", &history);
                 }
                 self.imp().move_forward();
             }

@@ -21,7 +21,7 @@ use glib::subclass::Signal;
 
 use adw::subclass::prelude::*;
 
-use mpd::{search::Operation, Query, Term, error::Error as MpdError};
+use mpd::{search::Operation, Query, Term, error::Error as MpdError, EditAction};
 
 mod imp {
     use super::*;
@@ -181,7 +181,6 @@ impl Library {
 
     /// Retrieve songs in a playlist
     pub fn init_playlist(&self, name: &str) {
-        println!("Fetching songs for playlist");
         self.client().queue_background(BackgroundTask::FetchPlaylistSongs(name.to_owned()));
     }
 
@@ -199,6 +198,10 @@ impl Library {
     pub fn rename_playlist(&self, old_name: &str, new_name: &str) -> Result<(), Option<MpdError>>{
         self.client().rename_playlist(old_name, new_name)
     }
+
+    // pub fn edit_playlist(&self, actions: &[&EditAction]) -> Result<(), Option<MpdError>> {
+    //     // TODO
+    // }
 
     pub fn get_folder_contents(&self, uri: &str) {
         self.client().queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()));
