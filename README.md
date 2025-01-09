@@ -48,18 +48,24 @@ TODO: Update to reflect the recent name change :)
 
 ## Build
 
-Euphonica is developed on, and so far has only been tested on Arch Linux (btw).
+Euphonica is still in very early development, and so far has only been tested on Arch Linux (btw).
 
 1. Make sure you have these dependencies installed beforehand:
-  - gtk4 >= 4.16
-  - libadwaita >= 1.6
-  - rustup >= 1.27
-  - meson >= 1.5
-  - mpd >= 0.21 (Euphonica relies on the new filter syntax)
+  - `gtk4` >= 4.16
+  - `libadwaita` >= 1.5
+  - `rustup` >= 1.27
+  - `meson` >= 1.5
+  - `gettext` >= 0.23
+  - `mpd` >= 0.21 (Euphonica relies on the new filter syntax)
+  
+    If you are on Arch Linux, `gettext` should have been installed as part of the `base-devel` metapackage, which also includes `git` (to clone this repo :) ).
 
 2. Init build folder
   ```bash
-  cd /path/to/where/you/cloned/this/repo/euphonica
+  cd /path/to/where/to/clone/euphonica
+  git clone https://github.com/htkhiem/euphonica.git
+  cd euphonica
+  git submodule update --init
   meson setup build --buildtype=release
   ```
 
@@ -68,6 +74,7 @@ Euphonica is developed on, and so far has only been tested on Arch Linux (btw).
   cd build
   meson install
   ```
+
 Flatpak & AUR releases are also planned.
 
 ## TODO
