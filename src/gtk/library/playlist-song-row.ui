@@ -32,6 +32,11 @@
               <object class="GtkBox">
                 <property name="spacing">6</property>
                 <child>
+                  <object class="GtkLabel" id="playlist_order">
+                    <property name="label">?</property>
+                  </object>
+                </child>
+                <child>
                   <object class="GtkLabel" id="song_name">
                     <property name="halign">start</property>
                     <property name="ellipsize">end</property>

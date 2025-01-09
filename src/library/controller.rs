@@ -199,9 +199,15 @@ impl Library {
         self.client().rename_playlist(old_name, new_name)
     }
 
-    // pub fn edit_playlist(&self, actions: &[&EditAction]) -> Result<(), Option<MpdError>> {
-    //     // TODO
-    // }
+    pub fn replace_playlist_with_songs(&self, playlist_name: &str, songs: &[Song]) -> Result<(), Option<MpdError>> {
+        // TODO
+        let mut edits: Vec<EditAction> = Vec::with_capacity(songs.len() + 1);
+        edits.push(EditAction::Clear(Cow::Borrowed(playlist_name)));
+        songs.iter().for_each(|s| {
+            edits.push(EditAction::Add(Cow::Borrowed(playlist_name), Cow::Borrowed(s.get_uri()), None));
+        });
+        self.client().edit_playlist(&edits)
+    }
 
     pub fn get_folder_contents(&self, uri: &str) {
         self.client().queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()));

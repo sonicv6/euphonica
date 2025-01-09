@@ -56,6 +56,8 @@ mod imp {
         #[template_child]
         pub thumbnail: TemplateChild<gtk::Image>,
         #[template_child]
+        pub playlist_order: TemplateChild<gtk::Label>,
+        #[template_child]
         pub song_name: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist_name: TemplateChild<gtk::Label>,
@@ -131,6 +133,7 @@ mod imp {
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
+                    ParamSpecString::builder("order").build(),
                     ParamSpecString::builder("name").build(),
                     ParamSpecString::builder("artist").build(),
                     ParamSpecString::builder("album").build(),
@@ -146,6 +149,7 @@ mod imp {
 
         fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
             match pspec.name() {
+                "order" => self.playlist_order.label().to_value(),
                 "name" => self.song_name.label().to_value(),
                 // "last_mod" => obj.get_last_mod().to_value(),
                 "album" => self.album_name.label().to_value(),
@@ -161,6 +165,13 @@ mod imp {
 
         fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
             match pspec.name() {
+                "order" => {
+                    // TODO: Handle no-name case here instead of in Song GObject for flexibility
+                    if let Ok(new) = value.get::<&str>() {
+                        self.playlist_order.set_label(new);
+                        self.obj().notify("order");
+                    }
+                }
                 "name" => {
                     // TODO: Handle no-name case here instead of in Song GObject for flexibility
                     if let Ok(name) = value.get::<&str>() {
@@ -232,6 +243,11 @@ impl PlaylistSongRow {
     pub fn setup(&self, library: Library, view: PlaylistContentView, item: &gtk::ListItem) {
         let _ = self.imp().library.set(library);
         let _ = self.imp().content_view.set(view);
+        item
+            .property_expression("item")
+            .chain_property::<Song>("queue-pos")
+            .chain_closure::<String>(closure_local!(|_: Option<Object>, val: u32| { val.to_string() }))
+            .bind(self, "order", gtk::Widget::NONE);
         item
             .property_expression("item")
             .chain_property::<Song>("name")

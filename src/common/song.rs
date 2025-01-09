@@ -303,7 +303,10 @@ impl Song {
     }
 
     pub fn set_queue_pos(&self, new: u32) {
-        let _ = self.imp().pos.replace(new);
+        let old = self.imp().pos.replace(new);
+        if old != new {
+            self.notify("queue-pos");
+        }
     }
 
     pub fn is_queued(&self) -> bool {

@@ -13,10 +13,7 @@ use glib::{
     signal::SignalHandlerId
 };
 
-use mpd::{
-    error::{Error as MpdError, ErrorCode as MpdErrorCode, ServerError},
-    EditAction
-};
+use mpd::error::{Error as MpdError, ErrorCode as MpdErrorCode, ServerError};
 
 use super::{
     Library,
@@ -29,14 +26,14 @@ use crate::{
 };
 
 #[derive(Debug)]
-enum InternalEditAction {
+pub enum InternalEditAction {
     ShiftBackward(u32),
     ShiftForward(u32),
     Remove(u32)
 }
 
 #[derive(Debug)]
-struct HistoryStep {
+pub struct HistoryStep {
     pub action: InternalEditAction,
     pub song: Option<Song> // for undoing removals
 }
@@ -50,7 +47,7 @@ impl HistoryStep {
     fn shift(&self, list: &gio::ListStore, old: u32, backward: bool) {
         // Use splice to only emit one update signal, reducing visual jitter
         let src = if backward { old - 1 } else { old };
-        let des = if backward { old } else { old + 1 };
+        let des = src + 1;
         let src_song = list.item(src).unwrap();
         let des_song = list.item(des).unwrap();
         list.splice(src, 2, &[des_song, src_song]);
@@ -78,10 +75,10 @@ impl HistoryStep {
     pub fn backward(&self, list: &gio::ListStore) {
         match self.action {
             InternalEditAction::ShiftBackward(idx) => {
-                self.shift(list, idx, false);
+                self.shift(list, idx - 1, false);
             }
             InternalEditAction::ShiftForward(idx) => {
-                self.shift(list, idx, true);
+                self.shift(list, idx + 1, true);
             }
             InternalEditAction::Remove(idx) => {
                 list.insert(idx, self.song.as_ref().unwrap());
@@ -117,11 +114,7 @@ mod imp {
         #[template_child]
         pub content_stack: TemplateChild<gtk::Stack>,
         #[template_child]
-        pub content_scroller: TemplateChild<gtk::ScrolledWindow>,
-        #[template_child]
         pub content: TemplateChild<gtk::ListView>,
-        #[template_child]
-        pub editing_content_scroller: TemplateChild<gtk::ScrolledWindow>,
         #[template_child]
         pub editing_content: TemplateChild<gtk::ListView>,
         #[template_child]
@@ -193,9 +186,7 @@ mod imp {
                 collapse_infobox: TemplateChild::default(),
                 runtime: TemplateChild::default(),
                 content_stack: TemplateChild::default(),
-                content_scroller: TemplateChild::default(),
                 content: TemplateChild::default(),
-                editing_content_scroller: TemplateChild::default(),
                 editing_content: TemplateChild::default(),
                 song_list: gio::ListStore::new::<Song>(),
                 editing_song_list: gio::ListStore::new::<Song>(),
@@ -361,12 +352,6 @@ mod imp {
             }
             self.editing_song_list.extend_from_slice(&songs);
 
-            // Set the editing list view to scroll to the same location as the main list view
-            // so as to get a nicely-aligned crossfade effect
-            self.editing_content_scroller.vadjustment().set_value(
-                self.content_scroller.vadjustment().value()
-            );
-
             // Everything is now in place; start fading
             self.action_row.set_visible_child_name("edit-mode");
             self.content_stack.set_visible_child_name("edit-mode");
@@ -377,17 +362,15 @@ mod imp {
                 // Currently if the command list fails halfway we'll still
                 // clear the undo history.
                 if self.history_idx.get() > 0 {
-                    // TODO: Either convert the InternalEditActions into their corresponding EditActions,
-                    // or just flatten the changes and generate a command list starting with a playlistclear
-                    // and containing playlistadd of each song in the editing_song_list.
-                    // let _ = self.library.get().unwrap().edit_playlist(
-                    // self.history
-                    //     .borrow()[..self.history_idx.get()]
-                    //     .iter()
-                    //     .map(|hs: &HistoryStep| &hs.action )
-                    //     .collect::<Vec<&EditAction>>()
-                    //     .as_ref()
-                    // );
+                    let song_count = self.editing_song_list.n_items();
+                    let mut song_list: Vec<Song> = Vec::with_capacity(song_count as usize);
+                    for i in 0..song_count {
+                        song_list.push(self.editing_song_list.item(i).unwrap().downcast_ref::<Song>().unwrap().clone());
+                    }
+                    let _ = self.library.get().unwrap().replace_playlist_with_songs(
+                        self.playlist.borrow().as_ref().unwrap().get_uri(),
+                        &song_list
+                    );
                     self.history_idx.replace(0);
                 }
                 self.history.borrow_mut().clear();
@@ -397,7 +380,6 @@ mod imp {
             }
             // Just fade back, no need to clear the list (won't lag us
             // since we're not rendering it)
-            self.content_scroller.vadjustment().set_value(0.0);
             self.action_row.set_visible_child_name("queue-mode");
             self.content_stack.set_visible_child_name("queue-mode");
         }
@@ -422,7 +404,10 @@ mod imp {
             let curr_idx = self.history_idx.get();
             let history = self.history.borrow();
             if curr_idx < history.len() {
-                let step = &history[curr_idx - 1];
+                // Current index is always 1-based, i.e. 1 points to the 0th element of the history vec.
+                // Since redoing means executing the NEXT step, not the current, we need to get the
+                // (curr_idx - 1 + 1)th step in the history.
+                let step = &history[curr_idx];
                 step.forward(&self.editing_song_list);
                 self.history_idx.replace(curr_idx + 1);
                 self.update_undo_redo_sensitivity();
@@ -431,13 +416,17 @@ mod imp {
 
         pub fn push_history(&self, step: HistoryStep) {
             // Truncate history to current index
-            let mut history = self.history.borrow_mut();
-            let curr_idx = self.history_idx.get();
-            let hist_len = history.len();
-            if curr_idx < hist_len {
-                history.truncate(curr_idx);
+            {
+                let mut history = self.history.borrow_mut();
+                let curr_idx = self.history_idx.get();
+                let hist_len = history.len();
+                if curr_idx < hist_len {
+                    history.truncate(curr_idx);
+                }
+                history.push(step);
+                self.history_idx.replace(history.len());
             }
-            history.push(step);
+            self.update_undo_redo_sensitivity();
         }
     }
 }
@@ -858,8 +847,8 @@ impl PlaylistContentView {
     }
 
     pub fn shift_forward(&self, idx: u32) {
-        let len = self.imp().history.borrow().len();
-        if len > 1 && idx < (len as u32 - 2) {
+        let len = self.imp().editing_song_list.n_items();
+        if len > 1 && idx < (len - 2) {
             let step = HistoryStep {
                 action: InternalEditAction::ShiftForward(idx),
                 song: None

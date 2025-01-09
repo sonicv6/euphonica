@@ -12,12 +12,7 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client,
-    error::{Error as MpdError, ErrorCode as MpdErrorCode},
-    lsinfo::LsInfoEntry,
-    search::{Operation as QueryOperation, Query, Term, Window},
-    song::Id,
-    Channel, Idle, Output, Subsystem, SaveMode
+    client::Client, error::{Error as MpdError, ErrorCode as MpdErrorCode}, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, EditAction, Idle, Output, SaveMode, Subsystem
 };
 use uuid::Uuid;
 
@@ -922,6 +917,18 @@ impl MpdWrapper {
     pub fn rename_playlist(&self, old_name: &str, new_name: &str) -> Result<(), Option<MpdError>> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             match client.pl_rename(old_name, new_name) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Some(e))
+            }
+        }
+        else {
+            Err(None)
+        }
+    }
+
+    pub fn edit_playlist(&self, actions: &[EditAction]) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.pl_edit(actions) {
                 Ok(()) => Ok(()),
                 Err(e) => Err(Some(e))
             }
