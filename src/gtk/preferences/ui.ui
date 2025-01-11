@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0" />
+  <requires lib="Adw" version="1.0" />
+  <template class="EuphonicaUIPreferences" parent="AdwPreferencesPage">
+    <property name="title" translatable="true">Appearance</property>
+    <property name="icon-name">brush-monitor-symbolic</property>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">Sidebar</property>
+        <child>
+          <object class="AdwSpinRow" id="recent_playlists_count">
+            <property name="title" translatable="true">Number of recent playlists to show</property>
+            <property name="subtitle" translatable="true">Sorted by last-modified time, latest first.</property>
+            <property name="digits">0</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0</property>
+                <property name="upper">20</property>
+                <property name="value">5</property>
+                <property name="page-increment">1</property>
+                <property name="step-increment">1</property>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">Background</property>
+        <child>
+          <object class="AdwSwitchRow" id="use_album_art_as_bg">
+            <property name="title" translatable="true">Use album art as background</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinRow" id="bg_blur_radius">
+            <property name="title" translatable="true">Background blur radius (pixels)</property>
+            <property name="subtitle" translatable="true">Set to 0 to disable blur.</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0</property>
+                <property name="upper">100</property>
+                <property name="value">24</property>
+                <property name="page-increment">10</property>
+                <property name="step-increment">1</property>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinRow" id="bg_opacity">
+            <property name="title" translatable="true">Background opacity</property>
+            <property name="subtitle" translatable="true">Lower values allow the album art to "dim" or "brighten" depending on whether the app is in light or dark mode by blending itself with the default window background.</property>
+            <property name="digits">2</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0.01</property>
+                <property name="upper">1.00</property>
+                <property name="value">0.50</property>
+                <property name="page-increment">0.1</property>
+                <property name="step-increment">0.02</property>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinRow" id="bg_transition_duration">
+            <property name="title" translatable="true">Transition duration (seconds)</property>
+            <property name="digits">2</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0.0</property>
+                <property name="upper">10.0</property>
+                <property name="value">1.0</property>
+                <property name="page-increment">1.0</property>
+                <property name="step-increment">0.25</property>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">Volume Knob</property>
+        <child>
+          <object class="AdwComboRow" id="vol_knob_unit">
+            <property name="title" translatable="true">Display unit</property>
+            <property name="subtitle" translatable="true">MPD natively uses a 100-step volume scale. The precise gain curve used depends on each output plugin's mixer configuration. dBFS assumes that the 100 steps are treated as percents.</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>%</item>
+                  <item>dBFS</item>
+                </items>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinRow" id="vol_knob_sensitivity">
+            <property name="title" translatable="true">Scroll sensitivity</property>
+            <property name="digits">1</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0.1</property>
+                <property name="upper">3.0</property>
+                <property name="value">1.0</property>
+                <property name="page-increment">1.0</property>
+                <property name="step-increment">0.1</property>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>
