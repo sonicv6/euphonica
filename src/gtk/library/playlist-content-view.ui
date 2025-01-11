@@ -230,7 +230,7 @@
             <child>
               <!-- The always-visible action row -->
               <object class="GtkBox">
-                <property name="spacing">6</property>
+                <property name="margin-end">6</property>
                 <child>
                   <object class="GtkStack" id="action_row">
                     <property name="transition-type">crossfade</property>
@@ -396,6 +396,7 @@
                 <child>
                   <object class="GtkToggleButton" id="collapse_infobox">
                     <property name="icon-name">up-symbolic</property>
+                    <property name="valign">center</property>
                     <style>
                       <class name="circular"/>
                       <class name="flat"/>

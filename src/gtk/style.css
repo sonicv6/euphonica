@@ -1,3 +1,7 @@
+listview > row {
+	padding: 0px;
+}
+
 .queue-view-column {
     margin-left: 12px;
     margin-right: 12px;

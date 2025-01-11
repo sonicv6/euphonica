@@ -21,16 +21,16 @@ use crate::{
     client::{
         ClientState,
         ConnectionState,
-    }, common::{INode, INodeType},
+    }, common::INode,
     utils::{g_cmp_str_options, g_search_substr, settings_manager}, window::EuphonicaWindow
 };
 
 // Playlist view implementation
 mod imp {
-    use std::cell::{OnceCell, RefCell};
+    use std::cell::OnceCell;
 
-    use glib::{ParamSpec, ParamSpecString};
-    use once_cell::sync::Lazy;
+    
+    
 
     use crate::library::PlaylistContentView;
 
@@ -151,6 +151,10 @@ impl PlaylistView {
         res
     }
 
+    pub fn pop(&self) {
+        self.imp().nav_view.pop();
+    }
+
     pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState, window: EuphonicaWindow) {
         let content_view = self.imp().content_view.get();
         content_view.setup(library.clone(), client_state.clone(), cache.clone(), window);
@@ -205,7 +209,7 @@ impl PlaylistView {
                                     this.on_playlist_clicked(playlists.item(idx).unwrap().downcast_ref::<INode>().unwrap());
                                 }
                                 else {
-                                    this.imp().nav_view.pop();
+                                    this.pop();
                                 }
                             }
 

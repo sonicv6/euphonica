@@ -2,7 +2,7 @@ use adw::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
 use glib::{Properties, clone};
 
-use crate::{client::ClientState, player::Player};
+use crate::{application::EuphonicaApplication, common::INode, window::EuphonicaWindow};
 
 use super::SidebarButton;
 
@@ -25,6 +25,8 @@ mod imp {
         pub playlists_section: TemplateChild<gtk::Box>,
         #[template_child]
         pub playlists_btn: TemplateChild<SidebarButton>,
+        #[template_child]
+        pub recent_playlists: TemplateChild<gtk::ListBox>,
         #[template_child]
         pub queue_btn: TemplateChild<gtk::ToggleButton>,
         #[template_child]
@@ -80,7 +82,16 @@ impl Sidebar {
         Self::default()
     }
 
-    pub fn setup(&self, stack: gtk::Stack, split_view: adw::NavigationSplitView, player: Player, client_state: ClientState) {
+    pub fn setup(
+        &self,
+        win: &EuphonicaWindow,
+        app: &EuphonicaApplication,
+    ) {
+        let stack = win.get_stack();
+        let split_view = win.get_split_view();
+        let player = app.get_player();
+        let library = app.get_library();
+        let client_state = app.get_client().get_client_state();
         // Set default view. TODO: remember last view
         stack.set_visible_child_name("albums");
         stack
@@ -93,9 +104,10 @@ impl Sidebar {
             .sync_create()
             .build();
 
-        self.imp().albums_btn.set_active(true);
+        let albums_btn = self.imp().albums_btn.get();
+        albums_btn.set_active(true);
         // Hook each button to their respective views
-        self.imp().albums_btn.connect_toggled(clone!(
+        albums_btn.connect_toggled(clone!(
             #[weak]
             stack,
             move |btn| {
@@ -122,11 +134,90 @@ impl Sidebar {
             }
         }));
 
+        let playlist_view = win.get_playlist_view();
+        let playlists = library.playlists();
+        let recent_playlists_model = gtk::SliceListModel::new(
+            Some(gtk::SortListModel::new(
+                Some(playlists.clone()),
+                Some(
+                    gtk::StringSorter::builder()
+                        .expression(
+                            gtk::PropertyExpression::new(
+                                INode::static_type(),
+                                Option::<gtk::PropertyExpression>::None,
+                                "last-modified"
+                            )//.chain_property::<INode>("last-modified")
+                        )
+                        .build()
+                )
+            )),
+            0,
+            5  // TODO: make configurable
+        );
+
+        let recent_playlists_widget = self.imp().recent_playlists.get();
+        recent_playlists_widget.bind_model(
+            Some(&recent_playlists_model),
+            clone!(
+                #[weak]
+                stack,
+                #[weak]
+                playlist_view,
+                #[weak]
+                split_view,
+                #[weak]
+                albums_btn,
+                #[upgrade_or]
+                SidebarButton::new("ERROR", "dot-symbolic").upcast::<gtk::Widget>(),
+                move |obj| {
+                    let playlist = obj.downcast_ref::<INode>().unwrap();
+                    let btn = SidebarButton::new(playlist.get_uri(), "dot-symbolic");
+                    btn.set_group(Some(&albums_btn));
+                    btn.connect_toggled(clone!(
+                        #[weak]
+                        stack,
+                        #[weak]
+                        playlist_view,
+                        #[weak]
+                        split_view,
+                        #[weak]
+                        playlist,
+                        move |btn| {
+                            if btn.is_active() {
+                                playlist_view.on_playlist_clicked(&playlist);
+                                stack.set_visible_child_name("playlists");
+                                split_view.set_show_content(true);
+                            }
+                        }
+                    ));
+                    btn.upcast::<gtk::Widget>()
+                }
+            )
+        );
+
+        // Dirty hack to remove the highlight effect on hover
+        // (as the items themselves are toggle buttons already, there is no need
+        // for the ListBoxRows to do this)
+        playlists.connect_items_changed(clone!(
+            #[weak]
+            recent_playlists_widget,
+            move |_, _, _, _| {
+                for idx in 0..5 {
+                    if let Some(row) = recent_playlists_widget.row_at_index(idx) {
+                        row.set_activatable(false);
+                    }
+                }
+            }
+        ));
+
         self.imp().playlists_btn.connect_toggled(clone!(
             #[weak]
             stack,
+            #[weak]
+            playlist_view,
             move |btn| {
             if btn.is_active() {
+                playlist_view.pop();
                 stack.set_visible_child_name("playlists");
             }
         }));
@@ -160,7 +251,8 @@ impl Sidebar {
         for btn in [
             &self.imp().albums_btn.get(),
             &self.imp().artists_btn.get(),
-            &self.imp().folders_btn.get()
+            &self.imp().folders_btn.get(),
+            &self.imp().playlists_btn.get()
         ] {
             btn.upcast_ref::<gtk::ToggleButton>().upcast_ref::<gtk::Button>().connect_clicked(clone!(
                 #[weak]

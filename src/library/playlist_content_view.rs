@@ -20,9 +20,7 @@ use super::{
     PlaylistSongRow
 };
 use crate::{
-    cache::{
-        placeholders::ALBUMART_PLACEHOLDER, Cache,
-    }, client::ClientState, common::{INode, Song}, utils::format_secs_as_duration, window::EuphonicaWindow
+    cache::Cache, client::ClientState, common::{INode, Song}, utils::format_secs_as_duration, window::EuphonicaWindow
 };
 
 #[derive(Debug)]

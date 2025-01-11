@@ -34,7 +34,7 @@ use crate::{
     application::EuphonicaApplication,
     client::{ClientState, ConnectionState},
     common::Album,
-    library::{AlbumView, ArtistContentView, ArtistView},
+    library::{AlbumView, ArtistContentView, ArtistView, FolderView, PlaylistView},
     player::{PlayerBar, QueueView},
     sidebar::Sidebar,
     utils::{self, settings_manager}
@@ -104,7 +104,7 @@ mod imp {
     use image::io::Reader;
     use utils::settings_manager;
 
-    use crate::{common::paintables::FadePaintable, library::{FolderView, PlaylistView}, player::Player};
+    use crate::{common::paintables::FadePaintable, player::Player};
 
     use super::*;
 
@@ -553,10 +553,8 @@ impl EuphonicaWindow {
             win.clone()
         );
         win.imp().sidebar.setup(
-            win.imp().stack.get(),
-            win.imp().split_view.get(),
-            app.get_player(),
-            app.get_client().get_client_state()
+            &win,
+            &app
         );
         win.imp().player_bar.setup(
             app.get_player()
@@ -589,6 +587,34 @@ impl EuphonicaWindow {
         win.bind_state();
         win.setup_signals();
         win
+    }
+
+    pub fn get_stack(&self) -> gtk::Stack {
+        self.imp().stack.get()
+    }
+
+    pub fn get_split_view(&self) -> adw::NavigationSplitView {
+        self.imp().split_view.get()
+    }
+
+    pub fn get_album_view(&self) -> AlbumView {
+        self.imp().album_view.get()
+    }
+
+    pub fn get_artist_view(&self) -> ArtistView {
+        self.imp().artist_view.get()
+    }
+
+    pub fn get_folder_view(&self) -> FolderView {
+        self.imp().folder_view.get()
+    }
+
+    pub fn get_playlist_view(&self) -> PlaylistView {
+        self.imp().playlist_view.get()
+    }
+
+    pub fn get_queue_view(&self) -> QueueView {
+        self.imp().queue_view.get()
     }
 
     pub fn send_simple_toast(&self, title: &str, timeout: u32) {
