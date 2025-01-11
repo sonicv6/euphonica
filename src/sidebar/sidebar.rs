@@ -2,7 +2,7 @@ use adw::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
 use glib::{Properties, clone};
 
-use crate::{application::EuphonicaApplication, common::INode, window::EuphonicaWindow};
+use crate::{application::EuphonicaApplication, common::INode, utils, window::EuphonicaWindow};
 
 use super::SidebarButton;
 
@@ -87,6 +87,7 @@ impl Sidebar {
         win: &EuphonicaWindow,
         app: &EuphonicaApplication,
     ) {
+        let settings = utils::settings_manager().child("ui");
         let stack = win.get_stack();
         let split_view = win.get_split_view();
         let player = app.get_player();
@@ -154,6 +155,13 @@ impl Sidebar {
             0,
             5  // TODO: make configurable
         );
+        settings
+            .bind(
+                "recent-playlists-count",
+                &recent_playlists_model,
+                "size"
+            )
+            .build();
 
         let recent_playlists_widget = self.imp().recent_playlists.get();
         recent_playlists_widget.bind_model(
@@ -201,9 +209,11 @@ impl Sidebar {
         playlists.connect_items_changed(clone!(
             #[weak]
             recent_playlists_widget,
+            #[strong]
+            settings,
             move |_, _, _, _| {
-                for idx in 0..5 {
-                    if let Some(row) = recent_playlists_widget.row_at_index(idx) {
+                for idx in 0..settings.uint("recent-playlists-count") {
+                    if let Some(row) = recent_playlists_widget.row_at_index(idx as i32) {
                         row.set_activatable(false);
                     }
                 }

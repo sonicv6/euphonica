@@ -14,7 +14,7 @@ use super::{
     ClientPreferences,
     IntegrationsPreferences,
     LibraryPreferences,
-    PlayerPreferences
+    UIPreferences
 };
 
 mod imp {
@@ -33,7 +33,7 @@ mod imp {
         pub library_tab: TemplateChild<LibraryPreferences>,
 
         #[template_child]
-        pub player_tab: TemplateChild<PlayerPreferences>
+        pub ui_tab: TemplateChild<UIPreferences>
     }
 
     #[glib::object_subclass]
@@ -78,7 +78,7 @@ impl Preferences {
 
         res.imp().client_tab.get().setup(client);
         res.imp().library_tab.get().setup();
-        res.imp().player_tab.get().setup();
+        res.imp().ui_tab.get().setup();
         res.imp().integrations_tab.get().setup(cache);
 
         res

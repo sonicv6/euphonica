@@ -249,7 +249,7 @@ impl PlayerBar {
     }
 
     fn setup_volume_knob(&self, player: Player) {
-        let settings = settings_manager().child("player");
+        let settings = settings_manager().child("ui");
         let knob = self.imp().vol_knob.get();
         knob.setup();
 

@@ -18,6 +18,9 @@ mod imp {
     #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/integrations.ui")]
     pub struct IntegrationsPreferences {
         #[template_child]
+        pub enable_mpris: TemplateChild<adw::SwitchRow>,
+
+        #[template_child]
         pub lastfm_key: TemplateChild<adw::EntryRow>,
         #[template_child]
         pub lastfm_download_album_art: TemplateChild<adw::SwitchRow>,
@@ -71,6 +74,16 @@ impl IntegrationsPreferences {
         let imp = self.imp();
         // Populate with current gsettings values
         let settings = utils::settings_manager();
+
+        let player_settings = settings.child("player");
+        let enable_mpris = self.imp().enable_mpris.get();
+        player_settings
+            .bind(
+                "enable-mpris",
+                &enable_mpris,
+                "active"
+            )
+            .build();
 
         // Set up Last.fm settings
         let lastfm_settings = utils::meta_provider_settings("lastfm");

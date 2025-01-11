@@ -185,7 +185,7 @@ mod imp {
     impl ObjectImpl for EuphonicaWindow {
         fn constructed(&self) {
             self.parent_constructed();
-            let settings = settings_manager().child("player");
+            let settings = settings_manager().child("ui");
             let obj_borrow = self.obj();
             let obj = obj_borrow.as_ref();
             let bg_paintable = &self.bg_paintable;
@@ -274,7 +274,7 @@ mod imp {
             let (sender_to_fg, fg_receiver) = async_channel::bounded::<BlurMessage>(1); // block background thread until sent
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting background blur thread...");
-                let settings = settings_manager().child("player");
+                let settings = settings_manager().child("ui");
                 // Cached here to avoid having to load the same image multiple times
                 let mut curr_data: Option<DynamicImage> = None;
                 let mut curr_path: Option<PathBuf> = None;
@@ -698,7 +698,7 @@ impl EuphonicaWindow {
             if let Some(sender) =  self.imp().sender_to_bg.get() {
                 if let Some(path) = player.current_song_album_art_path(true) {
                     if path.exists() {
-                        let settings = settings_manager().child("player");
+                        let settings = settings_manager().child("ui");
                         let config = BlurConfig {
                             width: self.width() as u32,
                             height: self.height() as u32,
@@ -725,7 +725,7 @@ impl EuphonicaWindow {
 
     fn queue_background_update(&self, fade: bool) {
         if let Some(sender) = self.imp().sender_to_bg.get() {
-            let settings = settings_manager().child("player");
+            let settings = settings_manager().child("ui");
             let config = BlurConfig {
                 width: self.width() as u32,
                 height: self.height() as u32,

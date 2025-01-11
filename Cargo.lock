@@ -838,7 +838,7 @@ dependencies = [
 
 [[package]]
 name = "euphonica"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "aho-corasick",
  "async-channel",
