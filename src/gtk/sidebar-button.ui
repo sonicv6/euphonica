@@ -3,6 +3,7 @@
 	<requires lib="gtk" version="4.0" />
 	<requires lib="Adw" version="1.0" />
 	<template class="EuphonicaSidebarButton" parent="GtkToggleButton">
+		<property name="hexpand">true</property>
 		<property name="child">
 			<object class="GtkBox">
 				<property name="spacing">12</property>

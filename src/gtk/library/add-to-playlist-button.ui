@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <template class="EuphonicaAddToPlaylistButton" parent="GtkBox">
+    <object class="GtkPopover" id="options_popover">
+      <property name="has-arrow">true</property>
+      <property name="name">options_popover</property>
+      <property name="child">
+        <object class="GtkBox">
+          <property name="orientation">1</property>
+          <child>
+            <object class="GtkScrolledWindow">
+              <property name="height-request">200</property>
+              <property name="child">
+                <object class="GtkListView" id="options">
+                  <style>
+                    <class name="radius-6"/>
+                  </style>
+                  <property name="single-click-activate">false</property>
+                </object>
+              </property>
+            </object>
+          </child>
+          <child>
+            <object class="GtkSearchEntry" id="name_box">
+              <property name="margin-top">6</property>
+              <property name="search-delay">150</property>
+              <property name="hexpand">true</property>
+              <property name="placeholder-text" translatable="true">Playlist name to create or add to</property>
+            </object>
+          </child>
+          <child>
+            <object class="GtkRevealer" id="add_revealer">
+              <property name="transition-type">slide-down</property>
+              <child>
+                <object class="GtkButton" id="add_btn">
+                  <property name="margin-top">6</property>
+                  <property name="label">Create</property>
+                  <property name="sensitive">false</property>
+                  <property name="hexpand">true</property>
+                  <style>
+                    <class name="suggested-action"/>
+                  </style>
+                </object>
+              </child>
+            </object>
+          </child>
+        </object>
+      </property>
+    </object>
+
+    <child>
+      <object class="GtkMenuButton" id="menu_btn">
+        <property name="popover">options_popover</property>
+        <property name="label" translatable="true">Add to playlist</property>
+        <property name="tooltip-text" translatable="true">Add the selected songs to a playlist (or create a new one)</property>
+      </object>
+    </child>
+  </template>
+</interface>

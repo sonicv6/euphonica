@@ -7,6 +7,10 @@ listview > row {
     margin-right: 12px;
 }
 
+.radius-6 {
+    border-radius: 6px;
+}
+
 .padding-12 {
     padding: 12px;
 }

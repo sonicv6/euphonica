@@ -21,7 +21,7 @@ use glib::subclass::Signal;
 
 use adw::subclass::prelude::*;
 
-use mpd::{search::Operation, Query, Term, error::Error as MpdError, EditAction};
+use mpd::{error::Error as MpdError, search::Operation, EditAction, Query, SaveMode, Term};
 
 mod imp {
     use super::*;
@@ -199,10 +199,12 @@ impl Library {
         self.client().rename_playlist(old_name, new_name)
     }
 
-    pub fn replace_playlist_with_songs(&self, playlist_name: &str, songs: &[Song]) -> Result<(), Option<MpdError>> {
+    pub fn add_songs_to_playlist(&self, playlist_name: &str, songs: &[Song], mode: SaveMode) -> Result<(), Option<MpdError>> {
         // TODO
         let mut edits: Vec<EditAction> = Vec::with_capacity(songs.len() + 1);
-        edits.push(EditAction::Clear(Cow::Borrowed(playlist_name)));
+        if mode == SaveMode::Replace {
+            edits.push(EditAction::Clear(Cow::Borrowed(playlist_name)));
+        }
         songs.iter().for_each(|s| {
             edits.push(EditAction::Add(Cow::Borrowed(playlist_name), Cow::Borrowed(s.get_uri()), None));
         });

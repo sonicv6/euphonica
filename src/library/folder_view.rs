@@ -252,9 +252,7 @@ impl Default for FolderView {
 
 impl FolderView {
     pub fn new() -> Self {
-        let res: Self = glib::Object::new();
-
-        res
+        glib::Object::new()
     }
 
     pub fn get_path(&self) -> String {

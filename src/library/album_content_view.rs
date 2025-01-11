@@ -27,6 +27,8 @@ use crate::{
 mod imp {
     use std::cell::Cell;
 
+    use crate::library::add_to_playlist::AddToPlaylistButton;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
@@ -70,6 +72,8 @@ mod imp {
         #[template_child]
         pub append_queue_text: TemplateChild<gtk::Label>,
         #[template_child]
+        pub add_to_playlist: TemplateChild<AddToPlaylistButton>,
+        #[template_child]
         pub sel_all: TemplateChild<gtk::Button>,
         #[template_child]
         pub sel_none: TemplateChild<gtk::Button>,
@@ -106,6 +110,7 @@ mod imp {
                 append_queue: TemplateChild::default(),
                 replace_queue_text: TemplateChild::default(),
                 append_queue_text: TemplateChild::default(),
+                add_to_playlist: TemplateChild::default(),
                 sel_all: TemplateChild::default(),
                 sel_none: TemplateChild::default(),
                 album: RefCell::new(None),
@@ -374,13 +379,16 @@ impl AlbumContentView {
         let factory = SignalListItemFactory::new();
 
         // Create an empty `AlbumSongRow` during setup
-        factory.connect_setup(move |_, list_item| {
+        factory.connect_setup(clone!(
+            #[weak]
+            library,
+            move |_, list_item| {
             let item = list_item
                 .downcast_ref::<ListItem>()
                 .expect("Needs to be ListItem");
             let row = AlbumSongRow::new(library.clone(), &item);
             item.set_child(Some(&row));
-        });
+        }));
         // Tell factory how to bind `AlbumSongRow` to one of our Album GObjects
         factory.connect_bind(move |_, list_item| {
             // Get `Song` from `ListItem` (that is, the data side)
@@ -418,6 +426,11 @@ impl AlbumContentView {
 
         // Set the factory of the list view
         self.imp().content.set_factory(Some(&factory));
+
+        self.imp().add_to_playlist.setup(
+            library.clone(),
+            self.imp().sel_model.clone()
+        );
     }
 
     /// Returns true if an album art was successfully retrieved.

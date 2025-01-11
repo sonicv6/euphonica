@@ -280,6 +280,9 @@
                                     </child>
                                   </object>
                                 </child>
+                                <child>
+                                  <object class="EuphonicaAddToPlaylistButton" id="add_to_playlist"/>
+                                </child>
                               </object>
                             </property>
                             <property name="end-widget">

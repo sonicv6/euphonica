@@ -14,8 +14,11 @@ mod folder_view;
 mod playlist_view;
 mod playlist_content_view;
 
+// Common stuff shared between views
 mod generic_row;
+mod add_to_playlist;
 
+// The Library controller itself
 mod controller;
 
 pub use album_view::AlbumView;

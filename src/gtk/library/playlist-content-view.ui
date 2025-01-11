@@ -61,7 +61,7 @@
               <object class="GtkBox">
                 <property name="spacing">6</property>
                 <child>
-                  <object class="GtkMenuButton">
+                  <object class="GtkMenuButton" id="rename_menu_btn">
                     <property name="tooltip-text" translatable="true">Rename this playlist</property>
                     <property name="popover">rename_popover</property>
                     <property name="icon-name">text-insert-symbolic</property>

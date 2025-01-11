@@ -415,6 +415,7 @@ impl PlaylistView {
 
     pub fn on_playlist_clicked(&self, inode: &INode) {
         let content_view = self.imp().content_view.get();
+        content_view.unbind(true);
         content_view.bind(inode.clone());
         self.imp().nav_view.push_by_tag("content");
         self.imp().library.get().unwrap().init_playlist(inode.get_name().unwrap());

@@ -63,7 +63,7 @@ impl HistoryStep {
             InternalEditAction::Remove(idx) => {
                 list.remove(idx);
                 let len = list.n_items();
-                if idx < len - 1 {
+                if idx <= len - 1 {
                     self.update_queue_pos(list, idx, len - 1);
                 }
             }
@@ -81,7 +81,7 @@ impl HistoryStep {
             InternalEditAction::Remove(idx) => {
                 list.insert(idx, self.song.as_ref().unwrap());
                 let len = list.n_items();
-                if idx < len - 1 {
+                if idx <= len - 1 {
                     self.update_queue_pos(list, idx, len - 1);
                 }
             }
@@ -97,6 +97,8 @@ impl HistoryStep {
 // and UI.
 mod imp {
     use std::cell::Cell;
+
+    use mpd::SaveMode;
 
     use super::*;
 
@@ -151,6 +153,8 @@ mod imp {
         pub sel_none: TemplateChild<gtk::Button>,
 
         #[template_child]
+        pub rename_menu_btn: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub rename: TemplateChild<gtk::Button>,
         #[template_child]
         pub new_name: TemplateChild<gtk::Entry>,
@@ -204,6 +208,7 @@ mod imp {
                 edit_apply: TemplateChild::default(),
                 sel_all: TemplateChild::default(),
                 sel_none: TemplateChild::default(),
+                rename_menu_btn: TemplateChild::default(),
                 rename: TemplateChild::default(),
                 new_name: TemplateChild::default(),
                 delete: TemplateChild::default(),
@@ -365,9 +370,10 @@ mod imp {
                     for i in 0..song_count {
                         song_list.push(self.editing_song_list.item(i).unwrap().downcast_ref::<Song>().unwrap().clone());
                     }
-                    let _ = self.library.get().unwrap().replace_playlist_with_songs(
+                    let _ = self.library.get().unwrap().add_songs_to_playlist(
                         self.playlist.borrow().as_ref().unwrap().get_uri(),
-                        &song_list
+                        &song_list,
+                        SaveMode::Replace
                     );
                     self.history_idx.replace(0);
                 }
@@ -595,6 +601,7 @@ impl PlaylistContentView {
             #[weak]
             new_name,
             move |_| {
+                this.imp().rename_menu_btn.set_active(false);
                 let library = this.imp().library.get().unwrap();
                 let rename_from: Option<String>;
                 {
@@ -857,9 +864,19 @@ impl PlaylistContentView {
     }
 
     pub fn remove(&self, idx: u32) {
+        println!("Editing song list len: {}", self.imp().editing_song_list.n_items());
+        println!("Requesting to delete {}", idx);
         let step = HistoryStep {
             action: InternalEditAction::Remove(idx),
-            song: Some(self.imp().editing_song_list.item(idx).unwrap().clone().downcast::<Song>().unwrap())
+            song: Some(
+                self
+                    .imp()
+                    .editing_song_list
+                    .item(idx)
+                    .unwrap()
+                    .clone()
+                    .downcast::<Song>().unwrap()
+            )
         };
         step.forward(&self.imp().editing_song_list);
         self.imp().push_history(step);

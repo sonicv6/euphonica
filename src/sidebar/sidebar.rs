@@ -147,13 +147,13 @@ impl Sidebar {
                                 INode::static_type(),
                                 Option::<gtk::PropertyExpression>::None,
                                 "last-modified"
-                            )//.chain_property::<INode>("last-modified")
+                            )
                         )
                         .build()
                 )
             )),
             0,
-            5  // TODO: make configurable
+            5 // placeholder, will be bound to a GSettings key later
         );
         settings
             .bind(
@@ -219,6 +219,18 @@ impl Sidebar {
                 }
             }
         ));
+
+        // Hide the list widget when there is no playlist at all to avoid
+        // an unnecessary ~6px space after the Saved Playlists button
+        recent_playlists_model
+            .bind_property(
+                "n-items",
+                &recent_playlists_widget,
+                "visible"
+            )
+            .transform_to(|_, len: u32| Some(len > 0))
+            .sync_create()
+            .build();
 
         self.imp().playlists_btn.connect_toggled(clone!(
             #[weak]
