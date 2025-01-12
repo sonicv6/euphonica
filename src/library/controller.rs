@@ -199,8 +199,11 @@ impl Library {
         self.client().rename_playlist(old_name, new_name)
     }
 
+    pub fn delete_playlist(&self, name: &str) -> Result<(), Option<MpdError>>{
+        self.client().delete_playlist(name)
+    }
+
     pub fn add_songs_to_playlist(&self, playlist_name: &str, songs: &[Song], mode: SaveMode) -> Result<(), Option<MpdError>> {
-        // TODO
         let mut edits: Vec<EditAction> = Vec::with_capacity(songs.len() + 1);
         if mode == SaveMode::Replace {
             edits.push(EditAction::Clear(Cow::Borrowed(playlist_name)));

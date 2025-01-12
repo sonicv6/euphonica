@@ -938,6 +938,18 @@ impl MpdWrapper {
         }
     }
 
+    pub fn delete_playlist(&self, name: &str) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.pl_remove(name) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Some(e))
+            }
+        }
+        else {
+            Err(None)
+        }
+    }
+
     pub fn get_status(&self) -> Option<mpd::Status> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
             let res = client.status();

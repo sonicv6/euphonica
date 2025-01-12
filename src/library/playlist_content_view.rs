@@ -153,6 +153,8 @@ mod imp {
         #[template_child]
         pub rename_menu_btn: TemplateChild<gtk::MenuButton>,
         #[template_child]
+        pub delete_menu_btn: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub rename: TemplateChild<gtk::Button>,
         #[template_child]
         pub new_name: TemplateChild<gtk::Entry>,
@@ -206,6 +208,7 @@ mod imp {
                 sel_all: TemplateChild::default(),
                 sel_none: TemplateChild::default(),
                 rename_menu_btn: TemplateChild::default(),
+                delete_menu_btn: TemplateChild::default(),
                 rename: TemplateChild::default(),
                 new_name: TemplateChild::default(),
                 delete: TemplateChild::default(),
@@ -568,6 +571,7 @@ impl PlaylistContentView {
 
         let rename_btn = self.imp().rename.get();
         let new_name = self.imp().new_name.get();
+        let delete_btn = self.imp().delete.get();
 
         new_name
             .connect_closure(
@@ -638,34 +642,45 @@ impl PlaylistContentView {
             }
         ));
 
-        append_queue_btn.connect_clicked(
-            clone!(
-                #[strong(rename_to = this)]
-                self,
-                move |_| {
-                    let library = this.imp().library.get().unwrap();
-                    if let Some(playlist) = this.imp().playlist.borrow().as_ref() {
-
-                        if this.imp().selecting_all.get() {
-                            library.queue_playlist(playlist.get_name().unwrap(), false, false);
-                        }
-                        else {
-                            let store = &this.imp().song_list;
-                            // Get list of selected songs
-                            let sel = &this.imp().sel_model.selection();
-                            let mut songs: Vec<Song> = Vec::with_capacity(sel.size() as usize);
-                            let (iter, first_idx) = BitsetIter::init_first(sel).unwrap();
-                            songs.push(store.item(first_idx).and_downcast::<Song>().unwrap());
-                            iter
-                                .for_each(
-                                    |idx| songs.push(store.item(idx).and_downcast::<Song>().unwrap())
-                                );
-                            library.queue_songs(&songs, false, false);
-                        }
+        append_queue_btn.connect_clicked(clone!(
+            #[strong(rename_to = this)]
+            self,
+            move |_| {
+                let library = this.imp().library.get().unwrap();
+                if let Some(playlist) = this.imp().playlist.borrow().as_ref() {
+                    if this.imp().selecting_all.get() {
+                        library.queue_playlist(playlist.get_name().unwrap(), false, false);
+                    }
+                    else {
+                        let store = &this.imp().song_list;
+                        // Get list of selected songs
+                        let sel = &this.imp().sel_model.selection();
+                        let mut songs: Vec<Song> = Vec::with_capacity(sel.size() as usize);
+                        let (iter, first_idx) = BitsetIter::init_first(sel).unwrap();
+                        songs.push(store.item(first_idx).and_downcast::<Song>().unwrap());
+                        iter
+                            .for_each(
+                                |idx| songs.push(store.item(idx).and_downcast::<Song>().unwrap())
+                            );
+                        library.queue_songs(&songs, false, false);
                     }
                 }
-            )
-        );
+            }
+        ));
+
+        delete_btn.connect_clicked(clone!(
+            #[strong(rename_to = this)]
+            self,
+            move |_| {
+                let library = this.imp().library.get().unwrap();
+                if let Some(playlist) = this.imp().playlist.borrow().as_ref() {
+                    // Close popover and exit view
+                    this.imp().delete_menu_btn.set_active(false);
+                    this.imp().window.get().unwrap().get_playlist_view().pop();
+                    let _ = library.delete_playlist(playlist.get_name().unwrap());
+                }
+            }
+        ));
 
         // Set up factory
         let factory = SignalListItemFactory::new();

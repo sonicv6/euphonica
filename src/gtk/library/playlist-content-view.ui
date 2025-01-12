@@ -68,7 +68,7 @@
                   </object>
                 </child>
                 <child>
-                  <object class="GtkMenuButton">
+                  <object class="GtkMenuButton" id="delete_menu_btn">
                     <property name="icon-name">user-trash-symbolic</property>
                     <property name="popover">delete_popover</property>
                     <property name="tooltip-text" translatable="true">Delete this playlist</property>
