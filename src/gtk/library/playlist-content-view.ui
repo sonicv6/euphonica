@@ -117,6 +117,7 @@
                             <property name="halign">start</property>
                             <property name="wrap">true</property>
                             <property name="justify">left</property>
+                            <property name="ellipsize">end</property>
                             <property name="label">Untitled Playlist</property>
                             <style>
                               <class name="title-2"/>

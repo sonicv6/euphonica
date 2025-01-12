@@ -11,7 +11,9 @@
 					<object class="GtkImage" id="icon_widget"></object>
 				</child>
 				<child>
-					<object class="GtkLabel" id="label_widget"></object>
+					<object class="GtkLabel" id="label_widget">
+						<property name="ellipsize">end</property>
+					</object>
 				</child>
 			</object>
 		</property>
