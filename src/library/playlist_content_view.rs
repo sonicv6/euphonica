@@ -865,7 +865,7 @@ impl PlaylistContentView {
 
     pub fn shift_forward(&self, idx: u32) {
         let len = self.imp().editing_song_list.n_items();
-        if len > 1 && idx < (len - 2) {
+        if len > 1 && idx < (len - 1) {
             let step = HistoryStep {
                 action: InternalEditAction::ShiftForward(idx),
                 song: None
