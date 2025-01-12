@@ -53,3 +53,7 @@ features = ["v1_6"]
 
 [profile.dev]
 debug = 1
+
+[profile.release]
+strip = true # Should reduce binary size on Linux
+lto = true

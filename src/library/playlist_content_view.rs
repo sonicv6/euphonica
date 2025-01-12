@@ -63,7 +63,7 @@ impl HistoryStep {
             InternalEditAction::Remove(idx) => {
                 list.remove(idx);
                 let len = list.n_items();
-                if idx <= len - 1 {
+                if len > 0 && idx <= len - 1 {
                     self.update_queue_pos(list, idx, len - 1);
                 }
             }
@@ -81,7 +81,7 @@ impl HistoryStep {
             InternalEditAction::Remove(idx) => {
                 list.insert(idx, self.song.as_ref().unwrap());
                 let len = list.n_items();
-                if idx <= len - 1 {
+                if len > 0 && idx <= len - 1 {
                     self.update_queue_pos(list, idx, len - 1);
                 }
             }
