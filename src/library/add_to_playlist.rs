@@ -280,7 +280,6 @@ mod imp {
                 will_create = n_items == 0;
             }
             self.will_create.replace(will_create);
-            println!("will_create: {}", will_create);
 
             // Update button text
             // TODO: translatable
@@ -288,23 +287,17 @@ mod imp {
             if let Some(name) = maybe_name {
                 self.add_btn.set_sensitive(true);
                 self.add_revealer.set_reveal_child(true);
-                println!("should be revealed");
 
                 if will_create {
                     // Name might be empty in this case but it's okay since we would
                     // have hidden the button
-                    self.add_btn.set_label(
-                        format!("Create \"{}\"", name).as_str()
-                    );
+                    self.add_btn.set_label(format!("Create \"{}\"", name).as_str());
                 }
                 else {
-                    self.add_btn.set_label(
-                        format!("Append to \"{}\"", name).as_str()
-                    );
+                    self.add_btn.set_label(format!("Append to \"{}\"", name).as_str());
                 }
             }
             else {
-                println!("should be hidden");
                 self.add_btn.set_sensitive(false);
                 self.add_revealer.set_reveal_child(false);
             }

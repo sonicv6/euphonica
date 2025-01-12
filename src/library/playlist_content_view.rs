@@ -876,8 +876,6 @@ impl PlaylistContentView {
     }
 
     pub fn remove(&self, idx: u32) {
-        println!("Editing song list len: {}", self.imp().editing_song_list.n_items());
-        println!("Requesting to delete {}", idx);
         let step = HistoryStep {
             action: InternalEditAction::Remove(idx),
             song: Some(
