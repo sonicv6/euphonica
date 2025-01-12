@@ -73,8 +73,8 @@
                     <property name="popover">delete_popover</property>
                     <property name="tooltip-text" translatable="true">Delete this playlist</property>
                     <style>
-                    <class name="destructive-action"/>
-                  </style>
+                      <class name="destructive-action"/>
+                    </style>
                   </object>
                 </child>
               </object>
@@ -97,7 +97,6 @@
                 <property name="child">
                   <object class="AdwBreakpointBin">
                     <property name="width-request">240</property>
-                    <property name="height-request">240</property>
                     <child>
                       <object class="AdwBreakpoint">
                         <condition>max-width: 550px</condition>
@@ -107,114 +106,94 @@
                       </object>
                     </child>
                     <property name="child">
-                      <object class="GtkBox" id="infobox">
+                      <object class="GtkBox" id="infobox_text">
+                        <property name="orientation">1</property>
+                        <property name="spacing">6</property>
                         <property name="margin-start">6</property>
-                        <property name="spacing">12</property>
+                        <property name="margin-end">6</property>
+                        <property name="hexpand">true</property>
                         <child>
-                          <object class="GtkBox">
-                            <property name="halign">3</property>
-                            <property name="valign">3</property>
-                            <property name="overflow">hidden</property>
+                          <object class="GtkLabel" id="title">
+                            <property name="halign">start</property>
+                            <property name="wrap">true</property>
+                            <property name="justify">left</property>
+                            <property name="label">Untitled Playlist</property>
                             <style>
-                              <class name="border-radius-6" />
+                              <class name="title-2"/>
                             </style>
-                            <child>
-                              <object class="GtkImage" id="cover">
-                                <property name="pixel-size">256</property>
-                                <property name="resource">/org/euphonica/Euphonica/albumart-placeholder.svg</property>
-                              </object>
-                            </child>
                           </object>
                         </child>
                         <child>
-                          <object class="GtkBox" id="infobox_text">
-                            <property name="orientation">1</property>
-                            <property name="spacing">6</property>
-                            <property name="hexpand">true</property>
-                            <child>
-                              <object class="GtkLabel" id="title">
-                                <property name="halign">start</property>
-                                <property name="wrap">true</property>
-                                <property name="justify">left</property>
-                                <property name="label">Untitled Playlist</property>
-                                <style>
-                                  <class name="title-2"/>
-                                </style>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkSeparator">
-                                <style>
-                                  <class name="spacer"/>
-                                </style>
-                              </object>
-                            </child>
+                          <object class="GtkSeparator">
+                            <style>
+                              <class name="spacer"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="spacing">12</property>
                             <child>
                               <object class="GtkBox">
-                                <property name="spacing">12</property>
+                                <property name="orientation">1</property>
                                 <child>
-                                  <object class="GtkBox">
-                                    <property name="orientation">1</property>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label" translatable="true">Last modified</property>
-                                        <style>
-                                          <class name="caption-heading"/>
-                                        </style>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel" id="last_mod">
-                                        <property name="label">-</property>
-                                        <style>
-                                          <class name="caption"/>
-                                        </style>
-                                      </object>
-                                    </child>
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="true">Last modified</property>
+                                    <style>
+                                      <class name="caption-heading"/>
+                                    </style>
                                   </object>
                                 </child>
-
                                 <child>
-                                  <object class="GtkBox">
-                                    <property name="orientation">1</property>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label" translatable="true">Tracks</property>
-                                        <style>
-                                          <class name="caption-heading"/>
-                                        </style>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel" id="track_count">
-                                        <property name="label">-</property>
-                                        <style>
-                                          <class name="caption"/>
-                                        </style>
-                                      </object>
-                                    </child>
+                                  <object class="GtkLabel" id="last_mod">
+                                    <property name="label">-</property>
+                                    <style>
+                                      <class name="caption"/>
+                                    </style>
                                   </object>
                                 </child>
+                              </object>
+                            </child>
 
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">1</property>
                                 <child>
-                                  <object class="GtkBox">
-                                    <property name="orientation">1</property>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label" translatable="true">Runtime</property>
-                                        <style>
-                                          <class name="caption-heading"/>
-                                        </style>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel" id="runtime">
-                                        <property name="label">-</property>
-                                        <style>
-                                          <class name="caption"/>
-                                        </style>
-                                      </object>
-                                    </child>
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="true">Tracks</property>
+                                    <style>
+                                      <class name="caption-heading"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="track_count">
+                                    <property name="label">-</property>
+                                    <style>
+                                      <class name="caption"/>
+                                    </style>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">1</property>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="true">Runtime</property>
+                                    <style>
+                                      <class name="caption-heading"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="runtime">
+                                    <property name="label">-</property>
+                                    <style>
+                                      <class name="caption"/>
+                                    </style>
                                   </object>
                                 </child>
                               </object>

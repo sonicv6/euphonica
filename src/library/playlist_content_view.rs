@@ -110,8 +110,6 @@ mod imp {
         #[template_child]
         pub collapse_infobox: TemplateChild<gtk::ToggleButton>,
         #[template_child]
-        pub cover: TemplateChild<gtk::Image>,
-        #[template_child]
         pub content_stack: TemplateChild<gtk::Stack>,
         #[template_child]
         pub content: TemplateChild<gtk::ListView>,
@@ -180,7 +178,6 @@ mod imp {
     impl Default for PlaylistContentView {
         fn default() -> Self {
             Self {
-                cover: TemplateChild::default(),
                 title: TemplateChild::default(),
                 last_mod: TemplateChild::default(),
                 track_count: TemplateChild::default(),
