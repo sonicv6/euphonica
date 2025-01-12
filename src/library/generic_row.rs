@@ -29,8 +29,8 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/folder-row.ui")]
-    pub struct FolderRow {
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/generic-row.ui")]
+    pub struct GenericRow {
         #[template_child]
         pub thumbnail: TemplateChild<gtk::Image>,
         #[template_child]
@@ -50,10 +50,10 @@ mod imp {
 
     // The central trait for subclassing a GObject
     #[glib::object_subclass]
-    impl ObjectSubclass for FolderRow {
+    impl ObjectSubclass for GenericRow {
         // `NAME` needs to match `class` attribute of template
-        const NAME: &'static str = "EuphonicaFolderRow";
-        type Type = super::FolderRow;
+        const NAME: &'static str = "EuphonicaGenericRow";
+        type Type = super::GenericRow;
         type ParentType = gtk::Box;
 
         fn class_init(klass: &mut Self::Class) {
@@ -66,7 +66,7 @@ mod imp {
     }
 
     // Trait shared by all GObjects
-    impl ObjectImpl for FolderRow {
+    impl ObjectImpl for GenericRow {
         fn constructed(&self) {
             self.parent_constructed();
 
@@ -82,6 +82,9 @@ mod imp {
                                 },
                                 INodeType::Folder => {
                                     library.queue_uri(this.uri.borrow().as_ref(), true, true, true);
+                                },
+                                INodeType::Playlist => {
+                                    library.queue_playlist(this.title.label().as_ref(), true, true);
                                 },
                                 _ => unreachable!()
                             }
@@ -102,6 +105,9 @@ mod imp {
                                 },
                                 INodeType::Folder => {
                                     library.queue_uri(this.uri.borrow().as_ref(), false, false, true);
+                                },
+                                INodeType::Playlist => {
+                                    library.queue_playlist(this.title.label().as_ref(), false, false);
                                 },
                                 _ => unreachable!()
                             }
@@ -157,7 +163,7 @@ mod imp {
                     if let Ok(it) = value.get::<INodeType>() {
                         self.inode_type.replace(it);
                         self.thumbnail.set_icon_name(Some(it.icon_name()));
-                        if it == INodeType::Folder || it == INodeType::Song {
+                        if it == INodeType::Folder || it == INodeType::Song || it == INodeType::Playlist {
                             self.replace_queue.set_visible(true);
                             self.append_queue.set_visible(true);
                         }
@@ -179,19 +185,19 @@ mod imp {
     }
 
     // Trait shared by all widgets
-    impl WidgetImpl for FolderRow {}
+    impl WidgetImpl for GenericRow {}
 
     // Trait shared by all boxes
-    impl BoxImpl for FolderRow {}
+    impl BoxImpl for GenericRow {}
 }
 
 glib::wrapper! {
-    pub struct FolderRow(ObjectSubclass<imp::FolderRow>)
+    pub struct GenericRow(ObjectSubclass<imp::GenericRow>)
     @extends gtk::Box, gtk::Widget,
     @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
 }
 
-impl FolderRow {
+impl GenericRow {
     pub fn new(library: Library, item: &gtk::ListItem) -> Self {
         let res: Self = Object::builder().build();
         res.setup(library, item);

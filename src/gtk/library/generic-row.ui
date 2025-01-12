@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-	<template class="EuphonicaFolderRow" parent="GtkBox">
+	<template class="EuphonicaGenericRow" parent="GtkBox">
 		<style>
 			<class name="padding-6"/>
 		</style>
@@ -49,7 +49,7 @@
 					<object class="GtkBox">
 						<child>
 							<object class="GtkButton" id="replace_queue">
-								<property name="tooltip-text" translatable="true">Replace queue with this song</property>
+								<property name="tooltip-text" translatable="true">Replace queue with this</property>
 								<property name="icon-name">play-symbolic</property>
 								<property name="visible">false</property>
 								<style>
@@ -59,7 +59,7 @@
 						</child>
 						<child>
 							<object class="GtkButton" id="append_queue">
-								<property name="tooltip-text" translatable="true">Add this song to the end of the queue</property>
+								<property name="tooltip-text" translatable="true">Append this to the queue</property>
 								<property name="icon-name">list-add-symbolic</property>
 								<property name="visible">false</property>
 								<style>

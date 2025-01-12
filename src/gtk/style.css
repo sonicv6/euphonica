@@ -1,6 +1,14 @@
+listview > row {
+	padding: 0px;
+}
+
 .queue-view-column {
     margin-left: 12px;
     margin-right: 12px;
+}
+
+.radius-6 {
+    border-radius: 6px;
 }
 
 .padding-12 {

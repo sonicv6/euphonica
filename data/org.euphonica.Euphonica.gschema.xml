@@ -21,6 +21,7 @@
 	</enum>
 
 	<schema id="org.euphonica.Euphonica" path="/org/euphonica/Euphonica/">
+		<child schema="org.euphonica.Euphonica.ui" name="ui"/>
 		<child schema="org.euphonica.Euphonica.state" name="state"/>
 		<child schema="org.euphonica.Euphonica.library" name="library"/>
 		<child schema="org.euphonica.Euphonica.metaprovider" name="metaprovider"/>
@@ -136,6 +137,12 @@
 		<key name="enable-mpris" type="b">
 			<default>true</default>
 		</key>
+	</schema>
+
+	<schema id="org.euphonica.Euphonica.ui" path="/org/euphonica/Euphonica/ui/">
+		<key name="recent-playlists-count" type="u">
+			<default>5</default>
+		</key>
 		<key name="use-album-art-as-bg" type="b">
 			<default>true</default>
 		</key>
@@ -160,6 +167,7 @@
 		<child schema="org.euphonica.Euphonica.state.albumview" name="albumview"/>
 		<child schema="org.euphonica.Euphonica.state.artistview" name="artistview"/>
 		<child schema="org.euphonica.Euphonica.state.folderview" name="folderview"/>
+		<child schema="org.euphonica.Euphonica.state.playlistview" name="playlistview"/>
 
 		<!-- Remember last window size -->
 		<key name="last-window-width" type="i">
@@ -201,6 +209,19 @@
 		<key name="sort-direction" enum='org.euphonica.Euphonica.sortdir'>
 			<default>'asc'</default>
 			<summary>Folder View sort direction</summary>
+		</key>
+	</schema>
+
+	<schema id="org.euphonica.Euphonica.state.playlistview" path="/org/euphonica/Euphonica/state/playlistview/">
+		<!-- Folder view state -->
+		<key name='sort-by' enum='org.euphonica.Euphonica.sortby'>
+			<default>'filename'</default>
+			<summary>Playlist View sort criterion</summary>
+		</key>
+
+		<key name="sort-direction" enum='org.euphonica.Euphonica.sortdir'>
+			<default>'asc'</default>
+			<summary>Playlist View sort direction</summary>
 		</key>
 	</schema>
 </schemalist>

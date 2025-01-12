@@ -3,7 +3,7 @@ option (
   type: 'combo',
   choices: [
     'default',
-    'development'
+    'dev'
   ],
-  value: 'development'
+  value: 'default'
 )

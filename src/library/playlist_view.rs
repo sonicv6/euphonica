@@ -1,7 +1,5 @@
 use std::{
-    rc::Rc,
-    cell::Cell,
-    cmp::Ordering
+    cell::Cell, cmp::Ordering, ops::Deref, rc::Rc
 };
 use adw::prelude::*;
 use adw::subclass::prelude::*;
@@ -15,6 +13,7 @@ use gtk::{
 };
 
 use glib::clone;
+use mpd::Subsystem;
 
 use super::{generic_row::GenericRow, Library};
 use crate::{
@@ -22,52 +21,26 @@ use crate::{
     client::{
         ClientState,
         ConnectionState,
-    }, common::{INode, INodeType},
-    utils::{g_cmp_str_options, g_search_substr, settings_manager}
+    }, common::INode,
+    utils::{g_cmp_str_options, g_search_substr, settings_manager}, window::EuphonicaWindow
 };
 
-// Folder view implementation
-// Unlike other views, here we use a single ListView and update its contents as we browse.
-// The back and forward buttons are disasbled/enabled as follows:
-// - If history is empty: both are disabled.
-// - If history is not empty:
-//   - If curr_idx > 0: enable back button, then
-//   - If curr_idx < history.len(): enable forward button too.
-//
-// Upon clicking on a folder:
-// 1. Append name to history. If curr_idx is not equal to history.len() then we have to
-// first truncate history be curr_idx long before appending, as with common forward button
-// behaviour.
-// 2. Increment curr_idx by one.
-// 3. Send a request for folder contents with uri = current history up to curr_idx - 1
-// joined using forward slashes (Linux-only).
-// 4. Switch stack to showing loading animation.
-// 5. Upon receiving a `folder-contents-downloaded` signal with matching URI, populate
-// the inode list with its contents and switch the stack back to showing the ListView.
-//
-// Upon backing out:
-// 1. Decrement curr_idx by one. Do not modify history.
-// 2. Repeat steps 3-5 as above. If curr_idx is 0 after decrementing, simply use ""
-// as path.
+// Playlist view implementation
 mod imp {
-    use std::cell::{OnceCell, RefCell};
+    use std::cell::OnceCell;
 
-    use glib::{ParamSpec, ParamSpecString};
-    use once_cell::sync::Lazy;
+    
+    
+
+    use crate::library::PlaylistContentView;
 
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/folder-view.ui")]
-    pub struct FolderView {
+    #[template(resource = "/org/euphonica/Euphonica/gtk/library/playlist-view.ui")]
+    pub struct PlaylistView {
         #[template_child]
-        pub path_widget: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub loading_stack: TemplateChild<gtk::Stack>,
-        #[template_child]
-        pub back_btn: TemplateChild<gtk::Button>,
-        #[template_child]
-        pub forward_btn: TemplateChild<gtk::Button>,
+        pub nav_view: TemplateChild<adw::NavigationView>,
 
         // Search & filter widgets
         #[template_child]
@@ -86,11 +59,11 @@ mod imp {
         // Content
         #[template_child]
         pub list_view: TemplateChild<gtk::ListView>,
+        #[template_child]
+        pub content_page: TemplateChild<adw::NavigationPage>,
+        #[template_child]
+        pub content_view: TemplateChild<PlaylistContentView>,
 
-        // Files and folders
-        pub history: RefCell<Vec<String>>,
-        pub curr_idx: Cell<usize>,  // 0 means at root.
-        pub inodes: gio::ListStore,
         // Search & filter models
         pub search_filter: gtk::CustomFilter,
         pub sorter: gtk::CustomSorter,
@@ -103,13 +76,10 @@ mod imp {
         pub library: OnceCell<Library>
     }
 
-    impl Default for FolderView {
+    impl Default for PlaylistView {
         fn default() -> Self {
             Self {
-                path_widget: TemplateChild::default(),
-                loading_stack: TemplateChild::default(),
-                back_btn: TemplateChild::default(),
-                forward_btn: TemplateChild::default(),
+                nav_view: TemplateChild::default(),
                 // Search & filter widgets
                 sort_dir: TemplateChild::default(),
                 sort_dir_btn: TemplateChild::default(),
@@ -118,10 +88,9 @@ mod imp {
                 search_bar: TemplateChild::default(),
                 search_entry: TemplateChild::default(),
                 // Content
-                history: RefCell::new(Vec::new()),
-                curr_idx: Cell::new(0),
                 list_view: TemplateChild::default(),
-                inodes: gio::ListStore::new::<INode>(),
+                content_page: TemplateChild::default(),
+                content_view: TemplateChild::default(),
                 // Search & filter models
                 search_filter: gtk::CustomFilter::default(),
                 sorter: gtk::CustomSorter::default(),
@@ -137,9 +106,9 @@ mod imp {
     }
 
     #[glib::object_subclass]
-    impl ObjectSubclass for FolderView {
-        const NAME: &'static str = "EuphonicaFolderView";
-        type Type = super::FolderView;
+    impl ObjectSubclass for PlaylistView {
+        const NAME: &'static str = "EuphonicaPlaylistView";
+        type Type = super::PlaylistView;
         type ParentType = gtk::Widget;
 
         fn class_init(klass: &mut Self::Class) {
@@ -152,158 +121,100 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for FolderView {
+    impl ObjectImpl for PlaylistView {
         fn dispose(&self) {
             while let Some(child) = self.obj().first_child() {
                 child.unparent();
             }
         }
-
-        fn constructed(&self) {
-            self.parent_constructed();
-            self.obj().bind_property("path", &self.path_widget.get(), "label").sync_create().build();
-
-            self.back_btn.connect_clicked(clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |_| this.move_back()
-            ));
-
-            self.forward_btn.connect_clicked(clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |_| this.move_forward()
-            ));
-        }
-
-        fn properties() -> &'static [ParamSpec] {
-            static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
-                vec![
-                    ParamSpecString::builder("path").read_only().build()
-                ]
-            });
-            PROPERTIES.as_ref()
-        }
-
-        fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
-            let obj = self.obj();
-            match pspec.name() {
-                "path" => obj.get_path().to_value(),
-                _ => unimplemented!(),
-            }
-        }
     }
 
-    impl WidgetImpl for FolderView {}
-
-    impl FolderView {
-        fn update_nav_btn_sensitivity(&self) {
-            let curr_idx = self.curr_idx.get();
-            let hist_len = self.history.borrow().len();
-            println!("Curr idx: {}", curr_idx);
-            println!("Hist len: {}", hist_len);
-            if curr_idx == 0 {
-                self.back_btn.set_sensitive(false);
-            }
-            else {
-                self.back_btn.set_sensitive(true);
-            }
-            if curr_idx == hist_len {
-                self.forward_btn.set_sensitive(false);
-            }
-            else {
-                self.forward_btn.set_sensitive(true);
-            }
-        }
-        pub fn move_back(&self) {
-            let curr_idx = self.curr_idx.get();
-            if curr_idx > 0 {
-                self.curr_idx.replace(curr_idx - 1);
-                self.obj().navigate();
-                self.update_nav_btn_sensitivity();
-            }
-        }
-
-        pub fn move_forward(&self) {
-            let curr_idx = self.curr_idx.get();
-            let hist_len = self.history.borrow().len();
-            // Reminder: this index is 1-based because 0 means root (before first
-            // element in history).
-            if curr_idx < hist_len {
-                self.curr_idx.replace(curr_idx + 1);
-                self.obj().navigate();
-                self.update_nav_btn_sensitivity();
-            }
-        }
-    }
+    impl WidgetImpl for PlaylistView {}
 }
 
 glib::wrapper! {
-    pub struct FolderView(ObjectSubclass<imp::FolderView>)
+    pub struct PlaylistView(ObjectSubclass<imp::PlaylistView>)
         @extends gtk::Widget,
         @implements gio::ActionGroup, gio::ActionMap;
 }
 
-impl Default for FolderView {
+impl Default for PlaylistView {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl FolderView {
+impl PlaylistView {
     pub fn new() -> Self {
-        glib::Object::new()
+        let res: Self = glib::Object::new();
+
+        res
     }
 
-    pub fn get_path(&self) -> String {
-        let imp = self.imp();
-        let history = imp.history.borrow();
-        let curr_idx = imp.curr_idx.get();
-        if history.len() > 0 && curr_idx > 0 {
-            history[..curr_idx].join("/")
-        }
-        else {
-            "".to_string()
-        }
+    pub fn pop(&self) {
+        self.imp().nav_view.pop();
     }
 
-    pub fn navigate(&self) {
-        self.notify("path");
-        self.imp().library.get().unwrap().get_folder_contents(&self.get_path());
-        self.imp().loading_stack.set_visible_child_name("loading");
-    }
-
-    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
+    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState, window: EuphonicaWindow) {
+        let content_view = self.imp().content_view.get();
+        content_view.setup(library.clone(), client_state.clone(), cache.clone(), window);
+        self.imp().content_page.connect_hidden(move |_| {
+            content_view.unbind(true);
+        });
+        self.imp().library.set(library.clone()).expect("Cannot init PlaylistView with Library");
         self.setup_sort();
         self.setup_search();
-        self.setup_listview(cache.clone(), library.clone());
-        self.imp().library.set(library.clone()).expect("Cannot init FolderView with Library");
+        self.setup_listview(cache.clone());
+
         client_state.connect_notify_local(Some("connection-state"), clone!(
             #[weak(rename_to = this)]
             self,
             move |state, _| {
                 if state.get_connection_state() == ConnectionState::Connected {
-                    // Newly-connected? Reset path to ""
-                    let _ = this.imp().history.replace(Vec::new());
-                    let _ = this.imp().curr_idx.replace(0);
-                    this.imp().library.get().unwrap().get_folder_contents("");
+                    // Newly-connected? Get all playlists.
+                    this.imp().library.get().unwrap().init_playlists();
                 }
             }
         ));
+
         client_state.connect_closure(
-            "folder-contents-downloaded",
+            "idle",
             false,
             closure_local!(
                 #[weak(rename_to = this)]
                 self,
-                move |_: ClientState, uri: String, entries: glib::BoxedAnyObject| {
-                    // If original URI matches current URI, refresh current view
-                    println!("Requested URI: {}", &uri);
-                    println!("Current URI: {}", &this.get_path());
-                    if uri == this.get_path() {
-                        this.imp().inodes.remove_all();
-                        this.imp().inodes.extend_from_slice(entries.borrow::<Vec<INode>>().as_ref());
-                        this.imp().loading_stack.set_visible_child_name("content");
+                move |_: ClientState, subsys: glib::BoxedAnyObject| {
+                    match subsys.borrow::<Subsystem>().deref() {
+                        Subsystem::Playlist => {
+                            let library = this.imp().library.get().unwrap();
+                            // Reload playlists
+                            library.init_playlists();
+                            // Also try to reload content view too, if it's still bound to one.
+                            // If its currently-bound playlist has just been deleted, don't rebind it.
+                            // Instead, force-switch the nav view to this page.
+                            let content_view = this.imp().content_view.get();
+                            if let Some(playlist) = content_view.current_playlist() {
+                                // If this change involves renaming the current playlist, ensure
+                                // we have updated the playlist object to the new name BEFORE sending
+                                // the actual rename command to MPD, such this this will always occur
+                                // with the current name being the NEW one.
+                                // Else, we will lose track of the current playlist.
+                                let curr_name = playlist.get_name();
+                                // Temporarily unbind
+                                content_view.unbind(true);
+                                let playlists = library.playlists();
+                                if let Some(idx) = playlists.find_with_equal_func(move |obj| {
+                                    obj.downcast_ref::<INode>().unwrap().get_name() == curr_name
+                                }) {
+                                    this.on_playlist_clicked(playlists.item(idx).unwrap().downcast_ref::<INode>().unwrap());
+                                }
+                                else {
+                                    this.pop();
+                                }
+                            }
+
+                        }
+                        _ => {}
                     }
                 }
             )
@@ -313,7 +224,7 @@ impl FolderView {
     fn setup_sort(&self) {
         // Setup sort widget & actions
         let settings = settings_manager();
-        let state = settings.child("state").child("folderview");
+        let state = settings.child("state").child("playlistview");
         let library_settings = settings.child("library");
         let sort_dir_btn = self.imp().sort_dir_btn.get();
         sort_dir_btn.connect_clicked(clone!(
@@ -502,33 +413,16 @@ impl FolderView {
         );
     }
 
-    pub fn on_inode_clicked(&self, inode: &INode) {
-        // - Upon receiving click signal, get the list item at the indicated activate index.
-        // - Extract inode from that list item.
-        // - If this inode is a folder:
-        //   - If we're not currently at the head of the history, truncate history to be curr_idx long.
-        //   - Append inode name to CWD
-        //   - Increment curr_idx
-        //   - Send an lsinfo query with the newly-updated URI.
-        //   - Switch to loading page.
-        // - Else: do nothing (adding songs and playlists are done with buttons to the right of each row).
-        if let Some(name) = inode.get_name() {
-            if inode.get_info().inode_type == INodeType::Folder {
-                {
-                    let curr_idx = self.imp().curr_idx.get();
-                    let mut history = self.imp().history.borrow_mut();
-                    let hist_len = history.len();
-                    if curr_idx < hist_len {
-                        history.truncate(curr_idx);
-                    }
-                    history.push(name.to_owned());
-                }
-                self.imp().move_forward();
-            }
-        }
+    pub fn on_playlist_clicked(&self, inode: &INode) {
+        let content_view = self.imp().content_view.get();
+        content_view.unbind(true);
+        content_view.bind(inode.clone());
+        self.imp().nav_view.push_by_tag("content");
+        self.imp().library.get().unwrap().init_playlist(inode.get_name().unwrap());
     }
 
-    fn setup_listview(&self, cache: Rc<Cache>, library: Library) {
+    fn setup_listview(&self, cache: Rc<Cache>) {
+        let library = self.imp().library.get().unwrap();
         // client_state.connect_closure(
         //     "inode-basic-info-downloaded",
         //     false,
@@ -556,7 +450,8 @@ impl FolderView {
             .build();
 
         // Chain search & sort. Put sort after search to reduce number of sort items.
-        let search_model = gtk::FilterListModel::new(Some(self.imp().inodes.clone()), Some(self.imp().search_filter.clone()));
+        let playlists = library.playlists();
+        let search_model = gtk::FilterListModel::new(Some(playlists.clone()), Some(self.imp().search_filter.clone()));
         search_model.set_incremental(true);
         let sort_model = gtk::SortListModel::new(Some(search_model), Some(self.imp().sorter.clone()));
         sort_model.set_incremental(true);
@@ -610,7 +505,7 @@ impl FolderView {
                     .and_downcast::<INode>()
                     .expect("The item has to be a `common::INode`.");
                 println!("Clicked on {:?}", &inode);
-                this.on_inode_clicked(&inode);
+                this.on_playlist_clicked(&inode);
             })
         );
     }

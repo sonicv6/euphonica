@@ -1,5 +1,5 @@
 use std::cell::OnceCell;
-use mpd::lsinfo::LsInfoEntry;
+use mpd::{lsinfo::LsInfoEntry, Playlist};
 use gtk::glib;
 use glib::prelude::*;
 use gtk::subclass::prelude::*;
@@ -70,6 +70,16 @@ impl From<LsInfoEntry> for INodeInfo {
                 last_modified: dir.last_mod,
                 inode_type: INodeType::Folder
             }
+        }
+    }
+}
+
+impl From<Playlist> for INodeInfo {
+    fn from(playlist: Playlist) -> Self {
+        Self {
+            uri: playlist.name,
+            last_modified: Some(playlist.last_mod),
+            inode_type: INodeType::Playlist
         }
     }
 }
@@ -149,6 +159,16 @@ impl INode {
         self.get_info().uri.split("/").last()
     }
 
+    /// Set a new name for this INode. Caution: only to be used with playlists.
+    pub fn with_new_name(&self, new_name: &str) -> Self {
+        let old_info = self.get_info();
+        Self::from(INodeInfo {
+            uri: new_name.to_owned(),
+            last_modified: old_info.last_modified.clone(),
+            inode_type: old_info.inode_type
+        })
+    }
+
     pub fn get_last_modified(&self) -> Option<&str> {
         self.get_info().last_modified.as_deref()
     }
@@ -171,6 +191,13 @@ impl From<INodeInfo> for INode {
 impl From<LsInfoEntry> for INode {
     fn from(entry: LsInfoEntry) -> Self {
         let info = INodeInfo::from(entry);
+        Self::from(info)
+    }
+}
+
+impl From<Playlist> for INode {
+    fn from(playlist: Playlist) -> Self {
+        let info = INodeInfo::from(playlist);
         Self::from(info)
     }
 }

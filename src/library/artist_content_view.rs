@@ -36,6 +36,8 @@ mod imp {
 
     use glib::subclass::Signal;
 
+    use crate::library::add_to_playlist::AddToPlaylistButton;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
@@ -80,6 +82,8 @@ mod imp {
         #[template_child]
         pub append_queue_text: TemplateChild<gtk::Label>,
         #[template_child]
+        pub add_to_playlist: TemplateChild<AddToPlaylistButton>,
+        #[template_child]
         pub sel_all: TemplateChild<gtk::Button>,
         #[template_child]
         pub sel_none: TemplateChild<gtk::Button>,
@@ -118,6 +122,7 @@ mod imp {
                 append_queue: TemplateChild::default(),
                 replace_queue_text: TemplateChild::default(),
                 append_queue_text: TemplateChild::default(),
+                add_to_playlist: TemplateChild::default(),
                 sel_all: TemplateChild::default(),
                 sel_none: TemplateChild::default(),
                 // Discography sub-view
@@ -550,8 +555,13 @@ impl ArtistContentView {
     pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
         let _ = self.imp().cache.set(cache.clone());
         self.setup_info_box(cache.clone());
-        self.setup_song_subview(library, cache.clone(), client_state.clone());
+        self.setup_song_subview(library.clone(), cache.clone(), client_state.clone());
         self.setup_album_subview(cache, client_state);
+
+        self.imp().add_to_playlist.setup(
+            library.clone(),
+            self.imp().song_sel_model.clone()
+        );
     }
 
     /// Returns true if an avatar was successfully retrieved.

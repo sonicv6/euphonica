@@ -108,7 +108,7 @@ mod imp {
     impl ObjectImpl for PlayerPane {
         fn constructed(&self) {
             self.parent_constructed();
-            let settings = settings_manager().child("player");
+            let settings = settings_manager().child("ui");
             let knob = self.vol_knob.get();
             settings
                 .bind(

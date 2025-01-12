@@ -1,6 +1,6 @@
 [package]
 name = "euphonica"
-version = "0.9.1"
+version = "0.10.0"
 edition = "2021"
 
 [dependencies]
@@ -30,6 +30,7 @@ mpris-server = "0.8.1"
 async-lock = "3.4.0"
 libblur = "0.14.4"
 keyring = { version = "3", features = ["linux-native-sync-persistent"] }
+gio = { version = "0.20.7", features = ["v2_74"] }
 
 
 [dependencies.gtk]
@@ -52,3 +53,7 @@ features = ["v1_6"]
 
 [profile.dev]
 debug = 1
+
+[profile.release]
+strip = true # Should reduce binary size on Linux
+lto = true

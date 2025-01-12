@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <requires lib="gtk" version="4.0"/>
-  <template class="EuphonicaAlbumView" parent="GtkWidget">
+  <template class="EuphonicaPlaylistView" parent="GtkWidget">
     <child>
       <object class="AdwNavigationView" id="nav_view">
         <child>
           <object class="AdwNavigationPage">
-            <property name="title" translatable="true">Albums</property>
+            <property name="title" translatable="true">Saved Playlists</property>
             <child>
               <object class="AdwToolbarView">
                 <child type="top">
@@ -36,9 +36,8 @@
                             <property name="model">
                               <object class="GtkStringList">
                                 <items>
-                                  <item translatable="yes">Album title</item>
-                                  <item translatable="yes">AlbumArtist</item>
-                                  <item translatable="yes">Release date</item>
+                                  <item translatable="yes">Playlist name</item>
+                                  <item translatable="yes">Last modified</item>
                                 </items>
                               </object>
                             </property>
@@ -52,28 +51,9 @@
                   <object class="GtkSearchBar" id="search_bar">
                     <property name="key-capture-widget">nav_view</property>
                     <child>
-                      <object class="GtkBox">
-                        <property name="spacing">6</property>
-                        <child>
-                          <object class="GtkDropDown" id="search_mode">
-                            <property name="model">
-                              <object class="GtkStringList">
-                                <items>
-                                  <!-- Rust code matches by index, not string content, to avoid string comparisons.-->
-                                  <item translatable="yes">Either</item>
-                                  <item translatable="yes">Album title</item>
-                                  <item translatable="yes">AlbumArtist tag</item>
-                                </items>
-                              </object>
-                            </property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkSearchEntry" id="search_entry">
-                            <property name="search-delay">150</property>
-                            <property name="width-request">400</property>
-                          </object>
-                        </child>
+                      <object class="GtkSearchEntry" id="search_entry">
+                        <property name="search-delay">150</property>
+                        <property name="width-request">400</property>
                       </object>
                     </child>
                   </object>
@@ -86,14 +66,11 @@
                     <property name="has-frame">false</property>
                     <property name="vexpand">true</property>
                     <property name="child">
-                      <object class="GtkGridView" id="grid_view">
-                        <property name="orientation">1</property>
-                        <property name="min-columns">1</property>
-                        <property name="max-columns">10</property>
+                      <object class="GtkListView" id="list_view">
+                        <property name="show-separators">true</property>
                         <property name="single-click-activate">true</property>
                         <style>
                           <class name="no-bg"/>
-                          <class name="padding-12"/>
                         </style>
                       </object>
                     </property>
@@ -106,9 +83,9 @@
         <child>
           <object class="AdwNavigationPage" id="content_page">
             <property name="tag">content</property>
-            <property name="title" translatable="true">Album Info</property>
+            <property name="title" translatable="true">Playlist Info</property>
             <child>
-              <object class="EuphonicaAlbumContentView" id="content_view"></object>
+              <object class="EuphonicaPlaylistContentView" id="content_view"></object>
             </child>
           </object>
         </child>

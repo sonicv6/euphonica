@@ -12,12 +12,7 @@ use async_channel::{Sender, Receiver, SendError};
 use glib::clone;
 use gtk::{glib, gio};
 use mpd::{
-    client::Client,
-    error::{Error as MpdError, ErrorCode as MpdErrorCode},
-    lsinfo::LsInfoEntry,
-    search::{Operation as QueryOperation, Query, Term, Window},
-    song::Id,
-    Channel, Idle, Output, Subsystem
+    client::Client, error::{Error as MpdError, ErrorCode as MpdErrorCode}, lsinfo::LsInfoEntry, search::{Operation as QueryOperation, Query, Term, Window}, song::Id, Channel, EditAction, Idle, Output, SaveMode, Subsystem
 };
 use uuid::Uuid;
 
@@ -27,7 +22,7 @@ use crate::{
 
 use super::state::{ClientState, ConnectionState};
 
-const BATCH_SIZE: u32 = 4096;
+const BATCH_SIZE: u32 = 1024;
 const FETCH_LIMIT: usize = 10000000;  // Fetch at most ten million songs at once (same
 // folder, same tag, etc)
 
@@ -43,6 +38,7 @@ enum AsyncClientMessage {
     ArtistSongInfoDownloaded(String, Vec<SongInfo>),  // Return songs of an artist (or had their participation)
     ArtistAlbumBasicInfoDownloaded(String, AlbumInfo),  // Return albums that had this artist in their AlbumArtist tag.
     FolderContentsDownloaded(String, Vec<LsInfoEntry>),
+    PlaylistSongInfoDownloaded(String, Vec<SongInfo>),
     DBUpdated
 }
 
@@ -58,6 +54,7 @@ pub enum BackgroundTask {
     FetchArtists(bool),  // Gradually get all artists. If bool flag is true, will parse AlbumArtist tag
     FetchArtistSongs(String),  // Get all songs of an artist with given name
     FetchArtistAlbums(String),  // Get all albums of an artist with given name
+    FetchPlaylistSongs(String),  // Get songs of playlist with given name
 }
 
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
@@ -171,7 +168,6 @@ mod background {
     ) where
         F: Fn(Vec<SongInfo>) -> Result<(), SendError<AsyncClientMessage>>
     {
-        // TODO: batched windowed retrieval
         let mut curr_len: u32 = 0;
         let mut more: bool = true;
         while more && (curr_len as usize) < FETCH_LIMIT {
@@ -332,6 +328,30 @@ mod background {
             ));
         }
     }
+
+    pub fn fetch_playlist_songs(
+        client: &mut mpd::Client,
+        sender_to_fg: &Sender<AsyncClientMessage>,
+        name: String
+    ) {
+        let mut curr_len: u32 = 0;
+        let mut more: bool = true;
+        while more && (curr_len as usize) < FETCH_LIMIT {
+            let songs: Vec<SongInfo> = client
+                .playlist(&name, curr_len..(curr_len + BATCH_SIZE))
+                .unwrap()
+                .iter_mut()
+                .map(|mpd_song| {
+                    SongInfo::from(std::mem::take(mpd_song))
+                })
+                .collect();
+            more = songs.len() >= BATCH_SIZE as usize;
+            if !songs.is_empty() {
+                curr_len += songs.len() as u32;
+                let _ = sender_to_fg.send_blocking(AsyncClientMessage::PlaylistSongInfoDownloaded(name.clone(), songs));
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -449,6 +469,11 @@ impl MpdWrapper {
                                 }
                                 BackgroundTask::FetchFolderContents(uri) => {
                                     background::fetch_folder_contents(&mut client, &sender_to_fg, uri)
+                                }
+                                BackgroundTask::FetchPlaylistSongs(name) => {
+                                    background::fetch_playlist_songs(
+                                        &mut client, &sender_to_fg, name
+                                    )
                                 }
                             }
                         }
@@ -571,6 +596,11 @@ impl MpdWrapper {
                 album_info
             ),
             AsyncClientMessage::FolderContentsDownloaded(uri, contents) => self.on_folder_contents_downloaded(uri, contents),
+            AsyncClientMessage::PlaylistSongInfoDownloaded(name, songs) => self.on_songs_downloaded(
+                "playlist-songs-downloaded",
+                name,
+                songs
+            ),
             AsyncClientMessage::DBUpdated => {},
             AsyncClientMessage::Busy(busy) => self.state.set_busy(busy),
         }
@@ -760,29 +790,39 @@ impl MpdWrapper {
         }
     }
 
-    fn get_sticker(&self, typ: &str, uri: &str, name: &str) {
+    pub fn get_sticker(&self, typ: &str, uri: &str, name: &str) -> Option<String> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let res = client.sticker(typ, uri, name);
-            if let Ok(sticker) = res {
-                self.state.emit_by_name::<()>("sticker-downloaded", &[
-                    &typ.to_value(),
-                    &uri.to_value(),
-                    &name.to_value(),
-                    &sticker.to_value()
-                ]);
-            }
-            else if let Err(error) = res {
-                match error {
+            match client.sticker(typ, uri, name) {
+                Ok(sticker) => {
+                    self.state.set_supports_stickers(true);
+                    return Some(sticker);
+                }
+                Err(error) => {
+                    match error {
                     MpdError::Server(server_err) => {
                         if server_err.detail.contains("disabled") {
-                            self.state.emit_by_name::<()>("sticker-db-disabled", &[]);
+                            self.state.set_supports_stickers(false);
                         }
-                        else if server_err.detail.contains("no such sticker") {
-                            self.state.emit_by_name::<()>("sticker-not-found", &[
-                                &typ.to_value(),
-                                &uri.to_value(),
-                                &name.to_value(),
-                            ]);
+                    }
+                    _ => {
+                        // Not handled yet
+                    }
+                };
+                return None;
+                }
+            }
+        }
+        return None;
+    }
+
+    pub fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.set_sticker(typ, uri, name, value) {
+                Ok(()) => self.state.set_supports_stickers(true),
+                Err(err) => match err {
+                    MpdError::Server(server_err) => {
+                        if server_err.detail.contains("disabled") {
+                            self.state.set_supports_stickers(false);
                         }
                     }
                     _ => {
@@ -793,11 +833,122 @@ impl MpdWrapper {
         }
     }
 
-    fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
+    pub fn get_playlists(&self) -> Vec<INode> {
+        // TODO: Might want to move to child thread
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            let _ = client.set_sticker(typ, uri, name, value);
+            match client.playlists() {
+                Ok(playlists) => {
+                    self.state.set_supports_playlists(true);
+
+                    // Convert mpd::Playlist to our INode GObject
+                    return playlists.into_iter().map(INode::from).collect::<Vec<INode>>();
+                }
+                Err(e) => match e {
+                    MpdError::Server(server_err) => {
+                        self.state.set_supports_playlists(false);
+                        if server_err.detail.contains("disabled") {
+                            println!("Playlists are not supported.");
+
+                        }
+                        else {
+                            println!("get_playlists: {:?}", server_err);
+                        }
+                    }
+                    _ => {
+                        println!("get_playlists: {:?}", e);
+                        // Not handled yet
+                    }
+                }
+            }
         }
-    } 
+        return Vec::with_capacity(0);
+    }
+
+    pub fn load_playlist(&self, name: &str) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.load(name, ..) {
+                Ok(()) => {
+                    self.state.set_supports_playlists(true);
+                    return Ok(());
+                }
+                Err(e) => {
+                    match &e {
+                        MpdError::Server(server_err) => {
+                            if server_err.detail.contains("disabled") {
+                                self.state.set_supports_playlists(false);
+                            }
+                        }
+                        _ => {
+                            // Not handled yet
+                        }
+                    }
+                    return Err(Some(e));
+                }
+            }
+        }
+        return Err(None);
+    }
+
+    pub fn save_queue_as_playlist(&self, name: &str, save_mode: SaveMode) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.save(name, Some(save_mode)) {
+                Ok(()) => {
+                    self.state.set_supports_playlists(true);
+                    return Ok(());
+                }
+                Err(e) => {
+                    match &e {
+                        MpdError::Server(server_err) => {
+                            if server_err.detail.contains("disabled") {
+                                self.state.set_supports_playlists(false);
+                            }
+                        }
+                        _ => {
+                            // Not handled yet
+                        }
+                    }
+                    return Err(Some(e));
+                }
+            }
+        }
+        return Err(None);
+    }
+
+    pub fn rename_playlist(&self, old_name: &str, new_name: &str) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.pl_rename(old_name, new_name) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Some(e))
+            }
+        }
+        else {
+            Err(None)
+        }
+    }
+
+    pub fn edit_playlist(&self, actions: &[EditAction]) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.pl_edit(actions) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Some(e))
+            }
+        }
+        else {
+            Err(None)
+        }
+    }
+
+    pub fn delete_playlist(&self, name: &str) -> Result<(), Option<MpdError>> {
+        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+            match client.pl_remove(name) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Some(e))
+            }
+        }
+        else {
+            Err(None)
+        }
+    }
 
     pub fn get_status(&self) -> Option<mpd::Status> {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
@@ -1028,32 +1179,6 @@ impl MpdWrapper {
                 signal_name,
                 &[
                     &Album::from(info)
-                ]
-            );
-        }
-    }
-
-    fn on_artist_downloaded(
-        &self,
-        signal_name: &str,
-        tag: Option<String>,  // For future features, such as fetching artists in album content view
-        info: ArtistInfo
-    ) {
-        // Append to listener lists
-        if let Some(tag) = tag {
-            self.state.emit_by_name::<()>(
-                signal_name,
-                &[
-                    &tag,
-                    &BoxedAnyObject::new(Artist::from(info))
-                ]
-            );
-        }
-        else {
-            self.state.emit_by_name::<()>(
-                signal_name,
-                &[
-                    &BoxedAnyObject::new(Artist::from(info))
                 ]
             );
         }

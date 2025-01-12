@@ -1,7 +1,7 @@
 extern crate mpd;
 use crate::{
     application::EuphonicaApplication,
-    cache::Cache,
+    cache::{Cache, CacheState},
     client::{ClientState, ConnectionState, MpdWrapper},
     common::{AlbumInfo, QualityGrade, Song},
     utils::{prettify_audio_format, settings_manager}
@@ -19,7 +19,13 @@ use adw::subclass::prelude::*;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject};
 use gtk::{gdk::Texture, glib::clone};
 use gtk::{gio, glib, prelude::*};
-use mpd::{status::{AudioFormat, State, Status}, ReplayGain, Subsystem};
+use mpd::{
+    status::{AudioFormat, State, Status},
+    ReplayGain,
+    Subsystem,
+    SaveMode,
+    error::Error as MpdError
+};
 use std::{
     cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
 };
@@ -184,7 +190,8 @@ mod imp {
         pub poll_blocked: Cell<bool>,
         pub mpris_server: AsyncOnceCell<LocalServer<super::Player>>,
         pub mpris_enabled: Cell<bool>,
-        pub app: OnceCell<EuphonicaApplication>
+        pub app: OnceCell<EuphonicaApplication>,
+        pub supports_playlists: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -198,6 +205,7 @@ mod imp {
                 position: Cell::new(0.0),
                 random: Cell::new(false),
                 consume: Cell::new(false),
+                supports_playlists: Cell::new(false),
                 replaygain: Cell::new(ReplayGain::Off),
                 crossfade: Cell::new(0.0),
                 mixramp_db: Cell::new(0.0),
@@ -234,6 +242,7 @@ mod imp {
                     ParamSpecDouble::builder("mixramp-delay").build(), // seconds
                     ParamSpecBoolean::builder("random").build(),
                     ParamSpecBoolean::builder("consume").build(),
+                    ParamSpecBoolean::builder("supports-playlists").build(),
                     ParamSpecDouble::builder("position").build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
@@ -259,6 +268,7 @@ mod imp {
                 "playback-flow" => self.flow.get().to_value(),
                 "random" => self.random.get().to_value(),
                 "consume" => self.consume.get().to_value(),
+                "supports-playlists" => self.supports_playlists.get().to_value(),
                 "crossfade" => self.crossfade.get().to_value(),
                 "mixramp-db" => self.mixramp_db.get().to_value(),
                 "mixramp-delay" => self.mixramp_delay.get().to_value(),
@@ -314,6 +324,12 @@ mod imp {
                         // Idle status will update it later.
                     }
                 }
+                "supports-playlists" => {
+                    if let Ok(state) = value.get::<bool>() {
+                        self.supports_playlists.replace(state);
+                        obj.notify("supports-playlists");
+                    }
+                }
                 _ => unimplemented!(),
             }
         }
@@ -366,6 +382,28 @@ impl Player {
     ) {
         let client_state = client.clone().get_client_state();
         let _ = self.imp().client.set(client);
+
+        // Signal once for current songs in case the UI is initialised too quickly,
+        // causing the player pane & bar to be stuck without album art for the
+        // song playing at startup.
+        cache.get_cache_state().connect_closure(
+            "album-art-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: CacheState, folder_uri: String| {
+                    if let Some(song) = this.imp().current_song.borrow().as_ref() {
+                        if let Some(album) = song.get_album() {
+                            if album.uri.as_str() == folder_uri.as_str() {
+                                this.notify("album-art");
+                            }
+                        }
+                    }
+                }
+            )
+        );
+
         let _ = self.imp().cache.set(cache);
         let _ = self.imp().app.set(application);
         // Connect to ClientState signals
@@ -388,6 +426,15 @@ impl Player {
                 }
             }
         ));
+        client_state
+            .bind_property(
+                "supports-playlists",
+                self,
+                "supports-playlists"
+            )
+            .sync_create()
+            .build();
+
         client_state.connect_closure(
             "idle",
             false,
@@ -1017,6 +1064,10 @@ impl Player {
                 }
             }
         }
+    }
+
+    pub fn save_queue(&self, name: &str, save_mode: SaveMode) -> Result<(), Option<MpdError>> {
+        return self.client().save_queue_as_playlist(name, save_mode);
     }
 
     /// Periodically poll for player progress to update seekbar.

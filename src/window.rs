@@ -34,7 +34,7 @@ use crate::{
     application::EuphonicaApplication,
     client::{ClientState, ConnectionState},
     common::Album,
-    library::{AlbumView, ArtistContentView, ArtistView},
+    library::{AlbumView, ArtistContentView, ArtistView, FolderView, PlaylistView},
     player::{PlayerBar, QueueView},
     sidebar::Sidebar,
     utils::{self, settings_manager}
@@ -104,7 +104,7 @@ mod imp {
     use image::io::Reader;
     use utils::settings_manager;
 
-    use crate::{common::paintables::FadePaintable, library::FolderView, player::Player};
+    use crate::{common::paintables::FadePaintable, player::Player};
 
     use super::*;
 
@@ -126,6 +126,8 @@ mod imp {
         pub artist_view: TemplateChild<ArtistView>,
         #[template_child]
         pub folder_view: TemplateChild<FolderView>,
+        #[template_child]
+        pub playlist_view: TemplateChild<PlaylistView>,
         #[template_child]
         pub queue_view: TemplateChild<QueueView>,
 
@@ -183,7 +185,7 @@ mod imp {
     impl ObjectImpl for EuphonicaWindow {
         fn constructed(&self) {
             self.parent_constructed();
-            let settings = settings_manager().child("player");
+            let settings = settings_manager().child("ui");
             let obj_borrow = self.obj();
             let obj = obj_borrow.as_ref();
             let bg_paintable = &self.bg_paintable;
@@ -272,7 +274,7 @@ mod imp {
             let (sender_to_fg, fg_receiver) = async_channel::bounded::<BlurMessage>(1); // block background thread until sent
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting background blur thread...");
-                let settings = settings_manager().child("player");
+                let settings = settings_manager().child("ui");
                 // Cached here to avoid having to load the same image multiple times
                 let mut curr_data: Option<DynamicImage> = None;
                 let mut curr_path: Option<PathBuf> = None;
@@ -526,7 +528,8 @@ impl EuphonicaWindow {
         win.restore_window_state();
         win.imp().queue_view.setup(
             app.get_player(),
-            app.get_cache()
+            app.get_cache(),
+            win.clone()
         );
         win.imp().album_view.setup(
             app.get_library(),
@@ -543,10 +546,15 @@ impl EuphonicaWindow {
             app.get_cache(),
             app.get_client().get_client_state()
         );
+        win.imp().playlist_view.setup(
+            app.get_library(),
+            app.get_cache(),
+            app.get_client().get_client_state(),
+            win.clone()
+        );
         win.imp().sidebar.setup(
-            win.imp().stack.get(),
-            win.imp().split_view.get(),
-            app.get_player()
+            &win,
+            &app
         );
         win.imp().player_bar.setup(
             app.get_player()
@@ -579,6 +587,34 @@ impl EuphonicaWindow {
         win.bind_state();
         win.setup_signals();
         win
+    }
+
+    pub fn get_stack(&self) -> gtk::Stack {
+        self.imp().stack.get()
+    }
+
+    pub fn get_split_view(&self) -> adw::NavigationSplitView {
+        self.imp().split_view.get()
+    }
+
+    pub fn get_album_view(&self) -> AlbumView {
+        self.imp().album_view.get()
+    }
+
+    pub fn get_artist_view(&self) -> ArtistView {
+        self.imp().artist_view.get()
+    }
+
+    pub fn get_folder_view(&self) -> FolderView {
+        self.imp().folder_view.get()
+    }
+
+    pub fn get_playlist_view(&self) -> PlaylistView {
+        self.imp().playlist_view.get()
+    }
+
+    pub fn get_queue_view(&self) -> QueueView {
+        self.imp().queue_view.get()
     }
 
     pub fn send_simple_toast(&self, title: &str, timeout: u32) {
@@ -614,6 +650,14 @@ impl EuphonicaWindow {
                 diag.present(Some(self));
             }
         }
+    }
+
+    pub fn show_dialog(&self, heading: &str, body: &str) {
+        let diag = adw::AlertDialog::builder()
+            .heading(heading)
+            .body(body)
+            .build();
+        diag.present(Some(self));
     }
 
     fn update_player_bar_visibility(&self) {
@@ -654,7 +698,7 @@ impl EuphonicaWindow {
             if let Some(sender) =  self.imp().sender_to_bg.get() {
                 if let Some(path) = player.current_song_album_art_path(true) {
                     if path.exists() {
-                        let settings = settings_manager().child("player");
+                        let settings = settings_manager().child("ui");
                         let config = BlurConfig {
                             width: self.width() as u32,
                             height: self.height() as u32,
@@ -681,7 +725,7 @@ impl EuphonicaWindow {
 
     fn queue_background_update(&self, fade: bool) {
         if let Some(sender) = self.imp().sender_to_bg.get() {
-            let settings = settings_manager().child("player");
+            let settings = settings_manager().child("ui");
             let config = BlurConfig {
                 width: self.width() as u32,
                 height: self.height() as u32,

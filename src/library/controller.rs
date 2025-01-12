@@ -7,10 +7,9 @@ use std::{
 };
 use crate::{
     cache::Cache,
-    client::{MpdWrapper, BackgroundTask},
+    client::{BackgroundTask, MpdWrapper},
     common::{
-        Album,
-        Artist, Song
+        Album, Artist, INode, Song
     }
 };
 use gtk::{
@@ -22,7 +21,7 @@ use glib::subclass::Signal;
 
 use adw::subclass::prelude::*;
 
-use mpd::{search::Operation, Query, Term};
+use mpd::{error::Error as MpdError, search::Operation, EditAction, Query, SaveMode, Term};
 
 mod imp {
     use super::*;
@@ -30,18 +29,19 @@ mod imp {
     #[derive(Debug)]
     pub struct Library {
         pub client: OnceCell<Rc<MpdWrapper>>,
-        // Each view gets their own list.
-        // Album retrieval routine:
-        // 1. Library sends request for albums to wrapper
-        // 2. Wrapper forwards request to background client
+        pub playlists: gio::ListStore,
+        // Each view gets their own list, except Playlist View.
+        // This is due to the need to access playlists from other views.
+        //
+        // Album/Artist retrieval routine:
+        // 1. Library places a background task to fetch albums.
         // 3. Background client gets list of unique album tags
         // 4. For each album tag:
         // 4.1. Get the first song with that tag
         // 4.2. Infer folder_uri, sound quality, albumartist, etc. & pack into AlbumInfo class.
-        // 4.3. Send AlbumInfo class to main thread via MpdMessage.
+        // 4.3. Send AlbumInfo class to main thread via AsyncClientMessage.
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
-
         pub cache: OnceCell<Rc<Cache>>,
     }
 
@@ -52,6 +52,7 @@ mod imp {
 
         fn new() -> Self {
             Self {
+                playlists: gio::ListStore::new::<INode>(),
                 client: OnceCell::new(),
                 cache: OnceCell::new()
             }
@@ -165,6 +166,52 @@ impl Library {
         if replace && play {
             self.client().play_at(0, false);
         }
+    }
+
+    /// Queue a playlist for playback.
+    pub fn init_playlists(&self) {
+        self.imp().playlists.remove_all();
+        self.imp().playlists.extend_from_slice(&self.client().get_playlists());
+    }
+
+    /// Get a reference to the local playlists store
+    pub fn playlists(&self) -> gio::ListStore {
+        self.imp().playlists.clone()
+    }
+
+    /// Retrieve songs in a playlist
+    pub fn init_playlist(&self, name: &str) {
+        self.client().queue_background(BackgroundTask::FetchPlaylistSongs(name.to_owned()));
+    }
+
+    /// Queue a playlist for playback.
+    pub fn queue_playlist(&self, name: &str, replace: bool, play: bool) {
+        if replace {
+            self.client().clear_queue();
+        }
+        let _ = self.client().load_playlist(name);
+        if replace && play {
+            self.client().play_at(0, false);
+        }
+    }
+
+    pub fn rename_playlist(&self, old_name: &str, new_name: &str) -> Result<(), Option<MpdError>>{
+        self.client().rename_playlist(old_name, new_name)
+    }
+
+    pub fn delete_playlist(&self, name: &str) -> Result<(), Option<MpdError>>{
+        self.client().delete_playlist(name)
+    }
+
+    pub fn add_songs_to_playlist(&self, playlist_name: &str, songs: &[Song], mode: SaveMode) -> Result<(), Option<MpdError>> {
+        let mut edits: Vec<EditAction> = Vec::with_capacity(songs.len() + 1);
+        if mode == SaveMode::Replace {
+            edits.push(EditAction::Clear(Cow::Borrowed(playlist_name)));
+        }
+        songs.iter().for_each(|s| {
+            edits.push(EditAction::Add(Cow::Borrowed(playlist_name), Cow::Borrowed(s.get_uri()), None));
+        });
+        self.client().edit_playlist(&edits)
     }
 
     pub fn get_folder_contents(&self, uri: &str) {

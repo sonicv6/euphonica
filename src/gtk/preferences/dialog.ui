@@ -16,7 +16,7 @@
 			<object class="EuphonicaLibraryPreferences" id="library_tab"/>
 		</child>
 		<child>
-			<object class="EuphonicaPlayerPreferences" id="player_tab"/>
+			<object class="EuphonicaUIPreferences" id="ui_tab"/>
 		</child>
 	</template>
 </interface>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <template class="EuphonicaArtistSongRow" parent="GtkBox">
+  <template class="EuphonicaPlaylistSongRow" parent="GtkBox">
     <style>
       <class name="padding-6"/>
     </style>
@@ -32,6 +32,11 @@
               <object class="GtkBox">
                 <property name="spacing">6</property>
                 <child>
+                  <object class="GtkLabel" id="playlist_order">
+                    <property name="label">?</property>
+                  </object>
+                </child>
+                <child>
                   <object class="GtkLabel" id="song_name">
                     <property name="halign">start</property>
                     <property name="ellipsize">end</property>
@@ -47,6 +52,25 @@
             </child>
             <child>
               <object class="GtkBox">
+                <child>
+                  <object class="GtkImage">
+                    <property name="icon-name">music-artist-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="artist_name">
+                    <property name="margin-start">4</property>
+                    <property name="ellipsize">end</property>
+                    <property name="label">Unknown</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkSeparator">
+                    <style>
+                      <class name="spacer"/>
+                    </style>
+                  </object>
+                </child>
                 <child>
                   <object class="GtkImage">
                     <property name="icon-name">library-music-symbolic</property>
@@ -87,6 +111,38 @@
         </property>
         <property name="end-widget">
           <object class="GtkBox">
+            <child>
+              <object class="GtkBox">
+                <style>
+                  <class name="linked"/>
+                </style>
+                <child>
+                  <object class="GtkButton" id="raise">
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                    <property name="icon-name">up-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="lower">
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                    <property name="icon-name">down-symbolic</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="remove">
+                <style>
+                  <class name="flat"/>
+                </style>
+                <property name="icon-name">list-remove-symbolic</property>
+                <property name="tooltip-text" translatable="true">Remove this track from the playlist</property>
+              </object>
+            </child>
             <child>
               <object class="GtkButton" id="replace_queue">
                 <property name="tooltip-text" translatable="true">Replace queue with this song</property>

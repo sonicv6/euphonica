@@ -40,7 +40,9 @@ mod imp {
     pub struct ClientState {
         pub connection_state: Cell<ConnectionState>,
         // Used to indicate that the background client is busy.
-        pub busy: Cell<bool>
+        pub busy: Cell<bool>,
+        pub supports_stickers: Cell<bool>,
+        pub supports_playlists: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -51,7 +53,9 @@ mod imp {
         fn new() -> Self {
             Self {
                 connection_state: Cell::default(),
-                busy: Cell::new(false)
+                busy: Cell::new(false),
+                supports_stickers: Cell::new(false),
+                supports_playlists: Cell::new(false)
             }
         }
     }
@@ -61,6 +65,8 @@ mod imp {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
                     ParamSpecBoolean::builder("busy").read_only().build(),
+                    ParamSpecBoolean::builder("supports-stickers").read_only().build(),
+                    ParamSpecBoolean::builder("supports-playlists").read_only().build(),
                     ParamSpecEnum::builder::<ConnectionState>("connection-state").read_only().build()
                 ]
             });
@@ -72,20 +78,11 @@ mod imp {
             match pspec.name() {
                 "connection-state" => obj.get_connection_state().to_value(),
                 "busy" => obj.is_busy().to_value(),
+                "supports-stickers" => obj.supports_stickers().to_value(),
+                "supports-playlists" => obj.supports_playlists().to_value(),
                 _ => unimplemented!(),
             }
         }
-
-        // fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
-        //     let obj = self.obj();
-        //     match pspec.name() {
-        //         "connection-state" => {
-        //             let state = value.get().expect("Error in ClientState::set_property");
-        //             obj.set_connection_state(state);
-        //         },
-        //         _ => unimplemented!()
-        //     }
-        // }
 
         fn signals() -> &'static [Signal] {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
@@ -95,23 +92,6 @@ mod imp {
                         .param_types([
                             BoxedAnyObject::static_type()  // mpd::Subsystem::to_str
                         ])
-                        .build(),
-                    Signal::builder("sticker-downloaded")
-                        .param_types([
-                            String::static_type(),         // Type
-                            String::static_type(),         // URI
-                            String::static_type(),         // name
-                            String::static_type()          // value
-                        ])
-                        .build(),
-                    Signal::builder("sticker-not-found")
-                        .param_types([
-                            String::static_type(),         // Type
-                            String::static_type(),         // URI
-                            String::static_type(),         // name
-                        ])
-                        .build(),
-                    Signal::builder("sticker-db-disabled")
                         .build(),
                     Signal::builder("album-art-downloaded")
                         .param_types([
@@ -160,6 +140,14 @@ mod imp {
                         .param_types([
                             str::static_type(), // corresponding path
                             BoxedAnyObject::static_type() // Vec<INode>
+                        ])
+                        .build(),
+                    // A chunk of a playlist's songs have been retrieved. Emit this
+                    // to make PlaylistContentView append this chunk.
+                    Signal::builder("playlist-songs-downloaded")
+                        .param_types([
+                            String::static_type(),
+                            BoxedAnyObject::static_type()  // Vec<Song>
                         ])
                         .build(),
                 ]
@@ -217,5 +205,27 @@ impl ClientState {
         self.emit_by_name::<()>(signal_name, &[
             &BoxedAnyObject::new(to_box)
         ]);
+    }
+
+    pub fn supports_stickers(&self) -> bool {
+        self.imp().supports_stickers.get()
+    }
+
+    pub fn set_supports_stickers(&self, state: bool) {
+        let old = self.imp().supports_stickers.replace(state);
+        if old != state {
+            self.notify("supports-stickers");
+        }
+    }
+
+    pub fn supports_playlists(&self) -> bool {
+        self.imp().supports_playlists.get()
+    }
+
+    pub fn set_supports_playlists(&self, state: bool) {
+        let old = self.imp().supports_playlists.replace(state);
+        if old != state {
+            self.notify("supports-playlists");
+        }
     }
 }

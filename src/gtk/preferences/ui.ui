@@ -2,9 +2,30 @@
 <interface>
   <requires lib="gtk" version="4.0" />
   <requires lib="Adw" version="1.0" />
-  <template class="EuphonicaPlayerPreferences" parent="AdwPreferencesPage">
-    <property name="title" translatable="true">Player</property>
-    <property name="icon-name">play-symbolic</property>
+  <template class="EuphonicaUIPreferences" parent="AdwPreferencesPage">
+    <property name="title" translatable="true">Appearance</property>
+    <property name="icon-name">brush-monitor-symbolic</property>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">Sidebar</property>
+        <child>
+          <object class="AdwSpinRow" id="recent_playlists_count">
+            <property name="title" translatable="true">Number of recent playlists to show</property>
+            <property name="subtitle" translatable="true">Sorted by last-modified time, latest first.</property>
+            <property name="digits">0</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0</property>
+                <property name="upper">20</property>
+                <property name="value">5</property>
+                <property name="page-increment">1</property>
+                <property name="step-increment">1</property>
+              </object>
+            </property>
+          </object>
+        </child>
+      </object>
+    </child>
     <child>
       <object class="AdwPreferencesGroup">
         <property name="title" translatable="true">Background</property>
@@ -91,19 +112,6 @@
                 <property name="step-increment">0.1</property>
               </object>
             </property>
-          </object>
-        </child>
-      </object>
-    </child>
-
-    <child>
-      <object class="AdwPreferencesGroup">
-        <property name="title" translatable="true">MPRIS</property>
-        <property name="description" translatable="true">Control Euphonica from your shell or other applications via the MPRIS protocol.</property>
-        <child>
-          <object class="AdwSwitchRow" id="enable_mpris">
-            <property name="title" translatable="true">Enable MPRIS integration</property>
-            <property name="subtitle" translatable="true">Requires a relaunch.</property>
           </object>
         </child>
       </object>
