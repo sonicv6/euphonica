@@ -99,7 +99,7 @@ It currently only supports connecting to MPD via a TCP socket. Local socket supp
 Euphonica tries to make minimal and sensible assumptions about your library's folder structure. 
 
 - Tracks from different releases (albums) should not be put in the same folder. Preferably, all tracks of the same release should be put in the same folder.
-- In order to make your album art files available to Euphonica (and other MPD clients), name them `folder.png/jpg/jpeg` and put them in the same folder as the tracks themselves.
+- In order to make your album art files available to Euphonica (and other MPD clients), name them `cover.png/jpg/webp` and put them in the same folder as the tracks themselves.
 - (Optional) Use [Beets](https://beets.io/?trk=public_post-text) to tag your tracks, or follow its tag schema, for best results when fetching album arts and artist avatars.
 Euphonica is developed with Beets tagging in mind and can take advantage of its MusicBrainz ID tags for accurate metadata fetching.
 
