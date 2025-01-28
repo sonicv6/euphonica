@@ -551,8 +551,8 @@ impl Player {
             State::Play => {
                 let new_state = PlaybackState::Playing;
                 let old_state = self.imp().state.replace(new_state);
+                self.maybe_start_polling();
                 if old_state != new_state {
-                    self.maybe_start_polling();
                     self.notify("playback-state");
                     if self.imp().mpris_enabled.get() {
                         mpris_changes.push(Property::PlaybackStatus(MprisPlaybackStatus::Playing));
@@ -562,8 +562,8 @@ impl Player {
             State::Pause => {
                 let new_state = PlaybackState::Paused;
                 let old_state = self.imp().state.replace(new_state);
+                self.stop_polling();
                 if old_state != new_state {
-                    self.stop_polling();
                     self.notify("playback-state");
                     if self.imp().mpris_enabled.get() {
                         mpris_changes.push(Property::PlaybackStatus(MprisPlaybackStatus::Paused));
@@ -573,8 +573,8 @@ impl Player {
             State::Stop => {
                 let new_state = PlaybackState::Stopped;
                 let old_state = self.imp().state.replace(new_state);
+                self.stop_polling();
                 if old_state != new_state {
-                    self.stop_polling();
                     self.notify("playback-state");
                     if self.imp().mpris_enabled.get() {
                         mpris_changes.push(Property::PlaybackStatus(MprisPlaybackStatus::Stopped));
