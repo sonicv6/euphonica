@@ -51,6 +51,15 @@
 		<key name="mpd-download-album-art" type="b">
 			<default>true</default>
 		</key>
+
+		<key name="mpd-fifo-path" type="s">
+			<default>''</default>
+		</key>
+
+		<key name="mpd-fifo-format" type="s">
+			<default>'44100:16:2'</default>
+			<summary>Audio format of FIFO output for use by the visualiser (specified in the same form as in your mpd.conf).</summary>
+		</key>
 	</schema>
 
 	<schema id="org.euphonica.Euphonica.library" path="/org/euphonica/Euphonica/library/">
@@ -136,6 +145,30 @@
 	<schema id="org.euphonica.Euphonica.player" path="/org/euphonica/Euphonica/player/">
 		<key name="enable-mpris" type="b">
 			<default>true</default>
+		</key>
+
+		<key name="use-visualizer" type="b">
+			<default>false</default>
+		</key>
+
+		<key name="visualizer-fft-samples" type="u">
+			<default>512</default>
+		</key>
+
+		<key name="visualizer-fps" type="u">
+			<default>60</default>
+		</key>
+
+		<key name="visualizer-spectrum-bands" type="u">
+			<default>10</default>
+		</key>
+
+		<key name="visualizer-spectrum-min-hz" type="u">
+			<default>20</default>
+		</key>
+
+		<key name="visualizer-spectrum-max-hz" type="u">
+			<default>20000</default>
 		</key>
 	</schema>
 

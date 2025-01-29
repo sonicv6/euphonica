@@ -7,6 +7,7 @@ use crate::{
     utils::{prettify_audio_format, settings_manager}
 };
 use async_lock::OnceCell as AsyncOnceCell;
+use futures::future::FusedFuture;
 use mpris_server::{
     zbus::{self, fdo},
     LocalPlayerInterface, LocalRootInterface, LocalServer,
@@ -20,14 +21,15 @@ use glib::{closure_local, subclass::Signal, BoxedAnyObject};
 use gtk::{gdk::Texture, glib::clone};
 use gtk::{gio, glib, prelude::*};
 use mpd::{
-    status::{AudioFormat, State, Status},
+    status::{self, AudioFormat, State, Status},
     ReplayGain,
     Subsystem,
     SaveMode,
     error::Error as MpdError
 };
+use rustfft::{num_complex::Complex, num_traits::Zero};
 use std::{
-    cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, sync::OnceLock, vec::Vec
+    cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, str::FromStr, sync::{atomic::Ordering, OnceLock}, thread, time::Duration, vec::Vec
 };
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
@@ -152,9 +154,12 @@ fn get_replaygain_icon_name(mode: ReplayGain) -> &'static str {
 }
 
 mod imp {
+    use std::sync::{atomic::AtomicBool, Arc, Mutex};
+
     use crate::application::EuphonicaApplication;
 
     use super::*;
+    use async_channel::{Receiver, Sender};
     use glib::{
         ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecObject, ParamSpecString, ParamSpecUInt, ParamSpecUInt64
     };
@@ -191,7 +196,11 @@ mod imp {
         pub mpris_server: AsyncOnceCell<LocalServer<super::Player>>,
         pub mpris_enabled: Cell<bool>,
         pub app: OnceCell<EuphonicaApplication>,
-        pub supports_playlists: Cell<bool>
+        pub supports_playlists: Cell<bool>,
+        // For receiving frequency levels from FFT thread
+        pub fft_stop: Arc<AtomicBool>,
+        pub fft_data: Arc<Mutex<(Vec<f32>, Vec<f32>)>>,  // stereo
+        pub fft_handle: RefCell<Option<gio::JoinHandle<()>>>
     }
 
     #[glib::object_subclass]
@@ -221,12 +230,48 @@ mod imp {
                 poll_blocked: Cell::new(false),
                 mpris_server: AsyncOnceCell::new(),
                 mpris_enabled: Cell::new(false),
-                app: OnceCell::new()
+                app: OnceCell::new(),
+                fft_stop: Arc::new(AtomicBool::new(false)),
+                fft_data: Arc::new(Mutex::new((
+                    vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bands") as usize],
+                    vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bands") as usize]
+                ))),
+                fft_handle: RefCell::new(None)
             }
         }
     }
 
     impl ObjectImpl for Player {
+        fn constructed(&self) {
+            self.parent_constructed();
+
+            let settings = settings_manager();
+            if settings.child("player").boolean("use-visualizer") {
+                self.obj().maybe_start_fft_thread(
+                    settings.child("client").string("mpd-fifo-path").as_str()
+                );
+            }
+            settings.child("player").connect_changed(
+                Some("use-visualizer"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |settings, key| {
+                        if settings.boolean(key) {
+                            // Visualiser turned on. Start FFT thread.
+                            this.obj().maybe_start_fft_thread(
+                                settings.child("client").string("mpd-fifo-path").as_str()
+                            );
+                        }
+                        else {
+                            // Visualiser turned off. FFT thread should
+                            // have stopped by itself. Join & yeet handle.
+                            this.obj().maybe_stop_fft_thread();
+                        }
+                    }
+                )
+            );
+        }
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
@@ -372,6 +417,91 @@ impl Player {
             glib::spawn_future_local(server.run());
             Ok(server)
         }).await
+    }
+
+    // Start a thread to read raw PCM data from MPD's named pipe output, transform them
+    // to the frequency domain, then return the frequency magnitudes.
+    // On each FFT frame (not screen frame):
+    // 1. Read app preferences.
+    //    - If visualiser is disabled or stop flag is true, then stop this thread.
+    //    - Else, read the specified number of samples from the named pipe.
+    //      This may have changed from the last frame by the user.
+    //    - Get the number of frequencies set by the user. Again this can be changed on-the-fly.
+    // 2. Perform FFT & extrapolate to the marker frequencies.
+    // 3. Send results back to main thread via the async channel.
+    fn maybe_start_fft_thread(&self, path: &str) {
+        let stop_flag = self.imp().fft_stop.clone();
+        stop_flag.store(false, Ordering::Relaxed);
+        let output = self.imp().fft_data.clone();
+        let should_start: bool;
+        {
+            should_start = self.imp().fft_handle.borrow().as_ref().is_none();
+        }
+        if should_start {
+            let fft_handle = gio::spawn_blocking(move || {
+                println!("Starting FFT loop...");
+                let settings = settings_manager();
+                // Will require starting a new thread to account for path and format changes
+                if let (Ok(mut reader), Ok(format)) = (
+                    super::fft::try_open_pipe(settings.child("client").string("mpd-fifo-path").as_str()),
+                    AudioFormat::from_str(settings.child("client").string("mpd-fifo-format").as_str())
+                ) {
+                    let n_samples = settings.child("player").uint("visualizer-fft-samples") as usize;
+                    let mut planner: rustfft::FftPlanner<f32> = rustfft::FftPlanner::new();
+                    let fft = planner.plan_fft_forward(n_samples);
+                    // Allocate the following once only
+                    let mut fft_scratch: Vec<Complex<f32>> = vec![Complex::zero(); fft.get_inplace_scratch_len()];
+                    let mut fft_buf_left: Vec<Complex<f32>> = vec![Complex::zero(); n_samples];
+                    let mut fft_buf_right: Vec<Complex<f32>> = vec![Complex::zero(); n_samples];
+                    'outer: loop {
+                        if stop_flag.load(Ordering::Relaxed) || !settings.child("player").boolean("use-visualizer") {
+                            break 'outer;
+                        }
+                        // TEST
+                        match super::fft::get_stereo_pcm(
+                            &mut fft_buf_left,
+                            &mut fft_buf_right,
+                            &mut reader,
+                            &format,
+                            true
+                        ) {
+                            Ok(()) => {
+                                fft.process_with_scratch(&mut fft_buf_left, &mut fft_scratch);
+                                fft.process_with_scratch(&mut fft_buf_right, &mut fft_scratch);
+
+                                println!("Left FFT peek: {:?}", fft_buf_left.last());
+                            }
+                            Err(e) => {
+                                match e.kind() {
+                                    std::io::ErrorKind::UnexpectedEof => {
+                                        println!("Early end of FIFO, did not fill buffer");
+                                    }
+                                    std::io::ErrorKind::WouldBlock => {
+                                        println!("FIFO is not being written to, probably due to nothing being played");
+                                    }
+                                    _ => {
+                                        println!("FFT ERR: {:?}", &e);
+                                        break 'outer;
+                                    }
+                                }
+                            }
+                        }
+                        thread::sleep(Duration::from_millis(
+                            (1000.0 / (settings.child("player").uint("visualizer-fps") as f64)).floor() as u64
+                        ));
+                    }
+                }
+            });
+            self.imp().fft_handle.replace(Some(fft_handle));
+        }
+    }
+
+    async fn maybe_stop_fft_thread(&self) {
+        if let Some(handle) = self.imp().fft_handle.take() {
+            self.imp().fft_stop.store(true, Ordering::Relaxed);
+            // Digusting sync hack - will freeze UI
+            while !handle.is_terminated() { thread::sleep(Duration::from_millis(10)); }
+        }
     }
 
     pub fn setup(

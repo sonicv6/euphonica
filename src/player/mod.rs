@@ -7,6 +7,7 @@ mod knob;
 mod output;
 mod seekbar;
 mod playback_controls;
+mod fft;
 
 use knob::VolumeKnob;
 use seekbar::Seekbar;
