@@ -147,22 +147,18 @@
 			<default>true</default>
 		</key>
 
-		<key name="use-visualizer" type="b">
-			<default>false</default>
-		</key>
-
 		<key name="visualizer-fft-samples" type="u">
-			<default>512</default>
+			<default>1024</default>
 		</key>
 
 		<key name="visualizer-fps" type="u">
-			<default>60</default>
+			<default>30</default>
 		</key>
 
 		<key name="visualizer-spectrum-bands" type="u">
 			<default>10</default>
 		</key>
-
+		<!--
 		<key name="visualizer-spectrum-min-hz" type="u">
 			<default>20</default>
 		</key>
@@ -170,6 +166,7 @@
 		<key name="visualizer-spectrum-max-hz" type="u">
 			<default>20000</default>
 		</key>
+		-->
 	</schema>
 
 	<schema id="org.euphonica.Euphonica.ui" path="/org/euphonica/Euphonica/ui/">
@@ -193,6 +190,15 @@
 		</key>
 		<key name="vol-knob-unit" enum='org.euphonica.Euphonica.volumeunit'>
 			<default>'percents'</default>
+		</key>
+		<key name="use-visualizer" type="b">
+			<default>false</default>
+		</key>
+		<key name="visualizer-opacity" type="d">
+			<default>0.3</default>
+		</key>
+		<key name="visualizer-scale" type="d">
+			<default>1.0</default>
 		</key>
 	</schema>
 

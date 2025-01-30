@@ -380,7 +380,7 @@ impl QueueView {
     pub fn setup(&self, player: Player, cache: Rc<Cache>, window: EuphonicaWindow) {
         let _ = self.imp().window.set(window);
         self.setup_listview(player.clone(), cache);
-        self.imp().player_pane.setup(player.clone());
+        self.imp().player_pane.setup(&player);
         self.bind_state(player);
     }
 }

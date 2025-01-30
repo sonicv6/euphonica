@@ -107,7 +107,7 @@ impl PlaybackControls {
         Object::builder().build()
     }
 
-    pub fn setup(&self, player: Player) {
+    pub fn setup(&self, player: &Player) {
         let imp = self.imp();
         // Set up buttons
         let play_pause_symbol = imp.play_pause_symbol.get();
@@ -190,7 +190,7 @@ impl PlaybackControls {
         shuffle_btn
             .bind_property(
                 "active",
-                &player,
+                player,
                 "random"
             )
             .bidirectional()
@@ -204,7 +204,7 @@ impl PlaybackControls {
         self.imp().seekbar.get()
     }
 
-    fn setup_seekbar(&self, player: Player) {
+    fn setup_seekbar(&self, player: &Player) {
         let seekbar = self.imp().seekbar.get();
         seekbar.connect_closure(
             "pressed",
