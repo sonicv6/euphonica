@@ -456,12 +456,15 @@ impl Player {
                     AudioFormat::from_str(settings.child("client").string("mpd-fifo-format").as_str())
                 ) {
                     let n_samples = settings.child("player").uint("visualizer-fft-samples") as usize;
-                    let n_bins = settings.child("player").uint("visualizer-spectrum-bands");
+                    let n_bins = settings.child("player").uint("visualizer-spectrum-bands") as usize;
                     let min_freq = settings.child("player").uint("visualizer-spectrum-min-hz") as f32;
                     let max_freq = settings.child("player").uint("visualizer-spectrum-max-hz") as f32;
+                    let curr_step_weight = settings.child("player").double("visualizer-spectrum-curr-step-weight") as f32;
                     // Allocate the following once only
                     let mut fft_buf_left: Vec<f32> = vec![0.0; n_samples];
                     let mut fft_buf_right: Vec<f32> = vec![0.0; n_samples];
+                    let mut curr_step_left: Vec<f32> = vec![0.0; n_bins];
+                    let mut curr_step_right: Vec<f32> = vec![0.0; n_bins];
                     'outer: loop {
                         if stop_flag.load(Ordering::Relaxed) || !settings.child("ui").boolean("use-visualizer") {
                             break 'outer;
@@ -475,26 +478,39 @@ impl Player {
                             true,
                         ) {
                             Ok(()) => {
+                                // Compute outside of mutex lock please
+                                super::fft::get_magnitudes(
+                                    &format,
+                                    &mut fft_buf_left,
+                                    &mut curr_step_left,
+                                    n_bins as u32,
+                                    super::fft::FftBinMode::Logarithmic,
+                                    min_freq,
+                                    max_freq
+                                );
+                                super::fft::get_magnitudes(
+                                    &format,
+                                    &mut fft_buf_right,
+                                    &mut curr_step_right,
+                                    n_bins as u32,
+                                    super::fft::FftBinMode::Logarithmic,
+                                    min_freq,
+                                    max_freq
+                                );
                                 // Replace last frame
                                 if let Ok(mut output_lock) = output.lock() {
-                                    super::fft::get_magnitudes(
-                                        &format,
-                                        &mut fft_buf_left,
-                                        &mut output_lock.0,
-                                        n_bins,
-                                        super::fft::FftBinMode::Logarithmic,
-                                        min_freq,
-                                        max_freq
-                                    );
-                                    super::fft::get_magnitudes(
-                                        &format,
-                                        &mut fft_buf_right,
-                                        &mut output_lock.1,
-                                        n_bins,
-                                        super::fft::FftBinMode::Logarithmic,
-                                        min_freq,
-                                        max_freq
-                                    );
+                                    if output_lock.0.len() != n_bins || output_lock.1.len() != n_bins {
+                                        output_lock.0.clear();
+                                        output_lock.1.clear();
+                                        for _ in 0..n_bins {
+                                            output_lock.0.push(0.0);
+                                            output_lock.1.push(0.0);
+                                        }
+                                    }
+                                    for i in 0..n_bins {
+                                        output_lock.0[i] = curr_step_left[i] * curr_step_weight + output_lock.0[i] * (1.0 - curr_step_weight);
+                                        output_lock.1[i] = curr_step_right[i] * curr_step_weight + output_lock.1[i] * (1.0 - curr_step_weight);
+                                    }
                                     // println!("FFT L: {:?}\tR: {:?}", &output_lock.0, &output_lock.1);
                                 }
                                 else {

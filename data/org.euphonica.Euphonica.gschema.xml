@@ -166,6 +166,10 @@
 		<key name="visualizer-spectrum-max-hz" type="u">
 			<default>16000</default>
 		</key>
+		<key name="visualizer-spectrum-curr-step-weight" type="d">
+			<default>0.2</default>
+
+		</key>
 	</schema>
 
 	<schema id="org.euphonica.Euphonica.ui" path="/org/euphonica/Euphonica/ui/">
