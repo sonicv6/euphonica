@@ -178,6 +178,8 @@ mod imp {
         pub visualizer_scale: Cell<f64>,
         #[property(get, set)]
         pub visualizer_blend_mode: Cell<u32>,
+        #[property(get, set)]
+        pub visualizer_use_splines: Cell<bool>,
         pub tick_callback: RefCell<Option<gtk::TickCallbackId>>,
         pub fft_data: OnceCell<Arc<Mutex<(Vec<f32>, Vec<f32>)>>>,
     }
@@ -297,6 +299,14 @@ mod imp {
                     "visualizer-blend-mode",
                     obj,
                     "visualizer-blend-mode"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-use-splines",
+                    obj,
+                    "visualizer-use-splines"
                 )
                 .get_only()
                 .build();
@@ -544,10 +554,48 @@ mod imp {
             let path_builder = gsk::PathBuilder::new();
             path_builder.move_to(0.0, height);
             path_builder.line_to(0.0, (height - data[0] * scale).max(0.0));
-            for (band_idx, level) in data[1..data.len()].iter().enumerate() {
-                path_builder.line_to((band_idx as f32 + 1.0) * band_width, (height - level * scale).max(0.0));
+
+            if self.visualizer_use_splines.get() {
+                // Spline mode. Since we can make 2 assumptions:
+                // - No two points share the same x-coordinate (duh), and
+                // - X-coordinates are monotonically increasing
+                // we can cheat a bit and avoid having to solve for Beizer control points.
+                let half_width = band_width as f32 / 2.0;
+                let quarter_width = band_width as f32 / 4.0;
+                for i in 0..(data.len() - 1) {
+                    let x = (i as f32 + 1.0) * band_width;
+                    let y = (height - data[i] * scale).max(0.0);
+                    let x_next = x + band_width;
+                    let y_next = (height - data[i+1] * scale).max(0.0);
+                    // Midpoint
+                    let x_mid = x + half_width;
+                    let y_mid = (height - (data[i] + data[i+1]) / 2.0 * scale).max(0.0);
+                    // The next two will serve as control points.
+                    // Between current point and midpoint
+                    let x_left_mid = x + quarter_width;
+                    // Between midpoint and next point
+                    let x_right_mid = x_mid + quarter_width;
+                    // First curve, from current point to midpoint
+                    path_builder.quad_to(
+                        // Control point
+                        x_left_mid, y,
+                        x_mid, y_mid
+                    );
+                    // Second curve, from midpoint to next point
+                    path_builder.quad_to(
+                        // Control point
+                        x_right_mid, y_next,
+                        x_next , y_next
+                    );
+                }
             }
-            path_builder.line_to(width, height);
+            else {
+                // Straight segments mode
+                for (band_idx, level) in data[1..data.len()].iter().enumerate() {
+                    path_builder.line_to((band_idx as f32 + 1.0) * band_width, (height - level * scale).max(0.0));
+                }
+                path_builder.line_to(width, height);
+            }
 
             snapshot.push_fill(
                 &path_builder.to_path(),
