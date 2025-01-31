@@ -127,7 +127,21 @@ impl FadePaintable {
         self.imp().previous.replace(self.imp().current.take());
         self.imp().current.replace(new);
         self.set_fade(0.0);
+    }
 
+    /// Returns whether this paintable will paint anything on the next snapshot().
+    /// (for example, it won't create any render node with no content set, or after
+    /// having fully faded to nothing).
+    pub fn will_paint(&self) -> bool {
+        let current_has_content = self.imp().current.borrow().is_some();
+        let previous_has_content = self.imp().previous.borrow().is_some();
+        let fade = self.get_fade();
+        if current_has_content {
+            previous_has_content || fade > 0.0
+        }
+        else {
+            previous_has_content && fade < 1.0
+        }
     }
 }
 

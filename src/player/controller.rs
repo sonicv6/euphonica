@@ -17,8 +17,8 @@ use mpris_server::{
 };
 
 use adw::subclass::prelude::*;
-use glib::{closure_local, subclass::Signal, BoxedAnyObject};
-use gtk::{gdk::Texture, glib::clone};
+use glib::{closure_local, subclass::Signal, BoxedAnyObject, clone};
+use gtk::{gdk::Texture};
 use gtk::{gio, glib, prelude::*};
 use mpd::{
     status::{AudioFormat, State, Status},

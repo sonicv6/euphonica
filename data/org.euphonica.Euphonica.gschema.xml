@@ -160,7 +160,7 @@
 		</key>
 
 		<key name="visualizer-spectrum-min-hz" type="u">
-			<default>80</default>
+			<default>40</default>
 		</key>
 
 		<key name="visualizer-spectrum-max-hz" type="u">
@@ -197,11 +197,21 @@
 		<key name="use-visualizer" type="b">
 			<default>false</default>
 		</key>
-		<key name="visualizer-opacity" type="d">
+		<key name="visualizer-top-opacity" type="d">
 			<default>0.3</default>
 		</key>
 		<key name="visualizer-scale" type="d">
 			<default>100000.0</default>
+		</key>
+		<key name="visualizer-blend-mode" type="u">
+			<default>6</default>
+			<summary>Index of gsk::BlendMode variant</summary>
+		</key>
+		<key name="visualizer-bottom-opacity" type="d">
+			<default>0.0</default>
+		</key>
+		<key name="visualizer-gradient-height" type="d">
+			<default>0.1</default>
 		</key>
 	</schema>
 
