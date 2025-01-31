@@ -8,7 +8,6 @@ mod output;
 mod seekbar;
 mod playback_controls;
 mod fft;
-pub mod spectrum;
 
 use knob::VolumeKnob;
 use seekbar::Seekbar;

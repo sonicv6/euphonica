@@ -27,7 +27,6 @@ use mpd::{
     SaveMode,
     error::Error as MpdError
 };
-use rustfft::{num_complex::Complex, num_traits::Zero};
 use std::{
     cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, str::FromStr, thread, time::Duration, vec::Vec,
     sync::{
@@ -458,12 +457,11 @@ impl Player {
                 ) {
                     let n_samples = settings.child("player").uint("visualizer-fft-samples") as usize;
                     let n_bins = settings.child("player").uint("visualizer-spectrum-bands");
-                    let mut planner: rustfft::FftPlanner<f32> = rustfft::FftPlanner::new();
-                    let fft = planner.plan_fft_forward(n_samples);
+                    let min_freq = settings.child("player").uint("visualizer-spectrum-min-hz") as f32;
+                    let max_freq = settings.child("player").uint("visualizer-spectrum-max-hz") as f32;
                     // Allocate the following once only
-                    let mut fft_scratch: Vec<Complex<f32>> = vec![Complex::zero(); fft.get_inplace_scratch_len()];
-                    let mut fft_buf_left: Vec<Complex<f32>> = vec![Complex::zero(); n_samples];
-                    let mut fft_buf_right: Vec<Complex<f32>> = vec![Complex::zero(); n_samples];
+                    let mut fft_buf_left: Vec<f32> = vec![0.0; n_samples];
+                    let mut fft_buf_right: Vec<f32> = vec![0.0; n_samples];
                     'outer: loop {
                         if stop_flag.load(Ordering::Relaxed) || !settings.child("ui").boolean("use-visualizer") {
                             break 'outer;
@@ -483,19 +481,19 @@ impl Player {
                                         &format,
                                         &mut fft_buf_left,
                                         &mut output_lock.0,
-                                        &mut fft_scratch,
-                                        fft.clone(),
                                         n_bins,
-                                        super::fft::FftBinMode::Logarithmic
+                                        super::fft::FftBinMode::Logarithmic,
+                                        min_freq,
+                                        max_freq
                                     );
                                     super::fft::get_magnitudes(
                                         &format,
                                         &mut fft_buf_right,
                                         &mut output_lock.1,
-                                        &mut fft_scratch,
-                                        fft.clone(),
                                         n_bins,
-                                        super::fft::FftBinMode::Logarithmic
+                                        super::fft::FftBinMode::Logarithmic,
+                                        min_freq,
+                                        max_freq
                                     );
                                     // println!("FFT L: {:?}\tR: {:?}", &output_lock.0, &output_lock.1);
                                 }

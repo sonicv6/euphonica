@@ -158,15 +158,14 @@
 		<key name="visualizer-spectrum-bands" type="u">
 			<default>10</default>
 		</key>
-		<!--
+
 		<key name="visualizer-spectrum-min-hz" type="u">
-			<default>20</default>
+			<default>80</default>
 		</key>
 
 		<key name="visualizer-spectrum-max-hz" type="u">
-			<default>20000</default>
+			<default>16000</default>
 		</key>
-		-->
 	</schema>
 
 	<schema id="org.euphonica.Euphonica.ui" path="/org/euphonica/Euphonica/ui/">
@@ -198,7 +197,7 @@
 			<default>0.3</default>
 		</key>
 		<key name="visualizer-scale" type="d">
-			<default>1.0</default>
+			<default>100000.0</default>
 		</key>
 	</schema>
 

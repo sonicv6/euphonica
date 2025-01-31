@@ -492,7 +492,7 @@ mod imp {
 
             let path_builder = gsk::PathBuilder::new();
             path_builder.move_to(0.0, height);
-            path_builder.line_to(0.0, (height - data[0]).max(0.0) * scale);
+            path_builder.line_to(0.0, (height - data[0] * scale).max(0.0));
             for (band_idx, level) in data[1..data.len()].iter().enumerate() {
                 path_builder.line_to((band_idx as f32 + 1.0) * band_width, (height - level * scale).max(0.0));
             }
