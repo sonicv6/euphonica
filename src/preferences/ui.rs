@@ -16,7 +16,7 @@ mod imp {
         #[template_child]
         pub recent_playlists_count: TemplateChild<adw::SpinRow>,
         #[template_child]
-        pub use_album_art_as_bg: TemplateChild<adw::SwitchRow>,
+        pub use_album_art_as_bg: TemplateChild<adw::ExpanderRow>,
         #[template_child]
         pub bg_blur_radius: TemplateChild<adw::SpinRow>,
         #[template_child]
@@ -74,28 +74,18 @@ impl UIPreferences {
             .bind(
                 "recent-playlists-count",
                 &recent_playlists_count,
-                "value"
+                "recent-playlists-count"
             )
             .build();
         let use_album_art_as_bg = imp.use_album_art_as_bg.get();
         let bg_blur_radius = imp.bg_blur_radius.get();
         let bg_opacity = imp.bg_opacity.get();
         let bg_transition_duration = imp.bg_transition_duration.get();
-        for widget in [&bg_blur_radius, &bg_opacity, &bg_transition_duration] {
-            use_album_art_as_bg
-                .bind_property(
-                    "active",
-                    widget,
-                    "sensitive"
-                )
-                .sync_create()
-                .build();
-        }
         ui_settings
             .bind(
                 "use-album-art-as-bg",
                 &use_album_art_as_bg,
-                "active"
+                "enable-expansion"
             )
             .build();
 

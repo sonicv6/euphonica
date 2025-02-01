@@ -30,54 +30,56 @@
       <object class="AdwPreferencesGroup">
         <property name="title" translatable="true">Background</property>
         <child>
-          <object class="AdwSwitchRow" id="use_album_art_as_bg">
-            <property name="title" translatable="true">Use album art as background</property>
-          </object>
-        </child>
-        <child>
-          <object class="AdwSpinRow" id="bg_blur_radius">
-            <property name="title" translatable="true">Background blur radius (pixels)</property>
-            <property name="subtitle" translatable="true">Set to 0 to disable blur.</property>
-            <property name="adjustment">
-              <object class="GtkAdjustment">
-                <property name="lower">0</property>
-                <property name="upper">100</property>
-                <property name="value">24</property>
-                <property name="page-increment">10</property>
-                <property name="step-increment">1</property>
+			    <object class="AdwExpanderRow" id="use_album_art_as_bg">
+				    <property name="title" translatable="true">Use album art as background</property>
+				    <property name="show-enable-switch">true</property>
+
+            <child>
+              <object class="AdwSpinRow" id="bg_blur_radius">
+                <property name="title" translatable="true">Background blur radius (pixels)</property>
+                <property name="subtitle" translatable="true">Set to 0 to disable blur.</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0</property>
+                    <property name="upper">100</property>
+                    <property name="value">24</property>
+                    <property name="page-increment">10</property>
+                    <property name="step-increment">1</property>
+                  </object>
+                </property>
               </object>
-            </property>
-          </object>
-        </child>
-        <child>
-          <object class="AdwSpinRow" id="bg_opacity">
-            <property name="title" translatable="true">Background opacity</property>
-            <property name="subtitle" translatable="true">Lower values allow the album art to "dim" or "brighten" depending on whether the app is in light or dark mode by blending itself with the default window background.</property>
-            <property name="digits">2</property>
-            <property name="adjustment">
-              <object class="GtkAdjustment">
-                <property name="lower">0.01</property>
-                <property name="upper">1.00</property>
-                <property name="value">0.50</property>
-                <property name="page-increment">0.1</property>
-                <property name="step-increment">0.02</property>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="bg_opacity">
+                <property name="title" translatable="true">Background opacity</property>
+                <property name="subtitle" translatable="true">Lower values allow the album art to "dim" or "brighten" depending on whether the app is in light or dark mode by blending itself with the default window background.</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.01</property>
+                    <property name="upper">1.00</property>
+                    <property name="value">0.50</property>
+                    <property name="page-increment">0.1</property>
+                    <property name="step-increment">0.02</property>
+                  </object>
+                </property>
               </object>
-            </property>
-          </object>
-        </child>
-        <child>
-          <object class="AdwSpinRow" id="bg_transition_duration">
-            <property name="title" translatable="true">Transition duration (seconds)</property>
-            <property name="digits">2</property>
-            <property name="adjustment">
-              <object class="GtkAdjustment">
-                <property name="lower">0.0</property>
-                <property name="upper">10.0</property>
-                <property name="value">1.0</property>
-                <property name="page-increment">1.0</property>
-                <property name="step-increment">0.25</property>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="bg_transition_duration">
+                <property name="title" translatable="true">Transition duration (seconds)</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.0</property>
+                    <property name="upper">10.0</property>
+                    <property name="value">1.0</property>
+                    <property name="page-increment">1.0</property>
+                    <property name="step-increment">0.25</property>
+                  </object>
+                </property>
               </object>
-            </property>
+            </child>
           </object>
         </child>
       </object>
