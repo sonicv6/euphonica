@@ -237,8 +237,8 @@ mod imp {
                 app: OnceCell::new(),
                 fft_stop: Arc::new(AtomicBool::new(false)),
                 fft_data: Arc::new(Mutex::new((
-                    vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bands") as usize],
-                    vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bands") as usize]
+                    vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bins") as usize],
+                    vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bins") as usize]
                 ))),
                 fft_handle: RefCell::new(None)
             }

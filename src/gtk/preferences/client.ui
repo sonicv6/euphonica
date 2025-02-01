@@ -68,7 +68,7 @@
         <child>
           <object class="AdwSpinRow" id="fifo_fps">
             <property name="title" translatable="true">Sampling FPS</property>
-            <property name="subtitle" translatable="true">Determines visualiser FPS.</property>
+            <property name="subtitle" translatable="true">Determines visualiser FPS. Higher values may result in increased CPU usage.</property>
             <property name="adjustment">
               <object class="GtkAdjustment">
                 <property name="lower">1</property>
@@ -83,7 +83,7 @@
         <child>
           <object class="AdwComboRow" id="fft_n_samples">
             <property name="title" translatable="true">FFT sample window size</property>
-            <property name="subtitle" translatable="true">Higher values improve frequency-axis resolution and allow for more bands to be shown, but require more processing.</property>
+            <property name="subtitle" translatable="true">Higher values improve frequency-axis resolution and allow for more bands to be shown, but will result in more CPU usage.</property>
             <property name="model">
               <object class="GtkStringList">
                 <items>
@@ -97,7 +97,7 @@
           </object>
         </child>
         <child>
-          <object class="AdwSpinRow" id="fft_bands">
+          <object class="AdwSpinRow" id="fft_n_bins">
             <property name="title" translatable="true">FFT output bin count</property>
             <property name="subtitle" translatable="true">Affects the horizontal granularity of the visualiser.</property>
             <property name="adjustment">
