@@ -117,7 +117,7 @@
               <class name="property"/>
             </style>
             <property name="title" translatable="true">Status</property>
-            <property name="subtitle">Not connected</property>
+            <property name="subtitle">Invalid</property>
             <child type="suffix">
               <object class="GtkButton" id="fifo_reconnect">
                 <property name="label" translatable="true">Reconnect</property>

@@ -69,6 +69,26 @@ pub enum PlaybackFlow {
     RepeatSingle // Loops current song
 }
 
+#[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
+#[enum_type(name = "EuphonicaFftStatus")]
+pub enum FftStatus {
+    #[default]
+    Invalid,
+    ValidNotReading, // due to visualiser not being run
+    Reading
+}
+
+impl FftStatus {
+    pub fn get_description(&self) -> &'static str {
+        // TODO: translatable
+        match self {
+            Self::Invalid => "Invalid",
+            Self::ValidNotReading => "Valid (not reading)",
+            Self::Reading => "Reading"
+        }
+    }
+}
+
 pub enum SwapDirection {
     Up,
     Down
@@ -271,10 +291,6 @@ mod imp {
                     }
                 )
             );
-
-            // TODO: restart thread upon changing visualiser config.
-            // In UI there should be a "save" button to trigger saving
-            // config and restarting thread since this is costly.
         }
 
         fn dispose(&self) {
@@ -309,6 +325,9 @@ mod imp {
                     ParamSpecEnum::builder::<QualityGrade>("quality-grade")
                         .read_only()
                         .build(),
+                    ParamSpecEnum::builder::<FftStatus>("fft-status")
+                        .read_only()
+                        .build(),
                     ParamSpecString::builder("format-desc").read_only().build(),
                 ]
             });
@@ -336,6 +355,7 @@ mod imp {
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
                 "quality-grade" => obj.quality_grade().to_value(),
+                "fft-status" => obj.fft_status().to_value(),
                 "format-desc" => obj.format_desc().to_value(),
                 _ => unimplemented!(),
             }
@@ -480,7 +500,6 @@ impl Player {
                             if stop_flag.load(Ordering::Relaxed) || !settings.child("ui").boolean("use-visualizer") {
                                 break 'outer;
                             }
-                            // TEST
                             match super::fft::get_stereo_pcm(
                                 &mut fft_buf_left,
                                 &mut fft_buf_right,
@@ -547,15 +566,27 @@ impl Player {
                 }
             });
             self.imp().fft_handle.replace(Some(fft_handle));
+            self.notify("fft-status");
         }
     }
 
-    fn maybe_stop_fft_thread(&self) {
+    async fn maybe_stop_fft_thread(&self) {
         if let Some(handle) = self.imp().fft_handle.take() {
             self.imp().fft_stop.store(true, Ordering::Relaxed);
-            // Digusting sync hack - will freeze UI
-            while !handle.is_terminated() { thread::sleep(Duration::from_millis(10)); }
+            let _ = handle.await;
+            self.notify("fft-status");
         }
+    }
+
+    pub fn reconnect_fifo(&self) {
+        glib::MainContext::default().spawn_local(clone!(
+            #[weak(rename_to = this)]
+            self,
+            async move {
+                this.maybe_stop_fft_thread().await;
+                this.maybe_start_fft_thread();
+            }
+        ));
     }
 
     pub fn fft_data(&self) -> Arc<Mutex<(Vec<f32>, Vec<f32>)>> {
@@ -1131,6 +1162,21 @@ impl Player {
             return song.get_quality_grade();
         }
         QualityGrade::Unknown
+    }
+
+    pub fn fft_status(&self) -> FftStatus {
+        if self.imp().fft_handle.borrow().as_ref().is_some() {
+            return FftStatus::Reading;
+        }
+        else {
+            // Try to open a new reader
+            if let Ok(_) = super::fft::open_named_pipe_readonly(
+                settings_manager().child("client").string("mpd-fifo-path").as_str(),
+            ) {
+                return FftStatus::ValidNotReading;
+            }
+            return FftStatus::Invalid
+        }
     }
 
     pub fn format_desc(&self) -> Option<String> {

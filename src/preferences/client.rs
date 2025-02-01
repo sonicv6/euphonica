@@ -13,8 +13,7 @@ use glib::clone;
 use mpd::status::AudioFormat;
 
 use crate::{
-    client::{ClientState, ConnectionState, MpdWrapper},
-    utils
+    client::{ClientState, ConnectionState, MpdWrapper}, player::{FftStatus, Player}, utils
 };
 
 mod imp {
@@ -127,7 +126,11 @@ impl ClientPreferences {
         }
     }
 
-    pub fn setup(&self, client: Rc<MpdWrapper>) {
+    fn on_fifo_changed(&self, state: FftStatus) {
+        self.imp().fifo_status.set_subtitle(state.get_description());
+    }
+
+    pub fn setup(&self, client: Rc<MpdWrapper>, player: &Player) {
         let imp = self.imp();
         let client_state = client.clone().get_client_state();
         // Populate with current gsettings values
@@ -222,6 +225,17 @@ impl ClientPreferences {
             .build();
 
         // FIFO
+        self.on_fifo_changed(player.fft_status());
+        player.connect_notify_local(
+            Some("fft-status"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |player, _| {
+                    this.on_fifo_changed(player.fft_status());
+                }
+            )
+        );
         let player_settings = settings.child("player");
         imp.fifo_path.set_text(&conn_settings.string("mpd-fifo-path"));
         imp.fifo_format.set_text(&conn_settings.string("mpd-fifo-format"));
@@ -257,5 +271,12 @@ impl ClientPreferences {
             }
         );
         imp.fft_n_bins.set_value(player_settings.uint("visualizer-spectrum-bins") as f64);
+        imp.fifo_reconnect.connect_clicked(clone!(
+            #[weak]
+            player,
+            move |_| {
+                player.reconnect_fifo();
+            }
+        ));
     }
 }

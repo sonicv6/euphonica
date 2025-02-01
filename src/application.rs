@@ -252,7 +252,8 @@ impl EuphonicaApplication {
         let window = self.active_window().unwrap();
         let prefs = Preferences::new(
             self.imp().client.clone(),
-            self.imp().cache.clone()
+            self.imp().cache.clone(),
+            &self.imp().player
         );
         prefs.present(Some(&window));
     }

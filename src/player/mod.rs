@@ -17,6 +17,6 @@ use output::MpdOutput;
 pub use bar::PlayerBar;
 pub use pane::PlayerPane;
 pub use playback_controls::PlaybackControls;
-pub use controller::{Player, PlaybackFlow};
+pub use controller::{Player, PlaybackFlow, FftStatus};
 pub use queue_view::QueueView;
 pub use controller::PlaybackState;

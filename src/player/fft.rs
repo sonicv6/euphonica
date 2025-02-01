@@ -5,49 +5,12 @@ use std::{
 
 use mpd::status::AudioFormat;
 
-fn open_named_pipe_readonly(path: &str) -> io::Result<File> {
+pub fn open_named_pipe_readonly(path: &str) -> io::Result<File> {
     OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NONBLOCK | libc::O_RDONLY)  // from os::unix::fs::OpenOptionsExt, i.e. on Unix-like systems only.
         .open(path)
 }
-
-// #[derive(PartialEq, Eq, Clone, Debug)]
-// pub enum BitDepth {
-//     Float32,
-//     Int32,
-//     Int16,
-//     Int8
-// }
-
-// impl BitDepth {
-//     pub fn bytes_per_sample(&self) -> u32 {
-//         match self {
-//             Self::Float32 | Self::Int32 => 4,
-//             Self::Int16 => 2,
-//             Self::Int8 => 1
-//         }
-//     }
-
-//     pub fn is_float(&self) -> bool {
-//         self == &Self::Float32
-//     }
-
-//     pub fn from_mpd_format(format_str: &str) -> Result<Self, ()> {
-//         let parts: Vec<&str> = format_str.split(':').collect();
-//         if parts.len() != 3 {
-//             return Err(()); // Invalid format string
-//         }
-
-//         match parts[1] {
-//             "f" => Ok(BitDepth::Float32),
-//             "8" => Ok(BitDepth::Int8),
-//             "16" => Ok(BitDepth::Int16),
-//             "32" => Ok(BitDepth::Int32),
-//             _ => Err(()), // Unsupported bit depth
-//         }
-//     }
-// }
 
 /// Blackman-Harris 4-term window, for reducing scalloping loss in FFT.
 /// Implementation taken from crate spectrum-analyzer v0.5.2, refactored
