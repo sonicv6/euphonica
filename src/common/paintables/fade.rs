@@ -121,9 +121,6 @@ impl FadePaintable {
     }
 
     pub fn set_new_content(&self, new: Option<gdk::MemoryTexture>) {
-        if new.is_none() {
-            println!("Clearing...");
-        }
         self.imp().previous.replace(self.imp().current.take());
         self.imp().current.replace(new);
         self.set_fade(0.0);
@@ -136,12 +133,7 @@ impl FadePaintable {
         let current_has_content = self.imp().current.borrow().is_some();
         let previous_has_content = self.imp().previous.borrow().is_some();
         let fade = self.get_fade();
-        if current_has_content {
-            previous_has_content || fade > 0.0
-        }
-        else {
-            previous_has_content && fade < 1.0
-        }
+        (current_has_content && fade > 0.0) || (previous_has_content && fade < 1.0)
     }
 }
 

@@ -180,6 +180,8 @@ mod imp {
         pub visualizer_blend_mode: Cell<u32>,
         #[property(get, set)]
         pub visualizer_use_splines: Cell<bool>,
+        #[property(get, set)]
+        pub visualizer_stroke_width: Cell<f64>,
         pub tick_callback: RefCell<Option<gtk::TickCallbackId>>,
         pub fft_data: OnceCell<Arc<Mutex<(Vec<f32>, Vec<f32>)>>>,
     }
@@ -307,6 +309,15 @@ mod imp {
                     "visualizer-use-splines",
                     obj,
                     "visualizer-use-splines"
+                )
+                .get_only()
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-stroke-width",
+                    obj,
+                    "visualizer-stroke-width"
                 )
                 .get_only()
                 .build();
@@ -460,7 +471,7 @@ mod imp {
                     // comes back with a better one.
                 }
                 if self.bg_paintable.will_paint() {
-                    if self.use_visualizer.get() {
+                    if self.will_draw_spectrum() {
                         should_blend = true;
                         snapshot.push_blend(blend_mode.into());
                     }
@@ -484,25 +495,23 @@ mod imp {
 
             // Spectrum visualiser
             if self.use_visualizer.get() {
-                if let Some(mutex) = self.fft_data.get() {
-                    let scale = self.visualizer_scale.get() as f32;
-                    let fg = widget.color();
-                    // Halve configured opacity since we're drawing two channels
-                    let width32 = widget.width() as f32;
-                    let height32 = widget.height() as f32;
-                    if let Ok(data) = mutex.lock() {
-                        if should_blend {
-                            snapshot.push_blend(blend_mode.into());
-                            self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
-                            snapshot.pop();
-                            self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
-                            snapshot.pop();
-                        }
-                        else {
-                            self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
-                            self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
-                        }
-                    }
+                let mutex = self.fft_data.get().unwrap();
+                let scale = self.visualizer_scale.get() as f32;
+                let fg = widget.color();
+                // Halve configured opacity since we're drawing two channels
+                let width32 = widget.width() as f32;
+                let height32 = widget.height() as f32;
+                let data = mutex.lock().unwrap();
+                if should_blend {
+                    snapshot.push_blend(blend_mode.into());
+                    self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
+                    snapshot.pop();
+                    self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
+                    snapshot.pop();
+                }
+                else {
+                    self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
+                    self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
                 }
             }
             if should_blend {
@@ -540,7 +549,7 @@ mod imp {
             }
         }
 
-        pub fn draw_spectrum(
+        fn draw_spectrum(
             &self,
             snapshot: &gtk::Snapshot,
             width: f32,
@@ -597,8 +606,10 @@ mod imp {
                 path_builder.line_to(width, height);
             }
 
+            let path = path_builder.to_path();
+
             snapshot.push_fill(
-                &path_builder.to_path(),
+                &path,
                 gsk::FillRule::Winding,
             );
             let bottom_stop = gsk::ColorStop::new(
@@ -626,6 +637,29 @@ mod imp {
             );
             // Fill node
             snapshot.pop();
+            let stroke_width = self.visualizer_stroke_width.get() as f32;
+            if stroke_width > 0.0 {
+                snapshot.append_stroke(&path, &gsk::Stroke::new(stroke_width), top_stop.color());
+            }
+        }
+
+        /// Whether any render node will be added to render the visualiser.
+        ///
+        /// This check is necessary to babysit the blend node's assertion that
+        /// both layers be non-empty.
+        fn will_draw_spectrum(&self) -> bool {
+            if !self.use_visualizer.get() {
+                return false;
+            }
+            if self.visualizer_stroke_width.get() > 0.0 {
+                return true;
+            }
+            if let Some(mutex) = self.fft_data.get() {
+                if let Ok(data) = mutex.lock() {
+                     return (data.0.iter().sum::<f32>() + data.1.iter().sum::<f32>()) > 0.0;
+                }
+            }
+            return false;
         }
 
         /// Fade to the new texture, or to nothing if playing song has no album art.

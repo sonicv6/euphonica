@@ -216,6 +216,9 @@
 		<key name="visualizer-use-splines" type='b'>
 			<default>true</default>
 		</key>
+		<key name="visualizer-stroke-width" type='d'>
+			<default>2.0</default>
+		</key>
 	</schema>
 
 	<schema id="org.euphonica.Euphonica.state" path="/org/euphonica/Euphonica/state/">
