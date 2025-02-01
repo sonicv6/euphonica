@@ -77,8 +77,13 @@ fn blackman_harris_4term_inplace(samples: &mut [f32]) {
 }
 
 
-pub fn try_open_pipe(path: &str) -> Result<BufReader<File>, Error> {
-    Ok(BufReader::new(open_named_pipe_readonly(path)?))
+pub fn try_open_pipe(path: &str, format: &AudioFormat, n_samples: usize) -> Result<BufReader<File>, Error> {
+    // Bits per sample * 2 (stereo) * n_samples * 4 (safety factor)
+    let buf_bytes = ((format.bits as usize * 8 * n_samples) as f64 / 8.0).ceil() as usize;
+
+    println!("FIFO buffer size: {} bytes", buf_bytes);
+    let mut pipe = BufReader::with_capacity(buf_bytes, open_named_pipe_readonly(path)?);
+    Ok(pipe)
 }
 
 fn parse_to_float(buf: [u8; 4], format: &AudioFormat, is_le: bool) -> f32 {
@@ -117,12 +122,18 @@ fn parse_to_float(buf: [u8; 4], format: &AudioFormat, is_le: bool) -> f32 {
 /// Here we assume the left and right channels are given one after the other as follows:
 /// L1 R1 L2 R2 L3 R3 ...
 /// That is, each sample consists of two numbers. Each number may also span multiple bytes.
+///
+/// When reading, try to read in the form of a sliding window by always reading the required
+/// number of samples but only advancing the number of samples per frame. If the buffer has
+/// not grown big enough, pad past with zeros.
+///
 /// Little-endianness is assumed for simplicity. TODO: maybe support big-endian too?
 pub fn get_stereo_pcm(
     samples_left: &mut [f32],
     samples_right: &mut [f32],
     reader: &mut BufReader<File>,
     format: &AudioFormat,
+    fps: f32,
     is_le: bool
 ) -> Result<(), std::io::Error> {
     let num_samples = samples_left.len();
@@ -132,23 +143,58 @@ pub fn get_stereo_pcm(
             "Given sample buffers' lengths do not match"
         ));
     }
-    let bytes_per_sample = format.bits / 8;
-    for idx in 0..num_samples {
-        // Left channel
-        let mut buf = vec![0u8; bytes_per_sample as usize];
-        reader.read_exact(&mut buf)?;
-        buf.resize(4, 0); // pad MSB with zeros
-        samples_left[idx] = parse_to_float(buf.try_into().unwrap(), format, is_le);
-        // Right channel
-        let mut buf = vec![0u8; bytes_per_sample as usize];
-        reader.read_exact(&mut buf)?;
-        buf.resize(4, 0); // pad MSB with zeros
-        samples_right[idx] = parse_to_float(buf.try_into().unwrap(), format, is_le);
+    samples_left.fill(0.0);
+    samples_right.fill(0.0);
+    // Bytes Per Sample (one channel)
+    let bps = (format.bits / 8) as usize;
+    // Stereo so x2 before /8
+    let bytes_per_frame = (format.rate as f32 / fps * format.bits as f32 / 4.0).ceil() as usize;
+    let internal_buf = reader.fill_buf()?;
+    // Read & write offsets, such that we'll always read from the latest samples
+    // and write into the latest slots.
+    // If we have not collected enough data to fill the samples slices, this
+    // will leave the earliest samples as zeros. Assume buffer never contains
+    // "partial" samples, i.e. filled size is always divisible by bps * 2.
+    let available = internal_buf.len() / bps / 2;
+    let read_offset: usize = if available > num_samples {
+        available - num_samples
     }
+    else {
+        0
+    };
+    let write_offset: usize = if available < num_samples {
+        num_samples - available
+    }
+    else {
+        0
+    };
+    // Each per-sample buffer will always be 4 bytes for easier parsing. Since we're assuming
+    // little-endianness, it will be filled from the left, with the most significant bits left
+    // blank if each sample has less than 32 bits.
+    for idx in 0..(num_samples.min(available)) {
+        // Left channel
+        let mut sample_buf = vec![0u8; 4];
+        let first_pos = read_offset + idx * 2 * bps;
+        sample_buf[..bps].copy_from_slice(
+            &internal_buf[first_pos..(first_pos + bps)]
+        );
+        samples_left[write_offset + idx] = parse_to_float(sample_buf.try_into().unwrap(), format, is_le);
+
+        // Right channel
+        let mut sample_buf = vec![0u8; 4];
+        let second_pos = first_pos + bps;
+        sample_buf[..bps].copy_from_slice(
+            &internal_buf[second_pos..(second_pos + bps)]
+        );
+        samples_right[write_offset + idx] = parse_to_float(sample_buf.try_into().unwrap(), format, is_le);
+    }
+    // Advance internal buffer
+    reader.consume(bytes_per_frame);
     Ok(())
 }
 
-pub enum FftBinMode {
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum BinMode {
     Linear,
     Logarithmic
 }
@@ -169,7 +215,7 @@ pub fn get_magnitudes(
     input_buf: &mut [f32],
     output_buf: &mut Vec<f32>,
     n_bins: u32,
-    bin_mode: FftBinMode,
+    bin_mode: BinMode,
     min_freq: f32,
     max_freq: f32
 ) {
@@ -192,11 +238,11 @@ pub fn get_magnitudes(
     }
 
     // Determine which bin this frequency falls into.
-    // Each bin's value is the average of magnitudes of all the frequencies therein.
-    let mut prev_count: u32 = 0;
-    let mut prev_bin: usize = 0;
+    // Each bin's value is the maximum magnitude of all the frequencies therein.
+    // let mut prev_count: u32 = 0;
+    // let mut prev_bin: usize = 0;
     match bin_mode {
-        FftBinMode::Linear => {
+        BinMode::Linear => {
             let spacing = (max_freq - min_freq) / (n_bins as f32);
             for i in 0..spectrum.len() {
                 let (freq, x) = spectrum[i];
@@ -205,23 +251,24 @@ pub fn get_magnitudes(
                 // println!("f={},\tbin={}", freq, bin_idx);
                 // rustfft does not normalise by itself.
                 // output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
-                output_buf[bin_idx] += x.val();
-                if prev_bin != bin_idx {
-                    if prev_count > 0 && bin_idx > 0 {
-                        // Done summing the previous bin => average it
-                        output_buf[prev_bin] /= prev_count as f32;
-                    }
-                    prev_count = 1;
-                    prev_bin = bin_idx;
-                }
-                else {
-                    prev_count += 1;
-                }
-                // Average last bin
-                output_buf[prev_bin] /= prev_count as f32;
+                // output_buf[bin_idx] += x.val();
+                // if prev_bin != bin_idx {
+                //     if prev_count > 0 && bin_idx > 0 {
+                //         // Done summing the previous bin => average it
+                //         output_buf[prev_bin] /= prev_count as f32;
+                //     }
+                //     prev_count = 1;
+                //     prev_bin = bin_idx;
+                // }
+                // else {
+                //     prev_count += 1;
+                // }
+                // // Average last bin
+                // output_buf[prev_bin] /= prev_count as f32;
+                output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
             }
         }
-        FftBinMode::Logarithmic => {
+        BinMode::Logarithmic => {
             // Evenly-spaced but in logarithmic scale
             let log_base = (max_freq.log10() - min_freq.log10()) / (n_bins as f32);
             for i in 0..spectrum.len() {
@@ -233,20 +280,21 @@ pub fn get_magnitudes(
                 // println!("f={},\tbin={}", freq, bin_idx);
                 // rustfft does not normalise by itself.
                 // output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
-                output_buf[bin_idx] += x.val();
-                if prev_bin != bin_idx {
-                    if prev_count > 1 && bin_idx > 0 {
-                        // Done summing the previous bin => average it
-                        output_buf[prev_bin] /= (prev_count as f32).log10().max(1.0);
-                    }
-                    prev_count = 1;
-                    prev_bin = bin_idx;
-                }
-                else {
-                    prev_count += 1;
-                }
-                // Average last bin
-                output_buf[prev_bin] /= (prev_count as f32).log10().max(1.0);
+                // output_buf[bin_idx] += x.val();
+                // if prev_bin != bin_idx {
+                //     if prev_count > 1 && bin_idx > 0 {
+                //         // Done summing the previous bin => average it
+                //         output_buf[prev_bin] /= (prev_count as f32).log10().max(1.0);
+                //     }
+                //     prev_count = 1;
+                //     prev_bin = bin_idx;
+                // }
+                // else {
+                //     prev_count += 1;
+                // }
+                // // Average last bin
+                // output_buf[prev_bin] /= (prev_count as f32).log10().max(1.0);
+                output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
             }
         }
     }

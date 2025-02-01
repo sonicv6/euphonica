@@ -18,7 +18,7 @@ use mpris_server::{
 
 use adw::subclass::prelude::*;
 use glib::{closure_local, subclass::Signal, BoxedAnyObject, clone};
-use gtk::{gdk::Texture};
+use gtk::gdk::Texture;
 use gtk::{gio, glib, prelude::*};
 use mpd::{
     status::{AudioFormat, State, Status},
@@ -450,86 +450,99 @@ impl Player {
             let fft_handle = gio::spawn_blocking(move || {
                 println!("Starting FFT loop...");
                 let settings = settings_manager();
+                let player_settings = settings.child("player");
                 // Will require starting a new thread to account for path and format changes
-                if let (Ok(mut reader), Ok(format)) = (
-                    super::fft::try_open_pipe(settings.child("client").string("mpd-fifo-path").as_str()),
-                    AudioFormat::from_str(settings.child("client").string("mpd-fifo-format").as_str())
-                ) {
-                    let n_samples = settings.child("player").uint("visualizer-fft-samples") as usize;
-                    let n_bins = settings.child("player").uint("visualizer-spectrum-bands") as usize;
-                    let min_freq = settings.child("player").uint("visualizer-spectrum-min-hz") as f32;
-                    let max_freq = settings.child("player").uint("visualizer-spectrum-max-hz") as f32;
-                    let curr_step_weight = settings.child("player").double("visualizer-spectrum-curr-step-weight") as f32;
-                    // Allocate the following once only
-                    let mut fft_buf_left: Vec<f32> = vec![0.0; n_samples];
-                    let mut fft_buf_right: Vec<f32> = vec![0.0; n_samples];
-                    let mut curr_step_left: Vec<f32> = vec![0.0; n_bins];
-                    let mut curr_step_right: Vec<f32> = vec![0.0; n_bins];
-                    'outer: loop {
-                        if stop_flag.load(Ordering::Relaxed) || !settings.child("ui").boolean("use-visualizer") {
-                            break 'outer;
-                        }
-                        // TEST
-                        match super::fft::get_stereo_pcm(
-                            &mut fft_buf_left,
-                            &mut fft_buf_right,
-                            &mut reader,
-                            &format,
-                            true,
-                        ) {
-                            Ok(()) => {
-                                // Compute outside of mutex lock please
-                                super::fft::get_magnitudes(
-                                    &format,
-                                    &mut fft_buf_left,
-                                    &mut curr_step_left,
-                                    n_bins as u32,
-                                    super::fft::FftBinMode::Logarithmic,
-                                    min_freq,
-                                    max_freq
-                                );
-                                super::fft::get_magnitudes(
-                                    &format,
-                                    &mut fft_buf_right,
-                                    &mut curr_step_right,
-                                    n_bins as u32,
-                                    super::fft::FftBinMode::Logarithmic,
-                                    min_freq,
-                                    max_freq
-                                );
-                                // Replace last frame
-                                if let Ok(mut output_lock) = output.lock() {
-                                    if output_lock.0.len() != n_bins || output_lock.1.len() != n_bins {
-                                        output_lock.0.clear();
-                                        output_lock.1.clear();
-                                        for _ in 0..n_bins {
-                                            output_lock.0.push(0.0);
-                                            output_lock.1.push(0.0);
+                if let Ok(format) = AudioFormat::from_str(settings.child("client").string("mpd-fifo-format").as_str()) {
+                    // These settings require a restart
+                    let n_samples = player_settings.uint("visualizer-fft-samples") as usize;
+                    let n_bins = player_settings.uint("visualizer-spectrum-bins") as usize;
+                    if let Ok(mut reader) = super::fft::try_open_pipe(
+                        settings.child("client").string("mpd-fifo-path").as_str(),
+                        &format,
+                        n_samples
+                    ) {
+                        // Allocate the following once only
+                        let mut fft_buf_left: Vec<f32> = vec![0.0; n_samples];
+                        let mut fft_buf_right: Vec<f32> = vec![0.0; n_samples];
+                        let mut curr_step_left: Vec<f32> = vec![0.0; n_bins];
+                        let mut curr_step_right: Vec<f32> = vec![0.0; n_bins];
+                        'outer: loop {
+                            // These should be applied on-the-fly
+                            let bin_mode = if player_settings.boolean("visualizer-spectrum-use-log-bins") {
+                                super::fft::BinMode::Logarithmic
+                            } else {
+                                super::fft::BinMode::Linear
+                            };
+                            let fps = player_settings.uint("visualizer-fps") as f32;
+                            let min_freq = player_settings.uint("visualizer-spectrum-min-hz") as f32;
+                            let max_freq = player_settings.uint("visualizer-spectrum-max-hz") as f32;
+                            let curr_step_weight = player_settings.double("visualizer-spectrum-curr-step-weight") as f32;
+                            if stop_flag.load(Ordering::Relaxed) || !settings.child("ui").boolean("use-visualizer") {
+                                break 'outer;
+                            }
+                            // TEST
+                            match super::fft::get_stereo_pcm(
+                                &mut fft_buf_left,
+                                &mut fft_buf_right,
+                                &mut reader,
+                                &format,
+                                fps,
+                                true,
+                            ) {
+                                Ok(()) => {
+                                    // Compute outside of mutex lock please
+                                    super::fft::get_magnitudes(
+                                        &format,
+                                        &mut fft_buf_left,
+                                        &mut curr_step_left,
+                                        n_bins as u32,
+                                        bin_mode,
+                                        min_freq,
+                                        max_freq
+                                    );
+                                    super::fft::get_magnitudes(
+                                        &format,
+                                        &mut fft_buf_right,
+                                        &mut curr_step_right,
+                                        n_bins as u32,
+                                        bin_mode,
+                                        min_freq,
+                                        max_freq
+                                    );
+                                    // Replace last frame
+                                    if let Ok(mut output_lock) = output.lock() {
+                                        if output_lock.0.len() != n_bins || output_lock.1.len() != n_bins {
+                                            output_lock.0.clear();
+                                            output_lock.1.clear();
+                                            for _ in 0..n_bins {
+                                                output_lock.0.push(0.0);
+                                                output_lock.1.push(0.0);
+                                            }
+                                        }
+                                        for i in 0..n_bins {
+                                            output_lock.0[i] = curr_step_left[i] * curr_step_weight + output_lock.0[i] * (1.0 - curr_step_weight);
+                                            output_lock.1[i] = curr_step_right[i] * curr_step_weight + output_lock.1[i] * (1.0 - curr_step_weight);
+                                        }
+                                        // println!("FFT L: {:?}\tR: {:?}", &output_lock.0, &output_lock.1);
+                                    }
+                                    else {
+                                        panic!("Unable to lock FFT data mutex");
+                                    }
+                                }
+                                Err(e) => {
+                                    match e.kind() {
+                                        std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::WouldBlock => {}
+                                        _ => {
+                                            println!("FFT ERR: {:?}", &e);
+                                            break 'outer;
                                         }
                                     }
-                                    for i in 0..n_bins {
-                                        output_lock.0[i] = curr_step_left[i] * curr_step_weight + output_lock.0[i] * (1.0 - curr_step_weight);
-                                        output_lock.1[i] = curr_step_right[i] * curr_step_weight + output_lock.1[i] * (1.0 - curr_step_weight);
-                                    }
-                                    // println!("FFT L: {:?}\tR: {:?}", &output_lock.0, &output_lock.1);
-                                }
-                                else {
-                                    panic!("Unable to lock FFT data mutex");
                                 }
                             }
-                            Err(e) => {
-                                match e.kind() {
-                                    std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::WouldBlock => {}
-                                    _ => {
-                                        println!("FFT ERR: {:?}", &e);
-                                        break 'outer;
-                                    }
-                                }
-                            }
+                            thread::sleep(Duration::from_millis(
+                                (1000.0 / fps).floor() as u64
+                            ));
                         }
-                        thread::sleep(Duration::from_millis(
-                            (1000.0 / (settings.child("player").uint("visualizer-fps") as f64)).floor() as u64
-                        ));
                     }
                 }
             });

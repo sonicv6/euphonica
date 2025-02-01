@@ -155,8 +155,12 @@
 			<default>30</default>
 		</key>
 
-		<key name="visualizer-spectrum-bands" type="u">
+		<key name="visualizer-spectrum-bins" type="u">
 			<default>10</default>
+		</key>
+
+		<key name="visualizer-spectrum-use-log-bins" type='b'>
+			<default>true</default>
 		</key>
 
 		<key name="visualizer-spectrum-min-hz" type="u">
@@ -201,7 +205,7 @@
 			<default>0.3</default>
 		</key>
 		<key name="visualizer-scale" type="d">
-			<default>100000.0</default>
+			<default>1000000.0</default>
 		</key>
 		<key name="visualizer-blend-mode" type="u">
 			<default>6</default>
