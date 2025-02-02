@@ -202,8 +202,6 @@ pub fn get_magnitudes(
 
     // Determine which bin this frequency falls into.
     // Each bin's value is the maximum magnitude of all the frequencies therein.
-    // let mut prev_count: u32 = 0;
-    // let mut prev_bin: usize = 0;
     match bin_mode {
         BinMode::Linear => {
             let spacing = (max_freq - min_freq) / (n_bins as f32);
@@ -211,23 +209,6 @@ pub fn get_magnitudes(
                 let (freq, x) = spectrum[i];
                 // Each bin's range is an interval open to the right, except for the last.
                 let bin_idx: usize = (((freq.val() - min_freq) / spacing).floor() as usize).min((n_bins - 1) as usize);
-                // println!("f={},\tbin={}", freq, bin_idx);
-                // rustfft does not normalise by itself.
-                // output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
-                // output_buf[bin_idx] += x.val();
-                // if prev_bin != bin_idx {
-                //     if prev_count > 0 && bin_idx > 0 {
-                //         // Done summing the previous bin => average it
-                //         output_buf[prev_bin] /= prev_count as f32;
-                //     }
-                //     prev_count = 1;
-                //     prev_bin = bin_idx;
-                // }
-                // else {
-                //     prev_count += 1;
-                // }
-                // // Average last bin
-                // output_buf[prev_bin] /= prev_count as f32;
                 output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
             }
         }
@@ -240,30 +221,8 @@ pub fn get_magnitudes(
                 let bin_idx: usize = (
                     ((freq.val().log10() - min_freq.log10()) / log_base).floor().max(0.0) as usize
                 ).min((n_bins - 1) as usize);
-                // println!("f={},\tbin={}", freq, bin_idx);
-                // rustfft does not normalise by itself.
-                // output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
-                // output_buf[bin_idx] += x.val();
-                // if prev_bin != bin_idx {
-                //     if prev_count > 1 && bin_idx > 0 {
-                //         // Done summing the previous bin => average it
-                //         output_buf[prev_bin] /= (prev_count as f32).log10().max(1.0);
-                //     }
-                //     prev_count = 1;
-                //     prev_bin = bin_idx;
-                // }
-                // else {
-                //     prev_count += 1;
-                // }
-                // // Average last bin
-                // output_buf[prev_bin] /= (prev_count as f32).log10().max(1.0);
                 output_buf[bin_idx] = output_buf[bin_idx].max(x.val());
             }
         }
     }
-    // for i in 0..output_buf.len() {
-    //     // y-axis should be logarithmic to mirror dB scale
-    //     output_buf[i] = (output_buf[i] / norm_fac).max(1.0).log10();
-    // }
-    // println!("{:?}", &output_buf);
 }

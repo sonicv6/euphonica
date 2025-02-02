@@ -573,12 +573,12 @@ mod imp {
                 let quarter_width = band_width as f32 / 4.0;
                 for i in 0..(data.len() - 1) {
                     let x = (i as f32 + 1.0) * band_width;
-                    let y = (height - data[i] * scale).max(0.0);
+                    let y = (height - data[i] * scale * 1000000.0).max(0.0);
                     let x_next = x + band_width;
-                    let y_next = (height - data[i+1] * scale).max(0.0);
+                    let y_next = (height - data[i+1] * scale * 1000000.0).max(0.0);
                     // Midpoint
                     let x_mid = x + half_width;
-                    let y_mid = (height - (data[i] + data[i+1]) / 2.0 * scale).max(0.0);
+                    let y_mid = (height - (data[i] + data[i+1]) / 2.0 * scale * 1000000.0).max(0.0);
                     // The next two will serve as control points.
                     // Between current point and midpoint
                     let x_left_mid = x + quarter_width;
@@ -601,7 +601,7 @@ mod imp {
             else {
                 // Straight segments mode
                 for (band_idx, level) in data[1..data.len()].iter().enumerate() {
-                    path_builder.line_to((band_idx as f32 + 1.0) * band_width, (height - level * scale).max(0.0));
+                    path_builder.line_to((band_idx as f32 + 1.0) * band_width, (height - level * scale * 1000000.0).max(0.0));
                 }
                 path_builder.line_to(width, height);
             }
@@ -616,14 +616,14 @@ mod imp {
                 0.0,
                 gdk::RGBA::new(
                     color.red(), color.green(), color.blue(),
-                    self.visualizer_bottom_opacity.get() as f32
+                    self.visualizer_bottom_opacity.get() as f32 / 2.0
                 )
             );
             let top_stop = gsk::ColorStop::new(
                 self.visualizer_gradient_height.get() as f32,
                 gdk::RGBA::new(
                     color.red(), color.green(), color.blue(),
-                    self.visualizer_top_opacity.get() as f32
+                    self.visualizer_top_opacity.get() as f32 / 2.0
                 )
             );
             snapshot.append_linear_gradient(

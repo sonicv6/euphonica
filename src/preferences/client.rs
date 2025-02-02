@@ -1,5 +1,5 @@
 use std::{rc::Rc, str::FromStr};
-use keyring::Entry;
+use keyring::{Entry, Error as KeyringError};
 
 use adw::subclass::prelude::*;
 use adw::prelude::*;
@@ -15,6 +15,8 @@ use mpd::status::AudioFormat;
 use crate::{
     client::{ClientState, ConnectionState, MpdWrapper}, player::{FftStatus, Player}, utils
 };
+
+const FFT_SIZES: &'static [u32; 4] = &[512, 1024, 2048, 4096];
 
 mod imp {
     use super::*;
@@ -159,7 +161,7 @@ impl ClientPreferences {
         // Prevent entering anything other than digits into the port entry row
         // This is needed since using a spinbutton row for port entry feels a bit weird
         imp.mpd_port.connect_changed(clone!(
-            #[strong(rename_to = this)]
+            #[weak(rename_to = this)]
             self,
             move |entry| {
                 if entry.text().parse::<u32>().is_err() {
@@ -189,7 +191,7 @@ impl ClientPreferences {
         );
 
         imp.reconnect.connect_clicked(clone!(
-            #[strong(rename_to = this)]
+            #[weak(rename_to = this)]
             self,
             #[strong]
             conn_settings,
@@ -202,9 +204,11 @@ impl ClientPreferences {
                 if let Ok(ref keyring_entry) = maybe_keyring_entry {
                     let password = this.imp().mpd_password.text();
                     if password.is_empty() {
-                        keyring_entry
-                            .delete_credential()
-                            .expect("Unable to clear saved MPD password from keyring");
+                        if let Err(KeyringError::NoEntry) = keyring_entry.delete_credential() {}
+                        else {
+                            panic!("Unable to clear MPD password from keyring");
+                        }
+
                     }
                     else {
                         keyring_entry
@@ -272,9 +276,35 @@ impl ClientPreferences {
         );
         imp.fft_n_bins.set_value(player_settings.uint("visualizer-spectrum-bins") as f64);
         imp.fifo_reconnect.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[strong]
+            conn_settings,
+            #[strong]
+            player_settings,
             #[weak]
             player,
             move |_| {
+                println!("Restarting FFT thread...");
+                let imp = this.imp();
+                conn_settings
+                    .set_string("mpd-fifo-path", &imp.fifo_path.text())
+                    .expect("Cannot save FIFO settings");
+                conn_settings
+                    .set_string("mpd-fifo-format", &imp.fifo_format.text())
+                    .expect("Cannot save FIFO settings");
+                player_settings
+                    .set_uint("visualizer-fps", imp.fifo_fps.value().round() as u32)
+                    .expect("Cannot save visualizer settings");
+                player_settings
+                    .set_uint(
+                        "visualizer-fft-samples",
+                        FFT_SIZES[imp.fft_n_samples.selected() as usize]
+                    )
+                    .expect("Cannot save FFT settings");
+                player_settings
+                    .set_uint("visualizer-spectrum-bins", imp.fft_n_bins.value().round() as u32)
+                    .expect("Cannot save visualizer settings");
                 player.reconnect_fifo();
             }
         ));

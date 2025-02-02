@@ -224,7 +224,8 @@ mod imp {
         // For receiving frequency levels from FFT thread
         pub fft_stop: Arc<AtomicBool>,
         pub fft_data: Arc<Mutex<(Vec<f32>, Vec<f32>)>>,  // Binned magnitudes, in stereo
-        pub fft_handle: RefCell<Option<gio::JoinHandle<()>>>
+        pub fft_handle: RefCell<Option<gio::JoinHandle<()>>>,
+        pub use_visualizer: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -260,7 +261,8 @@ mod imp {
                     vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bins") as usize],
                     vec![0.0; settings_manager().child("player").uint("visualizer-spectrum-bins") as usize]
                 ))),
-                fft_handle: RefCell::new(None)
+                fft_handle: RefCell::new(None),
+                use_visualizer: Cell::new(false)
             }
         }
     }
@@ -270,31 +272,25 @@ mod imp {
             self.parent_constructed();
 
             let settings = settings_manager();
+            settings.child("ui")
+                .bind(
+                    "use-visualizer",
+                    self.obj().as_ref(),
+                    "use-visualizer"
+                )
+                .get_only()
+                .build();
             if settings.child("ui").boolean("use-visualizer") {
                 self.obj().maybe_start_fft_thread();
             }
-            settings.child("ui").connect_changed(
-                Some("use-visualizer"),
-                clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    move |settings, key| {
-                        if settings.boolean(key) {
-                            // Visualiser turned on. Start FFT thread.
-                            this.obj().maybe_start_fft_thread();
-                        }
-                        else {
-                            // Visualiser turned off. FFT thread should
-                            // have stopped by itself. Join & yeet handle.
-                            this.obj().maybe_stop_fft_thread();
-                        }
-                    }
-                )
-            );
         }
 
         fn dispose(&self) {
-            self.obj().maybe_stop_fft_thread();
+            glib::MainContext::default().spawn_local(clone!(
+                #[weak(rename_to = this)]
+                self,
+                async move { this.obj().maybe_stop_fft_thread().await; })
+            );
         }
 
         fn properties() -> &'static [ParamSpec] {
@@ -313,6 +309,7 @@ mod imp {
                     ParamSpecBoolean::builder("random").build(),
                     ParamSpecBoolean::builder("consume").build(),
                     ParamSpecBoolean::builder("supports-playlists").build(),
+                    ParamSpecBoolean::builder("use-visualizer").build(),
                     ParamSpecDouble::builder("position").build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
@@ -342,6 +339,7 @@ mod imp {
                 "random" => self.random.get().to_value(),
                 "consume" => self.consume.get().to_value(),
                 "supports-playlists" => self.supports_playlists.get().to_value(),
+                "use-visualizer" => self.use_visualizer.get().to_value(),
                 "crossfade" => self.crossfade.get().to_value(),
                 "mixramp-db" => self.mixramp_db.get().to_value(),
                 "mixramp-delay" => self.mixramp_delay.get().to_value(),
@@ -402,6 +400,26 @@ mod imp {
                     if let Ok(state) = value.get::<bool>() {
                         self.supports_playlists.replace(state);
                         obj.notify("supports-playlists");
+                    }
+                }
+                "use-visualizer" => {
+                    if let Ok(state) = value.get::<bool>() {
+                        self.use_visualizer.replace(state);
+                        obj.notify("use-visualizer");
+
+                        if state {
+                            // Visualiser turned on. Start FFT thread.
+                            self.obj().maybe_start_fft_thread();
+                        }
+                        else {
+                            // Visualiser turned off. FFT thread should
+                            // have stopped by itself. Join & yeet handle.
+                            glib::MainContext::default().spawn_local(clone!(
+                                #[weak(rename_to = this)]
+                                self,
+                                async move { this.obj().maybe_stop_fft_thread().await; })
+                            );
+                        }
                     }
                 }
                 _ => unimplemented!(),
@@ -468,7 +486,6 @@ impl Player {
         }
         if should_start {
             let fft_handle = gio::spawn_blocking(move || {
-                println!("Starting FFT loop...");
                 let settings = settings_manager();
                 let player_settings = settings.child("player");
                 // Will require starting a new thread to account for path and format changes
@@ -487,6 +504,9 @@ impl Player {
                         let mut curr_step_left: Vec<f32> = vec![0.0; n_bins];
                         let mut curr_step_right: Vec<f32> = vec![0.0; n_bins];
                         'outer: loop {
+                            if stop_flag.load(Ordering::Relaxed) || !settings.child("ui").boolean("use-visualizer") {
+                                break 'outer;
+                            }
                             // These should be applied on-the-fly
                             let bin_mode = if player_settings.boolean("visualizer-spectrum-use-log-bins") {
                                 super::fft::BinMode::Logarithmic
@@ -497,9 +517,6 @@ impl Player {
                             let min_freq = player_settings.uint("visualizer-spectrum-min-hz") as f32;
                             let max_freq = player_settings.uint("visualizer-spectrum-max-hz") as f32;
                             let curr_step_weight = player_settings.double("visualizer-spectrum-curr-step-weight") as f32;
-                            if stop_flag.load(Ordering::Relaxed) || !settings.child("ui").boolean("use-visualizer") {
-                                break 'outer;
-                            }
                             match super::fft::get_stereo_pcm(
                                 &mut fft_buf_left,
                                 &mut fft_buf_right,

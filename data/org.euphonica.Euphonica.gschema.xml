@@ -171,7 +171,7 @@
 			<default>16000</default>
 		</key>
 		<key name="visualizer-spectrum-curr-step-weight" type="d">
-			<default>0.2</default>
+			<default>0.12</default>
 
 		</key>
 	</schema>
@@ -202,10 +202,10 @@
 			<default>false</default>
 		</key>
 		<key name="visualizer-top-opacity" type="d">
-			<default>0.3</default>
+			<default>0.6</default>
 		</key>
 		<key name="visualizer-scale" type="d">
-			<default>1000000.0</default>
+			<default>2.0</default>
 		</key>
 		<key name="visualizer-blend-mode" type="u">
 			<default>6</default>
