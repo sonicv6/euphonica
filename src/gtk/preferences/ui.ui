@@ -30,54 +30,56 @@
       <object class="AdwPreferencesGroup">
         <property name="title" translatable="true">Background</property>
         <child>
-          <object class="AdwSwitchRow" id="use_album_art_as_bg">
-            <property name="title" translatable="true">Use album art as background</property>
-          </object>
-        </child>
-        <child>
-          <object class="AdwSpinRow" id="bg_blur_radius">
-            <property name="title" translatable="true">Background blur radius (pixels)</property>
-            <property name="subtitle" translatable="true">Set to 0 to disable blur.</property>
-            <property name="adjustment">
-              <object class="GtkAdjustment">
-                <property name="lower">0</property>
-                <property name="upper">100</property>
-                <property name="value">24</property>
-                <property name="page-increment">10</property>
-                <property name="step-increment">1</property>
+			    <object class="AdwExpanderRow" id="use_album_art_as_bg">
+				    <property name="title" translatable="true">Use album art as background</property>
+				    <property name="show-enable-switch">true</property>
+
+            <child>
+              <object class="AdwSpinRow" id="bg_blur_radius">
+                <property name="title" translatable="true">Background blur radius (pixels)</property>
+                <property name="subtitle" translatable="true">Set to 0 to disable blur.</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0</property>
+                    <property name="upper">100</property>
+                    <property name="value">24</property>
+                    <property name="page-increment">10</property>
+                    <property name="step-increment">1</property>
+                  </object>
+                </property>
               </object>
-            </property>
-          </object>
-        </child>
-        <child>
-          <object class="AdwSpinRow" id="bg_opacity">
-            <property name="title" translatable="true">Background opacity</property>
-            <property name="subtitle" translatable="true">Lower values allow the album art to "dim" or "brighten" depending on whether the app is in light or dark mode by blending itself with the default window background.</property>
-            <property name="digits">2</property>
-            <property name="adjustment">
-              <object class="GtkAdjustment">
-                <property name="lower">0.01</property>
-                <property name="upper">1.00</property>
-                <property name="value">0.50</property>
-                <property name="page-increment">0.1</property>
-                <property name="step-increment">0.02</property>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="bg_opacity">
+                <property name="title" translatable="true">Background opacity</property>
+                <property name="subtitle" translatable="true">Lower values allow the album art to "dim" or "brighten" depending on whether the app is in light or dark mode by blending itself with the default window background.</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.01</property>
+                    <property name="upper">1.00</property>
+                    <property name="value">0.50</property>
+                    <property name="page-increment">0.1</property>
+                    <property name="step-increment">0.02</property>
+                  </object>
+                </property>
               </object>
-            </property>
-          </object>
-        </child>
-        <child>
-          <object class="AdwSpinRow" id="bg_transition_duration">
-            <property name="title" translatable="true">Transition duration (seconds)</property>
-            <property name="digits">2</property>
-            <property name="adjustment">
-              <object class="GtkAdjustment">
-                <property name="lower">0.0</property>
-                <property name="upper">10.0</property>
-                <property name="value">1.0</property>
-                <property name="page-increment">1.0</property>
-                <property name="step-increment">0.25</property>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="bg_transition_duration">
+                <property name="title" translatable="true">Transition duration (seconds)</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.0</property>
+                    <property name="upper">10.0</property>
+                    <property name="value">1.0</property>
+                    <property name="page-increment">1.0</property>
+                    <property name="step-increment">0.25</property>
+                  </object>
+                </property>
               </object>
-            </property>
+            </child>
           </object>
         </child>
       </object>
@@ -114,6 +116,152 @@
             </property>
           </object>
         </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">Spectrum Visualiser</property>
+        <child>
+			    <object class="AdwExpanderRow" id="use_visualizer">
+				    <property name="title" translatable="true">Show spectrum visualiser</property>
+				    <property name="show-enable-switch">true</property>
+
+            <child>
+              <object class="AdwSpinRow" id="visualizer_min_hz">
+                <property name="title" translatable="true">Lowest frequency (Hz)</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">10</property>
+                    <property name="upper">10000</property>
+                    <property name="value">80</property>
+                    <property name="page-increment">10</property>
+                    <property name="step-increment">100</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="visualizer_max_hz">
+                <property name="title" translatable="true">Highest frequency (Hz)</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">1000</property>
+                    <property name="upper">20000</property>
+                    <property name="value">16000</property>
+                    <property name="page-increment">100</property>
+                    <property name="step-increment">1000</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="visualizer_smoothing">
+                <property name="title" translatable="true">Temporal smoothing</property>
+                <property name="subtitle" translatable="true">How much to smooth out noisy impulses to reduce strobing visuals.</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.00</property>
+                    <property name="upper">0.99</property>
+                    <property name="value">0.9</property>
+                    <property name="page-increment">0.01</property>
+                    <property name="step-increment">0.05</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="visualizer_bottom_opacity">
+                <property name="title" translatable="true">Bottom opacity</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.0</property>
+                    <property name="upper">1.0</property>
+                    <property name="value">0.05</property>
+                    <property name="page-increment">0.01</property>
+                    <property name="step-increment">0.05</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="visualizer_top_opacity">
+                <property name="title" translatable="true">Top opacity</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.0</property>
+                    <property name="upper">1.0</property>
+                    <property name="value">0.35</property>
+                    <property name="page-increment">0.01</property>
+                    <property name="step-increment">0.05</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="visualizer_gradient_height">
+                <property name="title" translatable="true">Top opacity height</property>
+                <property name="subtitle" translatable="true">How high up (relative to total window height) is the gradient stop for top opacity.</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.0</property>
+                    <property name="upper">1.0</property>
+                    <property name="value">0.35</property>
+                    <property name="page-increment">0.01</property>
+                    <property name="step-increment">0.05</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSwitchRow" id="visualizer_use_splines">
+                <property name="title" translatable="true">Use splines</property>
+                <property name="subtitle" translatable="true">Draws the spectrum with smooth curves instead of straight lines.</property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="visualizer_stroke_width">
+                <property name="title" translatable="true">Stroke width</property>
+                <property name="subtitle" translatable="true">Stroke uses the default foreground colour at top opacity. Set to 0 to disable stroke drawing.</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.0</property>
+                    <property name="upper">64.0</property>
+                    <property name="value">2.0</property>
+                    <property name="page-increment">0.1</property>
+                    <property name="step-increment">1.0</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSwitchRow" id="visualizer_use_log_bins">
+                <property name="title" translatable="true">Use logarithmic X-axis</property>
+                <property name="subtitle" translatable="true">Closer to human perception of pitch.</property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwSpinRow" id="visualizer_scale">
+                <property name="title" translatable="true">Y-axis scale</property>
+                <property name="subtitle" translatable="true">Adjusts how tall the spectrum rises for a given loudness. Should be adjusted in tandem with top opacity height.</property>
+                <property name="digits">2</property>
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.01</property>
+                    <property name="upper">10.0</property>
+                    <property name="value">1.0</property>
+                    <property name="page-increment">0.05</property>
+                    <property name="step-increment">1.0</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+			    </object>
+		    </child>
       </object>
     </child>
   </template>

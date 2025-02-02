@@ -1,5 +1,5 @@
-use std::rc::Rc;
-use keyring::Entry;
+use std::{rc::Rc, str::FromStr};
+use keyring::{Entry, Error as KeyringError};
 
 use adw::subclass::prelude::*;
 use adw::prelude::*;
@@ -10,10 +10,13 @@ use gtk::{
 
 use glib::clone;
 
+use mpd::status::AudioFormat;
+
 use crate::{
-    client::{ClientState, ConnectionState, MpdWrapper},
-    utils
+    client::{ClientState, ConnectionState, MpdWrapper}, player::{FftStatus, Player}, utils
 };
+
+const FFT_SIZES: &'static [u32; 4] = &[512, 1024, 2048, 4096];
 
 mod imp {
     use super::*;
@@ -21,6 +24,7 @@ mod imp {
     #[derive(Debug, Default, CompositeTemplate)]
     #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/client.ui")]
     pub struct ClientPreferences {
+        // MPD
         #[template_child]
         pub mpd_host: TemplateChild<adw::EntryRow>,
         #[template_child]
@@ -32,7 +36,23 @@ mod imp {
         #[template_child]
         pub reconnect: TemplateChild<gtk::Button>,
         #[template_child]
-        pub mpd_download_album_art: TemplateChild<adw::SwitchRow>
+        pub mpd_download_album_art: TemplateChild<adw::SwitchRow>,
+
+        // FIFO output
+        #[template_child]
+        pub fifo_path: TemplateChild<adw::EntryRow>,
+        #[template_child]
+        pub fifo_format: TemplateChild<adw::EntryRow>,
+        #[template_child]
+        pub fifo_fps: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub fft_n_samples: TemplateChild<adw::ComboRow>,
+        #[template_child]
+        pub fft_n_bins: TemplateChild<adw::SpinRow>,
+        #[template_child]
+        pub fifo_status: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub fifo_reconnect: TemplateChild<gtk::Button>
     }
 
     #[glib::object_subclass]
@@ -108,11 +128,16 @@ impl ClientPreferences {
         }
     }
 
-    pub fn setup(&self, client: Rc<MpdWrapper>) {
+    fn on_fifo_changed(&self, state: FftStatus) {
+        self.imp().fifo_status.set_subtitle(state.get_description());
+    }
+
+    pub fn setup(&self, client: Rc<MpdWrapper>, player: &Player) {
         let imp = self.imp();
         let client_state = client.clone().get_client_state();
         // Populate with current gsettings values
         let settings = utils::settings_manager();
+
         // These should only be saved when the Apply button is clicked.
         // As such we won't bind the widgets directly to the settings.
         let conn_settings = settings.child("client");
@@ -136,7 +161,7 @@ impl ClientPreferences {
         // Prevent entering anything other than digits into the port entry row
         // This is needed since using a spinbutton row for port entry feels a bit weird
         imp.mpd_port.connect_changed(clone!(
-            #[strong(rename_to = this)]
+            #[weak(rename_to = this)]
             self,
             move |entry| {
                 if entry.text().parse::<u32>().is_err() {
@@ -166,7 +191,7 @@ impl ClientPreferences {
         );
 
         imp.reconnect.connect_clicked(clone!(
-            #[strong(rename_to = this)]
+            #[weak(rename_to = this)]
             self,
             #[strong]
             conn_settings,
@@ -179,9 +204,11 @@ impl ClientPreferences {
                 if let Ok(ref keyring_entry) = maybe_keyring_entry {
                     let password = this.imp().mpd_password.text();
                     if password.is_empty() {
-                        keyring_entry
-                            .delete_credential()
-                            .expect("Unable to clear saved MPD password from keyring");
+                        if let Err(KeyringError::NoEntry) = keyring_entry.delete_credential() {}
+                        else {
+                            panic!("Unable to clear MPD password from keyring");
+                        }
+
                     }
                     else {
                         keyring_entry
@@ -200,5 +227,86 @@ impl ClientPreferences {
                 "active"
             )
             .build();
+
+        // FIFO
+        self.on_fifo_changed(player.fft_status());
+        player.connect_notify_local(
+            Some("fft-status"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |player, _| {
+                    this.on_fifo_changed(player.fft_status());
+                }
+            )
+        );
+        let player_settings = settings.child("player");
+        imp.fifo_path.set_text(&conn_settings.string("mpd-fifo-path"));
+        imp.fifo_format.set_text(&conn_settings.string("mpd-fifo-format"));
+
+        // TODO: more input validation
+        // Only accept valid MPD format strings
+        imp.fifo_format.connect_changed(clone!(
+            #[strong(rename_to = this)]
+            self,
+            move |entry| {
+                if let Err(_) = AudioFormat::from_str(entry.text().as_str()) {
+                    if !entry.has_css_class("error") {
+                        entry.add_css_class("error");
+                        this.imp().fifo_reconnect.set_sensitive(false);
+                    }
+                }
+                else if entry.has_css_class("error") {
+                    entry.remove_css_class("error");
+                    this.imp().fifo_reconnect.set_sensitive(true);
+                }
+            }
+        ));
+
+        imp.fifo_fps.set_value(player_settings.uint("visualizer-fps") as f64);
+        // 512 1024 2048 4096
+        imp.fft_n_samples.set_selected(
+            match &player_settings.uint("visualizer-fft-samples") {
+                512 => 0,
+                1024 => 1,
+                2048 => 2,
+                4096 => 3,
+                _ => unreachable!()
+            }
+        );
+        imp.fft_n_bins.set_value(player_settings.uint("visualizer-spectrum-bins") as f64);
+        imp.fifo_reconnect.connect_clicked(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[strong]
+            conn_settings,
+            #[strong]
+            player_settings,
+            #[weak]
+            player,
+            move |_| {
+                println!("Restarting FFT thread...");
+                let imp = this.imp();
+                conn_settings
+                    .set_string("mpd-fifo-path", &imp.fifo_path.text())
+                    .expect("Cannot save FIFO settings");
+                conn_settings
+                    .set_string("mpd-fifo-format", &imp.fifo_format.text())
+                    .expect("Cannot save FIFO settings");
+                player_settings
+                    .set_uint("visualizer-fps", imp.fifo_fps.value().round() as u32)
+                    .expect("Cannot save visualizer settings");
+                player_settings
+                    .set_uint(
+                        "visualizer-fft-samples",
+                        FFT_SIZES[imp.fft_n_samples.selected() as usize]
+                    )
+                    .expect("Cannot save FFT settings");
+                player_settings
+                    .set_uint("visualizer-spectrum-bins", imp.fft_n_bins.value().round() as u32)
+                    .expect("Cannot save visualizer settings");
+                player.reconnect_fifo();
+            }
+        ));
     }
 }

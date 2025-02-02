@@ -3,7 +3,7 @@
   <requires lib="gtk" version="4.0"/>
   <requires lib="Adw" version="1.0"/>
   <template class="EuphonicaClientPreferences" parent="AdwPreferencesPage">
-    <property name="title" translatable="true">Database</property>
+    <property name="title" translatable="true">Client</property>
     <property name="icon-name">server-pick-symbolic</property>
     <child>
       <object class="AdwPreferencesGroup">
@@ -40,6 +40,86 @@
             <property name="subtitle">Not connected</property>
             <child type="suffix">
               <object class="GtkButton" id="reconnect">
+                <property name="label" translatable="true">Reconnect</property>
+                <property name="valign">center</property>
+                <style>
+                  <class name="suggested-action"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title" translatable="true">FIFO</property>
+        <property name="description" translatable="true">Specify a FIFO PCM output for the spectrum visualiser to read from.</property>
+        <child>
+          <object class="AdwEntryRow" id="fifo_path">
+            <property name="title" translatable="true">Path to FIFO file</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwEntryRow" id="fifo_format">
+            <property name="title" translatable="true">Format string (in MPD syntax)</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinRow" id="fifo_fps">
+            <property name="title" translatable="true">Sampling FPS</property>
+            <property name="subtitle" translatable="true">Determines visualiser FPS. Higher values may result in increased CPU usage.</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">1</property>
+                <property name="upper">60</property>
+                <property name="value">30</property>
+                <property name="page-increment">1</property>
+                <property name="step-increment">10</property>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwComboRow" id="fft_n_samples">
+            <property name="title" translatable="true">FFT sample window size</property>
+            <property name="subtitle" translatable="true">Higher values improve frequency-axis resolution and allow for more bands to be shown, but will result in more CPU usage.</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>512</item>
+                  <item>1024</item>
+                  <item>2048</item>
+                  <item>4096</item>
+                </items>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinRow" id="fft_n_bins">
+            <property name="title" translatable="true">FFT output bin count</property>
+            <property name="subtitle" translatable="true">Affects the horizontal granularity of the visualiser.</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">5</property>
+                <property name="upper">25</property>
+                <property name="value">20</property>
+                <property name="page-increment">1</property>
+                <property name="step-increment">5</property>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow" id="fifo_status">
+            <style>
+              <class name="property"/>
+            </style>
+            <property name="title" translatable="true">Status</property>
+            <property name="subtitle">Invalid</property>
+            <child type="suffix">
+              <object class="GtkButton" id="fifo_reconnect">
                 <property name="label" translatable="true">Reconnect</property>
                 <property name="valign">center</property>
                 <style>

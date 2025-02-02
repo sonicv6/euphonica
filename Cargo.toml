@@ -1,6 +1,6 @@
 [package]
 name = "euphonica"
-version = "0.10.1"
+version = "0.11.1"
 edition = "2021"
 
 [dev-dependencies]
@@ -39,6 +39,8 @@ gio = { version = "0.20.7", features = ["v2_74"] }
 rustls = "0.23.18" # GHSA ID GHSA-qg5g-gv98-5ffh
 glib = "0.20.0"    # GHSA ID GHSA-wrw7-89jp-8q8g
 idna = "1.0.0"     # CVE-2024-12242
+libc = "0.2.169"
+spectrum-analyzer = "=0.5.2"
 
 [dependencies.gtk]
 package = "gtk4"

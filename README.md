@@ -5,6 +5,7 @@ An MPD frontend with delusions of grandeur.
 
 ## Features
 - GTK4 Libadwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration
+- Built-in, customisable spectrum visualiser.
 - Audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums & detailed format printout
 - Browse your library by album, artist and folders with multiselection support
   - Browsing by genre and other criteria are planned.
@@ -32,20 +33,23 @@ An MPD frontend with delusions of grandeur.
 
 ## Screenshots
 
-- Album View in dark mode[^1]
-  ![Album View in dark mode](https://i.ibb.co/d2tdZdn/album-view-dark.png)
+- Album View in light mode[^1]
+  ![Album View in dark mode](https://i.ibb.co/ksWxmgCR/album-view-light.png)
 
-- Queue View in light mode[^1]
-  ![Queue View in light mode](https://i.ibb.co/Sdp5QZY/queue-view-light.png)
+- Queue View in dark mode[^1]
+  ![Queue View in dark mode](https://i.ibb.co/zTFHm0kg/queue-view-dark.png)
 
-- Artist bio as fetched from Last.fm[^1][^2]
-  ![Artist Content View in dark mode](https://i.ibb.co/3WVNtdx/artist-content-view-dark.png)
+- Artist bio as fetched from Last.fm[^1][^2][^3]
+  ![Artist Content View in dark mode](https://i.ibb.co/nf4chmX/artist-content-view-dark.png)
 
 - Album wiki as fetched from Last.fm[^1][^2]
-  ![Album Content View in dark mode](https://i.ibb.co/NCmrFKZ/album-content-view-dark.png)
+  ![Album Content View in dark mode](https://i.ibb.co/Pv1X4yn5/album-content-view-dark.png)
   
-- Playlist Content View in light mode[^1]
-  ![Playlist Content View in light mode](https://i.ibb.co/2SdLFXf/playlist-content-view-light.png)
+- Playlist Content View in dark mode[^1]
+  ![Playlist Content View in dark mode](https://i.ibb.co/zTG0Smf3/playlist-content-view-dark.png)
+  
+- Some of the available UI customisations[^1]
+  ![Visualiser customisation in light mode](https://i.ibb.co/DPzYXHPb/visualiser-customisation.png)
 
 
 [^1]: Actual album arts have been replaced with random pictures from [Pexels](https://www.pexels.com/). All credits go to the original authors.

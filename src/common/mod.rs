@@ -4,6 +4,7 @@ pub mod inode;
 pub mod artist;
 pub mod paintables;
 pub mod marquee;
+pub mod blend_mode;
 
 pub use song::{SongInfo, Song, QualityGrade};
 pub use inode::{INodeType, INode};
@@ -15,3 +16,4 @@ pub use artist::{
     parse_mb_artist_tag,
     artists_to_string
 };
+pub use blend_mode::BlendMode;

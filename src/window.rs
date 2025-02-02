@@ -24,7 +24,9 @@ use adw::{
     subclass::prelude::*
 };
 use gtk::{
-    gdk, gio, glib::{self, clone, closure_local, BoxedAnyObject}
+    gdk,
+    gio,
+    glib::{self, clone, closure_local, BoxedAnyObject}
 };
 use glib::signal::SignalHandlerId;
 use image::{imageops::FilterType, DynamicImage};
@@ -33,9 +35,9 @@ use mpd::Subsystem;
 use crate::{
     application::EuphonicaApplication,
     client::{ClientState, ConnectionState},
-    common::Album,
+    common::{Album, blend_mode::*, paintables::FadePaintable},
     library::{AlbumView, ArtistContentView, ArtistView, FolderView, PlaylistView},
-    player::{PlayerBar, QueueView},
+    player::{Player, PlayerBar, QueueView},
     sidebar::Sidebar,
     utils::{self, settings_manager}
 };
@@ -96,15 +98,13 @@ pub enum BlurMessage {
 // will not result in a rapidly-changing background - it will only change as quickly as it
 // can fade or the CPU can blur, whichever is slower.
 mod imp {
-    use std::cell::{Cell, OnceCell};
+    use std::{cell::{Cell, OnceCell}, sync::{Arc, Mutex}};
 
     use async_channel::Sender;
     use glib::Properties;
-    use gtk::gdk;
+    use gtk::{gdk, graphene, gsk};
     use image::io::Reader;
     use utils::settings_manager;
-
-    use crate::{common::paintables::FadePaintable, player::Player};
 
     use super::*;
 
@@ -154,15 +154,36 @@ mod imp {
         pub notify_playback_state_id: RefCell<Option<SignalHandlerId>>,
         pub notify_duration_id: RefCell<Option<SignalHandlerId>>,
 
+        // Blurred album art background
         #[property(get, set)]
         pub use_album_art_bg: Cell<bool>,
         #[property(get, set)]
-        pub opacity: Cell<f64>,
+        pub bg_opacity: Cell<f64>,
         pub bg_paintable: FadePaintable,
         pub player: OnceCell<Player>,
         pub sender_to_bg: OnceCell<Sender<BlurMessage>>, // sending a None will terminate the thread
         pub bg_handle: OnceCell<gio::JoinHandle<()>>,
-        pub prev_size: Cell<(u32, u32)>
+        pub prev_size: Cell<(u32, u32)>,
+
+        // Visualiser on the bottom edge
+        #[property(get, set)]
+        pub use_visualizer: Cell<bool>,
+        #[property(get, set)]
+        pub visualizer_top_opacity: Cell<f64>,
+        #[property(get, set)]
+        pub visualizer_bottom_opacity: Cell<f64>,
+        #[property(get, set)]
+        pub visualizer_gradient_height: Cell<f64>,
+        #[property(get, set)]
+        pub visualizer_scale: Cell<f64>,
+        #[property(get, set)]
+        pub visualizer_blend_mode: Cell<u32>,
+        #[property(get, set)]
+        pub visualizer_use_splines: Cell<bool>,
+        #[property(get, set)]
+        pub visualizer_stroke_width: Cell<f64>,
+        pub tick_callback: RefCell<Option<gtk::TickCallbackId>>,
+        pub fft_data: OnceCell<Arc<Mutex<(Vec<f32>, Vec<f32>)>>>,
     }
 
     #[glib::object_subclass]
@@ -202,7 +223,7 @@ mod imp {
                 .bind(
                     "bg-opacity",
                     obj,
-                    "opacity"
+                    "bg-opacity"
                 )
                 .build();
 
@@ -233,6 +254,84 @@ mod imp {
                 |this, _| {
                     this.queue_new_background();
                 }
+            );
+
+            settings
+                .bind(
+                    "use-visualizer",
+                    obj,
+                    "use-visualizer"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-top-opacity",
+                    obj,
+                    "visualizer-top-opacity"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-bottom-opacity",
+                    obj,
+                    "visualizer-bottom-opacity"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-gradient-height",
+                    obj,
+                    "visualizer-gradient-height"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-scale",
+                    obj,
+                    "visualizer-scale"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-blend-mode",
+                    obj,
+                    "visualizer-blend-mode"
+                )
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-use-splines",
+                    obj,
+                    "visualizer-use-splines"
+                )
+                .get_only()
+                .build();
+
+            settings
+                .bind(
+                    "visualizer-stroke-width",
+                    obj,
+                    "visualizer-stroke-width"
+                )
+                .get_only()
+                .build();
+
+            self.set_always_redraw(self.use_visualizer.get());
+            settings.connect_changed(
+                Some("use-visualizer"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |settings, key| {
+                        this.set_always_redraw(settings.boolean(key));
+                    }
+                )
             );
 
             self.sidebar.connect_notify_local(
@@ -358,6 +457,8 @@ mod imp {
     impl WidgetImpl for EuphonicaWindow {
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let widget = self.obj();
+            let mut should_blend = false;
+            let blend_mode: BlendMode = self.visualizer_blend_mode.get().try_into().unwrap();
             // Statically-cached blur
             if self.use_album_art_bg.get() {
                 // Check if window has been resized (will need reblur)
@@ -369,19 +470,55 @@ mod imp {
                     // Will still reuse old (mis-sized) blur texture until child thread
                     // comes back with a better one.
                 }
-                let opacity = self.opacity.get();
-                if opacity < 1.0 {
-                    snapshot.push_opacity(opacity);
-                }
-                self.bg_paintable.snapshot(
-                    snapshot,
-                    widget.width() as f64,
-                    widget.height() as f64
-                );
-                if opacity < 1.0 {
-                    snapshot.pop();
+                if self.bg_paintable.will_paint() {
+                    if self.will_draw_spectrum() {
+                        should_blend = true;
+                        snapshot.push_blend(blend_mode.into());
+                    }
+                    let bg_opacity = self.bg_opacity.get();
+                    if bg_opacity < 1.0 {
+                        snapshot.push_opacity(bg_opacity);
+                    }
+                    self.bg_paintable.snapshot(
+                        snapshot,
+                        widget.width() as f64,
+                        widget.height() as f64
+                    );
+                    if bg_opacity < 1.0 {
+                        snapshot.pop();
+                    }
+                    if should_blend {
+                        snapshot.pop();
+                    }
                 }
             }
+
+            // Spectrum visualiser
+            if self.use_visualizer.get() {
+                let mutex = self.fft_data.get().unwrap();
+                let scale = self.visualizer_scale.get() as f32;
+                let fg = widget.color();
+                // Halve configured opacity since we're drawing two channels
+                let width32 = widget.width() as f32;
+                let height32 = widget.height() as f32;
+                let data = mutex.lock().unwrap();
+                if should_blend {
+                    snapshot.push_blend(blend_mode.into());
+                    self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
+                    snapshot.pop();
+                    self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
+                    snapshot.pop();
+                }
+                else {
+                    self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
+                    self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
+                }
+            }
+            if should_blend {
+                // Add top layer of blend node
+                snapshot.pop();
+            }
+
             // Call the parent class's snapshot() method to render child widgets
             self.parent_snapshot(snapshot);
         }
@@ -391,6 +528,140 @@ mod imp {
     impl AdwApplicationWindowImpl for EuphonicaWindow {}
 
     impl EuphonicaWindow {
+        /// Force window to be redrawn on each frame.
+        ///
+        /// This is currently necessary for the visualiser to get updated.
+        pub fn set_always_redraw(&self, state: bool) {
+            if state {
+                if let Some(old_id) = self.tick_callback.replace(
+                    Some(self.obj().add_tick_callback(move |obj, _| {
+                        obj.queue_draw();
+                        glib::ControlFlow::Continue
+                    }))
+                ) {
+                    old_id.remove();
+                }
+            }
+            else {
+                if let Some(old_id) = self.tick_callback.take() {
+                    old_id.remove();
+                }
+            }
+        }
+
+        fn draw_spectrum(
+            &self,
+            snapshot: &gtk::Snapshot,
+            width: f32,
+            height: f32,
+            data: &[f32],
+            scale: f32,
+            color: &gdk::RGBA
+        ) {
+            let band_width = width / (data.len() as f32 - 1.0);
+
+            let path_builder = gsk::PathBuilder::new();
+            path_builder.move_to(0.0, height);
+            path_builder.line_to(0.0, (height - data[0] * scale).max(0.0));
+
+            if self.visualizer_use_splines.get() {
+                // Spline mode. Since we can make 2 assumptions:
+                // - No two points share the same x-coordinate (duh), and
+                // - X-coordinates are monotonically increasing
+                // we can cheat a bit and avoid having to solve for Beizer control points.
+                let half_width = band_width as f32 / 2.0;
+                let quarter_width = band_width as f32 / 4.0;
+                for i in 0..(data.len() - 1) {
+                    let x = (i as f32 + 1.0) * band_width;
+                    let y = (height - data[i] * scale * 1000000.0).max(0.0);
+                    let x_next = x + band_width;
+                    let y_next = (height - data[i+1] * scale * 1000000.0).max(0.0);
+                    // Midpoint
+                    let x_mid = x + half_width;
+                    let y_mid = (height - (data[i] + data[i+1]) / 2.0 * scale * 1000000.0).max(0.0);
+                    // The next two will serve as control points.
+                    // Between current point and midpoint
+                    let x_left_mid = x + quarter_width;
+                    // Between midpoint and next point
+                    let x_right_mid = x_mid + quarter_width;
+                    // First curve, from current point to midpoint
+                    path_builder.quad_to(
+                        // Control point
+                        x_left_mid, y,
+                        x_mid, y_mid
+                    );
+                    // Second curve, from midpoint to next point
+                    path_builder.quad_to(
+                        // Control point
+                        x_right_mid, y_next,
+                        x_next , y_next
+                    );
+                }
+            }
+            else {
+                // Straight segments mode
+                for (band_idx, level) in data[1..data.len()].iter().enumerate() {
+                    path_builder.line_to((band_idx as f32 + 1.0) * band_width, (height - level * scale * 1000000.0).max(0.0));
+                }
+                path_builder.line_to(width, height);
+            }
+
+            let path = path_builder.to_path();
+
+            snapshot.push_fill(
+                &path,
+                gsk::FillRule::Winding,
+            );
+            let bottom_stop = gsk::ColorStop::new(
+                0.0,
+                gdk::RGBA::new(
+                    color.red(), color.green(), color.blue(),
+                    self.visualizer_bottom_opacity.get() as f32 / 2.0
+                )
+            );
+            let top_stop = gsk::ColorStop::new(
+                self.visualizer_gradient_height.get() as f32,
+                gdk::RGBA::new(
+                    color.red(), color.green(), color.blue(),
+                    self.visualizer_top_opacity.get() as f32 / 2.0
+                )
+            );
+            snapshot.append_linear_gradient(
+                &graphene::Rect::new(0.0, 0.0, width, height),
+                &graphene::Point::new(0.0, height),
+                &graphene::Point::new(0.0, 0.0),
+                &[
+                    bottom_stop,
+                    top_stop
+                ]
+            );
+            // Fill node
+            snapshot.pop();
+            let stroke_width = self.visualizer_stroke_width.get() as f32;
+            if stroke_width > 0.0 {
+                snapshot.append_stroke(&path, &gsk::Stroke::new(stroke_width), top_stop.color());
+            }
+        }
+
+        /// Whether any render node will be added to render the visualiser.
+        ///
+        /// This check is necessary to babysit the blend node's assertion that
+        /// both layers be non-empty.
+        fn will_draw_spectrum(&self) -> bool {
+            if !self.use_visualizer.get() {
+                return false;
+            }
+            if self.visualizer_stroke_width.get() > 0.0 {
+                return true;
+            }
+            if let Some(mutex) = self.fft_data.get() {
+                if let Ok(data) = mutex.lock() {
+                     return (data.0.iter().sum::<f32>() + data.1.iter().sum::<f32>()) > 0.0;
+                }
+            }
+            return false;
+        }
+
         /// Fade to the new texture, or to nothing if playing song has no album art.
         pub fn push_tex(&self, tex: Option<gdk::MemoryTexture>, do_fade: bool) {
             let bg_paintable = self.bg_paintable.clone();
@@ -462,6 +733,9 @@ impl EuphonicaWindow {
         let app = win.downcast_application();
         let client_state = app.get_client().get_client_state();
         let player = app.get_player();
+
+        win.imp().fft_data.set(player.fft_data()).expect("Unable to bind FFT data to visualiser widget");
+
         win.queue_new_background();
         client_state.connect_closure(
             "idle",
@@ -557,7 +831,7 @@ impl EuphonicaWindow {
             &app
         );
         win.imp().player_bar.setup(
-            app.get_player()
+            &app.get_player()
         );
 
         win.imp().player_bar.connect_closure(

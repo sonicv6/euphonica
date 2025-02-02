@@ -51,6 +51,15 @@
 		<key name="mpd-download-album-art" type="b">
 			<default>true</default>
 		</key>
+
+		<key name="mpd-fifo-path" type="s">
+			<default>''</default>
+		</key>
+
+		<key name="mpd-fifo-format" type="s">
+			<default>'44100:16:2'</default>
+			<summary>Audio format of FIFO output for use by the visualiser (specified in the same form as in your mpd.conf).</summary>
+		</key>
 	</schema>
 
 	<schema id="org.euphonica.Euphonica.library" path="/org/euphonica/Euphonica/library/">
@@ -137,6 +146,34 @@
 		<key name="enable-mpris" type="b">
 			<default>true</default>
 		</key>
+
+		<key name="visualizer-fft-samples" type="u">
+			<default>1024</default>
+		</key>
+
+		<key name="visualizer-fps" type="u">
+			<default>30</default>
+		</key>
+
+		<key name="visualizer-spectrum-bins" type="u">
+			<default>10</default>
+		</key>
+
+		<key name="visualizer-spectrum-use-log-bins" type='b'>
+			<default>true</default>
+		</key>
+
+		<key name="visualizer-spectrum-min-hz" type="u">
+			<default>40</default>
+		</key>
+
+		<key name="visualizer-spectrum-max-hz" type="u">
+			<default>16000</default>
+		</key>
+		<key name="visualizer-spectrum-curr-step-weight" type="d">
+			<default>0.12</default>
+
+		</key>
 	</schema>
 
 	<schema id="org.euphonica.Euphonica.ui" path="/org/euphonica/Euphonica/ui/">
@@ -160,6 +197,31 @@
 		</key>
 		<key name="vol-knob-unit" enum='org.euphonica.Euphonica.volumeunit'>
 			<default>'percents'</default>
+		</key>
+		<key name="use-visualizer" type="b">
+			<default>false</default>
+		</key>
+		<key name="visualizer-top-opacity" type="d">
+			<default>0.6</default>
+		</key>
+		<key name="visualizer-scale" type="d">
+			<default>2.0</default>
+		</key>
+		<key name="visualizer-blend-mode" type="u">
+			<default>6</default>
+			<summary>Index of gsk::BlendMode variant</summary>
+		</key>
+		<key name="visualizer-bottom-opacity" type="d">
+			<default>0.0</default>
+		</key>
+		<key name="visualizer-gradient-height" type="d">
+			<default>0.1</default>
+		</key>
+		<key name="visualizer-use-splines" type='b'>
+			<default>true</default>
+		</key>
+		<key name="visualizer-stroke-width" type='d'>
+			<default>2.0</default>
 		</key>
 	</schema>
 

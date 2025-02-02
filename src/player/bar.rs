@@ -62,6 +62,7 @@ mod imp {
         pub goto_pane: TemplateChild<gtk::Button>,
         #[template_child]
         pub vol_knob: TemplateChild<VolumeKnob>,
+
         pub output_widgets: RefCell<Vec<MpdOutput>>,
         // Index of visible child in output_widgets
         pub current_output: Cell<usize>,
@@ -217,11 +218,11 @@ mod imp {
         }
     }
 
-    // Trait shared by all widgets
     impl WidgetImpl for PlayerBar {}
 
-    // Trait shared by all boxes
     impl BoxImpl for PlayerBar {}
+
+    impl PlayerBar {}
 }
 
 
@@ -242,13 +243,13 @@ impl PlayerBar {
         Self::default()
     }
 
-    pub fn setup(&self, player: Player) {
-        self.setup_volume_knob(player.clone());
-        self.bind_state(player.clone());
-        self.imp().playback_controls.setup(player);
+    pub fn setup(&self, player: &Player) {
+        self.setup_volume_knob(&player);
+        self.bind_state(&player);
+        self.imp().playback_controls.setup(&player);
     }
 
-    fn setup_volume_knob(&self, player: Player) {
+    fn setup_volume_knob(&self, player: &Player) {
         let settings = settings_manager().child("ui");
         let knob = self.imp().vol_knob.get();
         knob.setup();
@@ -314,7 +315,7 @@ impl PlayerBar {
         );
     }
 
-    fn bind_state(&self, player: Player) {
+    fn bind_state(&self, player: &Player) {
         let imp = self.imp();
         let info_box = imp.info_box.get();
         player

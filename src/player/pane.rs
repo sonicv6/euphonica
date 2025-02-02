@@ -157,13 +157,13 @@ impl PlayerPane {
         Self::default()
     }
 
-    pub fn setup(&self, player: Player) {
-        self.setup_volume_knob(player.clone());
-        self.bind_state(player.clone());
+    pub fn setup(&self, player: &Player) {
+        self.setup_volume_knob(player);
+        self.bind_state(player);
         self.imp().playback_controls.setup(player);
     }
 
-    fn setup_volume_knob(&self, player: Player) {
+    fn setup_volume_knob(&self, player: &Player) {
         let knob = self.imp().vol_knob.get();
         knob.setup();
 
@@ -309,7 +309,7 @@ impl PlayerPane {
             .build();
     }
 
-    fn bind_state(&self, player: Player) {
+    fn bind_state(&self, player: &Player) {
         let imp = self.imp();
         let info_box = imp.info_box.get();
         let format_info = imp.format_info.get();
