@@ -34,23 +34,23 @@ An MPD frontend with delusions of grandeur.
 ## Screenshots
 
 - Album View in light mode[^1]
-  ![Album View in dark mode](https://i.ibb.co/ksWxmgCR/album-view-light.png)
+  ![album-view-light](https://github.com/user-attachments/assets/302b0e37-ff4a-4151-b688-6d6b5e1dcb60)
 
 - Queue View in dark mode[^1]
-  ![Queue View in dark mode](https://i.ibb.co/zTFHm0kg/queue-view-dark.png)
+  ![queue-view-dark](https://github.com/user-attachments/assets/0ed85f77-48dc-4dc6-9e43-850e731bcaaa)
 
 - Artist bio as fetched from Last.fm[^1][^2][^3]
-  ![Artist Content View in dark mode](https://i.ibb.co/nf4chmX/artist-content-view-dark.png)
+  ![artist-content-view-light](https://github.com/user-attachments/assets/63a715a2-05e4-4443-9dd2-f4f1f2760aa3)
 
 - Album wiki as fetched from Last.fm[^1][^2]
-  ![Album Content View in dark mode](https://i.ibb.co/Pv1X4yn5/album-content-view-dark.png)
+  ![album-content-view-dark](https://github.com/user-attachments/assets/2665a48a-e81c-43ff-b3c1-76a6d7443f5e)
   
 - Playlist Content View in dark mode[^1]
-  ![Playlist Content View in dark mode](https://i.ibb.co/zTG0Smf3/playlist-content-view-dark.png)
+  ![playlist-content-view-dark](https://github.com/user-attachments/assets/42c3b9c5-a4fe-4e70-9765-5326c75d6c5b)
+
   
 - Some of the available UI customisations[^1]
-  ![Visualiser customisation in light mode](https://i.ibb.co/DPzYXHPb/visualiser-customisation.png)
-
+![visualiser-customisation](https://github.com/user-attachments/assets/e21d0a36-6dba-4fea-84a2-0fdb0810bff5)
 
 [^1]: Actual album arts have been replaced with random pictures from [Pexels](https://www.pexels.com/). All credits go to the original authors.
 [^2]: Artist bios and album wikis are user-contributed and licensed by Last.fm under CC-BY-SA.
