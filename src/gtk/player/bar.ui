@@ -124,8 +124,9 @@
                     <condition>max-width: 400px</condition>
                     <setter object="mini_layout" property="orientation">1</setter>
                     <setter object="mini_layout" property="spacing">3</setter>
-                    <setter object="playback_controls_wrapper" property="hexpand">1</setter>
-                    <setter object="playback_controls_wrapper" property="halign">center</setter>
+                    <setter object="playback_controls_slot" property="hexpand">1</setter>
+                    <setter object="info_box" property="hexpand">1</setter>
+                    <setter object="playback_controls_slot" property="halign">center</setter>
                   </object>
                 </child>
                 <property name="child">
@@ -144,16 +145,6 @@
                             <property name="id">info-box</property>
                           </object>
                         </child>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkBox" id="playback_controls_wrapper">
-                        <property name="spacing">6</property>
-                        <child>
-                          <object class="AdwLayoutSlot">
-                            <property name="id">playback-controls</property>
-                          </object>
-                        </child>
                         <child>
                           <object class="GtkButton" id="goto_pane">
                             <property name="tooltip-text">Jump to Now Playing</property>
@@ -164,6 +155,11 @@
                             <property name="icon-name">sidebar-show-right-symbolic</property>
                           </object>
                         </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwLayoutSlot" id="playback_controls_slot">
+                        <property name="id">playback-controls</property>
                       </object>
                     </child>
                   </object>
