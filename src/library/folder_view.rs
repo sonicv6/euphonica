@@ -41,9 +41,9 @@ use crate::{
 // 2. Repeat steps 3-5 as above. If curr_idx is 0 after decrementing, simply use ""
 // as path.
 mod imp {
-    use std::cell::{OnceCell, RefCell};
+    use std::{cell::{OnceCell, RefCell}, sync::OnceLock};
 
-    use glib::{ParamSpec, ParamSpecString};
+    use glib::{subclass::Signal, ParamSpec, ParamSpecBoolean, ParamSpecString};
     use once_cell::sync::Lazy;
 
     use super::*;
@@ -51,6 +51,8 @@ mod imp {
     #[derive(Debug, CompositeTemplate)]
     #[template(resource = "/org/euphonica/Euphonica/gtk/library/folder-view.ui")]
     pub struct FolderView {
+        #[template_child]
+        pub show_sidebar: TemplateChild<gtk::Button>,
         #[template_child]
         pub path_widget: TemplateChild<gtk::Label>,
         #[template_child]
@@ -92,11 +94,13 @@ mod imp {
         // if they now match.
         pub last_search_len: Cell<usize>,
         pub library: OnceCell<Library>,
+        pub collapsed: Cell<bool>
     }
 
     impl Default for FolderView {
         fn default() -> Self {
             Self {
+                show_sidebar: TemplateChild::default(),
                 path_widget: TemplateChild::default(),
                 loading_stack: TemplateChild::default(),
                 back_btn: TemplateChild::default(),
@@ -123,6 +127,7 @@ mod imp {
                 // if they now match.
                 last_search_len: Cell::new(0),
                 library: OnceCell::new(),
+                collapsed: Cell::new(false)
             }
         }
     }
@@ -168,11 +173,31 @@ mod imp {
                 self,
                 move |_| this.move_forward()
             ));
+
+            self.obj()
+                .bind_property(
+                    "collapsed",
+                    &self.show_sidebar.get(),
+                    "visible"
+                )
+                .sync_create()
+                .build();
+
+            self.show_sidebar.connect_clicked(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_| {
+                    this.obj().emit_by_name::<()>("show-sidebar-clicked", &[]);
+                }
+            ));
         }
 
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> =
-                Lazy::new(|| vec![ParamSpecString::builder("path").read_only().build()]);
+                Lazy::new(|| vec![
+                    ParamSpecString::builder("path").read_only().build(),
+                    ParamSpecBoolean::builder("collapsed").build()
+                ]);
             PROPERTIES.as_ref()
         }
 
@@ -180,8 +205,32 @@ mod imp {
             let obj = self.obj();
             match pspec.name() {
                 "path" => obj.get_path().to_value(),
+                "collapsed" => self.collapsed.get().to_value(),
                 _ => unimplemented!(),
             }
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            match pspec.name() {
+                "collapsed" => {
+                    if let Ok(new) = value.get::<bool>() {
+                        let old = self.collapsed.replace(new);
+                        if old != new {
+                            self.obj().notify("collapsed");
+                        }
+                    }
+                }
+                _ => unimplemented!()
+            }
+        }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("show-sidebar-clicked").build(),
+                ]
+            })
         }
     }
 

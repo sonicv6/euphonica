@@ -109,7 +109,7 @@ mod imp {
     pub struct EuphonicaWindow {
         // Top level widgets
         #[template_child]
-        pub split_view: TemplateChild<adw::NavigationSplitView>,
+        pub split_view: TemplateChild<adw::OverlaySplitView>,
         #[template_child]
         pub content: TemplateChild<gtk::Box>,
         #[template_child]
@@ -306,6 +306,28 @@ mod imp {
                 ),
             );
 
+            let view = self.split_view.get();
+            [
+                self.album_view.upcast_ref::<gtk::Widget>(),
+                self.artist_view.upcast_ref::<gtk::Widget>(),
+                self.folder_view.upcast_ref::<gtk::Widget>(),
+                self.playlist_view.upcast_ref::<gtk::Widget>(),
+                self.queue_view.upcast_ref::<gtk::Widget>()
+            ].iter().for_each(clone!(
+                #[weak]
+                view,
+                move |item| {
+                    item.connect_local(
+                        "show-sidebar-clicked",
+                        false,
+                        move |_| {
+                            view.set_show_sidebar(true);
+                            None
+                        }
+                    );
+                }
+            ));
+
             self.queue_view.connect_notify_local(
                 Some("show-content"),
                 clone!(
@@ -318,7 +340,7 @@ mod imp {
             );
 
             self.queue_view.connect_notify_local(
-                Some("collapsed"),
+                Some("pane-collapsed"),
                 clone!(
                     #[weak(rename_to = this)]
                     obj,
@@ -830,7 +852,7 @@ impl EuphonicaWindow {
         self.imp().stack.get()
     }
 
-    pub fn get_split_view(&self) -> adw::NavigationSplitView {
+    pub fn get_split_view(&self) -> adw::OverlaySplitView {
         self.imp().split_view.get()
     }
 
@@ -901,7 +923,7 @@ impl EuphonicaWindow {
         let revealer = self.imp().player_bar_revealer.get();
         if self.imp().sidebar.showing_queue_view() {
             let queue_view = self.imp().queue_view.get();
-            if (queue_view.collapsed() && queue_view.show_content()) || !queue_view.collapsed() {
+            if (queue_view.pane_collapsed() && queue_view.show_content()) || !queue_view.pane_collapsed() {
                 revealer.set_reveal_child(false);
             } else {
                 revealer.set_reveal_child(true);
@@ -913,7 +935,7 @@ impl EuphonicaWindow {
 
     fn goto_pane(&self) {
         self.imp().stack.set_visible_child_name("queue");
-        self.imp().split_view.set_show_content(true);
+        self.imp().split_view.set_show_sidebar(!self.imp().split_view.is_collapsed());
         self.imp().queue_view.set_show_content(true);
     }
 
@@ -921,8 +943,8 @@ impl EuphonicaWindow {
         self.imp().album_view.on_album_clicked(album);
         // self.imp().stack.set_visible_child_name("albums");
         self.imp().sidebar.set_view("albums");
-        if !self.imp().split_view.shows_content() {
-            self.imp().split_view.set_show_content(true);
+        if self.imp().split_view.shows_sidebar() {
+            self.imp().split_view.set_show_sidebar(!self.imp().split_view.is_collapsed());
         }
     }
 

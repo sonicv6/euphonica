@@ -11,6 +11,13 @@
               <object class="AdwToolbarView">
                 <child type="top">
 					        <object class="AdwHeaderBar">
+                    <child type="start">
+                      <object class="GtkButton" id="show_sidebar">
+                        <property name="icon-name">dock-left-symbolic</property>
+                        <property name="tooltip-text" translatable="true">Show sidebar</property>
+                        <property name="visible">false</property>
+                      </object>
+                    </child>
                     <child type="end">
                       <object class="GtkToggleButton" id="search_btn">
                         <property name="icon-name">edit-find-symbolic</property>

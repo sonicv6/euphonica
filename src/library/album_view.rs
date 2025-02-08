@@ -7,7 +7,7 @@ use gtk::{
 };
 use std::{cell::Cell, cmp::Ordering, rc::Rc};
 
-use glib::clone;
+use glib::{clone, Properties};
 
 use super::{AlbumCell, AlbumContentView, Library};
 use crate::{
@@ -18,15 +18,20 @@ use crate::{
 };
 
 mod imp {
-    use std::cell::OnceCell;
+    use std::{cell::OnceCell, sync::OnceLock};
+
+    use glib::subclass::Signal;
 
     use super::*;
 
-    #[derive(Debug, CompositeTemplate)]
+    #[derive(Debug, CompositeTemplate, Properties)]
+    #[properties(wrapper_type = super::AlbumView)]
     #[template(resource = "/org/euphonica/Euphonica/gtk/library/album-view.ui")]
     pub struct AlbumView {
         #[template_child]
         pub nav_view: TemplateChild<adw::NavigationView>,
+        #[template_child]
+        pub show_sidebar: TemplateChild<gtk::Button>,
 
         // Search & filter widgets
         #[template_child]
@@ -63,12 +68,16 @@ mod imp {
         // if they now match.
         pub last_search_len: Cell<usize>,
         pub library: OnceCell<Library>,
+
+        #[property(get, set)]
+        pub collapsed: Cell<bool>
     }
 
     impl Default for AlbumView {
         fn default() -> Self {
             Self {
                 nav_view: TemplateChild::default(),
+                show_sidebar: TemplateChild::default(),
                 // Search & filter widgets
                 sort_dir: TemplateChild::default(),
                 sort_dir_btn: TemplateChild::default(),
@@ -92,6 +101,8 @@ mod imp {
                 // if they now match.
                 last_search_len: Cell::new(0),
                 library: OnceCell::new(),
+
+                collapsed: Cell::new(false)
             }
         }
     }
@@ -112,6 +123,7 @@ mod imp {
         }
     }
 
+    #[glib::derived_properties]
     impl ObjectImpl for AlbumView {
         fn dispose(&self) {
             while let Some(child) = self.obj().first_child() {
@@ -121,6 +133,32 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+
+            self.obj()
+                .bind_property(
+                    "collapsed",
+                    &self.show_sidebar.get(),
+                    "visible"
+                )
+                .sync_create()
+                .build();
+
+            self.show_sidebar.connect_clicked(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_| {
+                    this.obj().emit_by_name::<()>("show-sidebar-clicked", &[]);
+                }
+            ));
+        }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("show-sidebar-clicked").build(),
+                ]
+            })
         }
     }
 

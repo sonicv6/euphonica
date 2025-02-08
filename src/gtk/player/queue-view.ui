@@ -66,6 +66,13 @@
                       <object class="GtkBox">
                         <property name="spacing">6</property>
                         <child>
+                          <object class="GtkButton" id="show_sidebar">
+                            <property name="icon-name">dock-left-symbolic</property>
+                            <property name="tooltip-text" translatable="true">Show sidebar</property>
+                            <property name="visible">false</property>
+                          </object>
+                        </child>
+                        <child>
                           <object class="GtkMenuButton" id="save">
                             <property name="icon-name">document-save-symbolic</property>
                             <property name="tooltip-text" translatable="true">Save current queue as playlist</property>

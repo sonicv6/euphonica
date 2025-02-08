@@ -11,15 +11,20 @@
       <object class="AdwBreakpoint">
         <condition>max-width: 1000</condition>
         <setter object="player_bar" property="collapsed">true</setter>
-        <setter object="queue_view" property="collapsed">true</setter>
+        <setter object="queue_view" property="pane-collapsed">true</setter>
       </object>
     </child>
     <child>
       <object class="AdwBreakpoint">
         <condition>max-width: 600</condition>
         <setter object="split_view" property="collapsed">true</setter>
-        <setter object="player_bar" property="collapsed">true</setter>
+        <setter object="album_view" property="collapsed">true</setter>
+        <setter object="artist_view" property="collapsed">true</setter>
+        <setter object="folder_view" property="collapsed">true</setter>
+        <setter object="playlist_view" property="collapsed">true</setter>
         <setter object="queue_view" property="collapsed">true</setter>
+        <setter object="queue_view" property="pane-collapsed">true</setter>
+        <setter object="player_bar" property="collapsed">true</setter>
       </object>
     </child>
     <property name="content">
@@ -29,7 +34,7 @@
         <child>
           <object class="AdwToastOverlay" id="toast_overlay">
             <child>
-              <object class="AdwNavigationSplitView" id="split_view">
+              <object class="AdwOverlaySplitView" id="split_view">
                 <property name="vexpand">true</property>
                 <property name="sidebar">
                   <object class="AdwNavigationPage">

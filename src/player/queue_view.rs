@@ -19,9 +19,9 @@ use crate::{cache::Cache, common::Song, window::EuphonicaWindow};
 use super::{Player, QueueRow};
 
 mod imp {
-    use std::cell::{Cell, OnceCell};
+    use std::{cell::{Cell, OnceCell}, sync::OnceLock};
 
-    use glib::Properties;
+    use glib::{subclass::Signal, Properties};
 
     use super::*;
 
@@ -29,6 +29,8 @@ mod imp {
     #[properties(wrapper_type = super::QueueView)]
     #[template(resource = "/org/euphonica/Euphonica/gtk/player/queue-view.ui")]
     pub struct QueueView {
+        #[template_child]
+        pub show_sidebar: TemplateChild<gtk::Button>,
         #[template_child]
         pub queue_pane_view: TemplateChild<adw::NavigationSplitView>,
         #[template_child]
@@ -43,10 +45,6 @@ mod imp {
         pub consume: TemplateChild<gtk::ToggleButton>,
         #[template_child]
         pub clear_queue: TemplateChild<gtk::Button>,
-        #[property(get, set)]
-        pub collapsed: Cell<bool>,
-        #[property(get, set)]
-        pub show_content: Cell<bool>,
 
         #[template_child]
         pub save: TemplateChild<gtk::MenuButton>,
@@ -56,6 +54,13 @@ mod imp {
         pub save_confirm: TemplateChild<gtk::Button>,
 
         pub window: OnceCell<EuphonicaWindow>,
+
+        #[property(get, set)]
+        pub pane_collapsed: Cell<bool>,
+        #[property(get, set)]
+        pub collapsed: Cell<bool>,
+        #[property(get, set)]
+        pub show_content: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -88,7 +93,7 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
             let obj = self.obj();
-            obj.bind_property("collapsed", &self.queue_pane_view.get(), "collapsed")
+            obj.bind_property("pane-collapsed", &self.queue_pane_view.get(), "collapsed")
                 .sync_create()
                 .build();
 
@@ -97,6 +102,32 @@ mod imp {
                 .bidirectional()
                 .sync_create()
                 .build();
+
+            self.obj()
+                .bind_property(
+                    "collapsed",
+                    &self.show_sidebar.get(),
+                    "visible"
+                )
+                .sync_create()
+                .build();
+
+            self.show_sidebar.connect_clicked(clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |_| {
+                    this.obj().emit_by_name::<()>("show-sidebar-clicked", &[]);
+                }
+            ));
+        }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("show-sidebar-clicked").build(),
+                ]
+            })
         }
     }
 
