@@ -93,24 +93,13 @@
                     </child>
                     <child type="end">
                       <object class="GtkButton" id="now_playing_button">
+                        <style>
+                          <class name="suggested-action"/>
+                        </style>
                         <property name="visible" bind-source="queue_pane_view" bind-property="collapsed" bind-flags="sync-create"/>
                         <property name="action-name">navigation.push</property>
                         <property name="action-target">'now_playing'</property>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="spacing">6</property>
-                            <child>
-                              <object class="GtkLabel">
-                                <property name="label" translatable="true">Now Playing</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkImage">
-                                <property name="icon-name">right-symbolic</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
+                        <property name="icon-name">play-symbolic</property>
                       </object>
                     </child>
                   </object>

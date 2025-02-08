@@ -235,7 +235,17 @@
                               <class name="padding-6"/>
                             </style>
                             <property name="start-widget">
-                              <object class="GtkBox">
+                              <object class="AdwBreakpointBin">
+                                <property name="width-request">240</property>
+                                <property name="height-request">16</property>
+                                <child>
+                                  <object class="AdwBreakpoint">
+                                    <condition>max-width: 550px</condition>
+                                    <setter object="action_btns" property="orientation">1</setter>
+                                  </object>
+                                </child>
+                                <property name="child">
+                                  <object class="GtkBox" id="action_btns">
                                 <property name="spacing">6</property>
                                 <child>
                                   <object class="GtkButton" id="replace_queue">
@@ -283,6 +293,8 @@
                                 <child>
                                   <object class="EuphonicaAddToPlaylistButton" id="add_to_playlist"/>
                                 </child>
+                              </object>
+                                </property>
                               </object>
                             </property>
                             <property name="end-widget">
