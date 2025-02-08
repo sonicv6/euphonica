@@ -8,27 +8,11 @@
 					<object class="AdwHeaderBar">
             <property name="show-title">false</property>
             <child type="start">
-              <object class="GtkBox">
-                <child>
                   <object class="GtkButton" id="show_sidebar">
                     <property name="icon-name">dock-left-symbolic</property>
                     <property name="tooltip-text" translatable="true">Show sidebar</property>
                     <property name="visible">false</property>
                   </object>
-                </child>
-                <child>
-                  <object class="GtkButton" id="back_btn">
-                    <property name="icon-name">left-symbolic</property>
-                    <property name="sensitive">false</property>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkButton" id="forward_btn">
-                    <property name="icon-name">right-symbolic</property>
-                    <property name="sensitive">false</property>
-                  </object>
-                </child>
-              </object>
             </child>
             <child type="end">
               <object class="GtkToggleButton" id="search_btn">
@@ -72,20 +56,38 @@
             <child>
               <object class="GtkSearchEntry" id="search_entry">
                 <property name="search-delay">150</property>
-                <property name="width-request">400</property>
+                <property name="width-request">100</property>
               </object>
             </child>
           </object>
         </child>
 				<property name="content">
           <object class="GtkBox">
+            <property name="hexpand">true</property>
             <property name="orientation">1</property>
             <child>
-              <object class="GtkLabel" id="path_widget">
+              <object class="GtkBox">
                 <style>
-                  <class name="padding-6"/>
+                  <class name="toolbar"/>
                 </style>
-                <property name="ellipsize">end</property>
+                <child>
+                  <object class="GtkButton" id="back_btn">
+                    <property name="icon-name">left-symbolic</property>
+                    <property name="sensitive">false</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="forward_btn">
+                    <property name="icon-name">right-symbolic</property>
+                    <property name="sensitive">false</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="path_widget">
+                    <property name="hexpand">true</property>
+                    <property name="ellipsize">end</property>
+                  </object>
+                </child>
               </object>
             </child>
             <child>

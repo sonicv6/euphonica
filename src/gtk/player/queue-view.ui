@@ -57,6 +57,7 @@
               <object class="AdwToolbarView">
                 <child type="top">
                   <object class="AdwHeaderBar">
+                    <property name="show-title" bind-source="EuphonicaQueueView" bind-property="collapsed" bind-flags="sync-create|invert-boolean"></property>
                     <property name="title-widget">
                       <object class="AdwWindowTitle" id="queue_title">
                         <property name="title" translatable="true">Queue</property>
