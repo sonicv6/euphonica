@@ -229,97 +229,110 @@
             </child>
             <child>
               <!-- The always-visible action row -->
-              <object class="GtkCenterBox">
-                <style>
-                  <class name="padding-6"/>
-                </style>
-                <property name="start-widget">
-                  <object class="GtkBox">
-                    <property name="spacing">6</property>
-                    <child>
-                      <object class="GtkButton" id="replace_queue">
-                        <property name="tooltip-text" translatable="true">Replace the queue with the selected songs</property>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="spacing">6</property>
-                            <child>
-                              <object class="GtkImage">
-                                <property name="icon-name">play-symbolic</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="replace_queue_text">
-                                <property name="label" translatable="true">Play all</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                        <style>
-                          <class name="suggested-action"/>
-                        </style>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkButton" id="append_queue">
-                        <property name="tooltip-text" translatable="true">Add selected songs to the end of the queue</property>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="spacing">6</property>
-                            <child>
-                              <object class="GtkImage">
-                                <property name="icon-name">list-add-symbolic</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="append_queue_text">
-                                <property name="label" translatable="true">Queue all</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="EuphonicaAddToPlaylistButton" id="add_to_playlist"/>
-                    </child>
+              <object class="AdwBreakpointBin">
+                <property name="width-request">240</property>
+                <property name="height-request">16</property>
+                <child>
+                  <object class="AdwBreakpoint">
+                    <condition>max-width: 550px</condition>
+                    <setter object="action_btns" property="orientation">1</setter>
                   </object>
-                </property>
-                <property name="end-widget">
-                  <object class="GtkBox">
-                    <property name="spacing">6</property>
-                    <child>
-                      <object class="GtkButton" id="sel_all">
-                        <style>
-                          <class name="circular"/>
-                        </style>
-                        <property name="icon-name">edit-select-all-symbolic</property>
-                        <style>
-                          <class name="circular"/>
-                          <class name="flat"/>
-                        </style>
+                </child>
+                <property name="child">
+                  <object class="GtkCenterBox">
+                    <style>
+                      <class name="padding-6"/>
+                    </style>
+                    <property name="start-widget">
+                      <object class="GtkBox" id="action_btns">
+                        <property name="spacing">6</property>
+                        <child>
+                          <object class="GtkButton" id="replace_queue">
+                            <property name="tooltip-text" translatable="true">Replace the queue with the selected songs</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="spacing">6</property>
+                                <child>
+                                  <object class="GtkImage">
+                                    <property name="icon-name">play-symbolic</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="replace_queue_text">
+                                    <property name="label" translatable="true">Play all</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <style>
+                              <class name="suggested-action"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="append_queue">
+                            <property name="tooltip-text" translatable="true">Add selected songs to the end of the queue</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="spacing">6</property>
+                                <child>
+                                  <object class="GtkImage">
+                                    <property name="icon-name">list-add-symbolic</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="append_queue_text">
+                                    <property name="label" translatable="true">Queue all</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="EuphonicaAddToPlaylistButton" id="add_to_playlist"/>
+                        </child>
                       </object>
-                    </child>
-                    <child>
-                      <object class="GtkButton" id="sel_none">
-                        <style>
-                          <class name="circular"/>
-                        </style>
-                        <property name="icon-name">edit-select-none-symbolic</property>
-                        <style>
-                          <class name="circular"/>
-                          <class name="flat"/>
-                        </style>
+                    </property>
+                    <property name="end-widget">
+                      <object class="GtkBox">
+                        <property name="valign">end</property>
+                        <property name="spacing">6</property>
+                        <child>
+                          <object class="GtkButton" id="sel_all">
+                            <style>
+                              <class name="circular"/>
+                            </style>
+                            <property name="icon-name">edit-select-all-symbolic</property>
+                            <style>
+                              <class name="circular"/>
+                              <class name="flat"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="sel_none">
+                            <style>
+                              <class name="circular"/>
+                            </style>
+                            <property name="icon-name">edit-select-none-symbolic</property>
+                            <style>
+                              <class name="circular"/>
+                              <class name="flat"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkToggleButton" id="collapse_infobox">
+                            <property name="icon-name">up-symbolic</property>
+                            <style>
+                              <class name="circular"/>
+                              <class name="flat"/>
+                            </style>
+                          </object>
+                        </child>
                       </object>
-                    </child>
-                    <child>
-                      <object class="GtkToggleButton" id="collapse_infobox">
-                        <property name="icon-name">up-symbolic</property>
-                        <style>
-                          <class name="circular"/>
-                          <class name="flat"/>
-                        </style>
-                      </object>
-                    </child>
+                    </property>
                   </object>
                 </property>
               </object>

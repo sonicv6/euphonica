@@ -97,12 +97,11 @@
                 <property name="child">
                   <object class="AdwBreakpointBin">
                     <property name="width-request">240</property>
+                    <property name="height-request">100</property>
                     <child>
                       <object class="AdwBreakpoint">
                         <condition>max-width: 550px</condition>
-                        <setter object="infobox" property="orientation">1</setter>
                         <setter object="infobox_text" property="margin-start">12</setter>
-                        <setter object="cover" property="pixel-size">128</setter>
                       </object>
                     </child>
                     <property name="child">

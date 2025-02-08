@@ -9,6 +9,7 @@
     <property name="hexpand">true</property>
     <child>
       <object class="AdwMultiLayoutView" id="multi_layout_view">
+        <property name="hexpand">true</property>
         <style>
           <class name="player-bar"/>
         </style>
@@ -115,39 +116,54 @@
           <object class="AdwLayout">
             <property name="name">mini</property>
             <property name="content">
-              <object class="GtkCenterBox">
-                <property name="start-widget">
-                  <object class="GtkBox">
-                    <property name="spacing">6</property>
-                    <property name="hexpand">true</property>
-                    <child>
-                      <object class="AdwLayoutSlot">
-                        <property name="id">album-art</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwLayoutSlot">
-                        <property name="id">info-box</property>
-                      </object>
-                    </child>
+              <object class="AdwBreakpointBin">
+                <property name="width-request">240</property>
+                <property name="height-request">24</property>
+                <child>
+                  <object class="AdwBreakpoint">
+                    <condition>max-width: 400px</condition>
+                    <setter object="mini_layout" property="orientation">1</setter>
+                    <setter object="mini_layout" property="spacing">3</setter>
+                    <setter object="playback_controls_wrapper" property="hexpand">1</setter>
+                    <setter object="playback_controls_wrapper" property="halign">center</setter>
                   </object>
-                </property>
-                <property name="end-widget">
-                  <object class="GtkBox">
-                    <property name="spacing">6</property>
+                </child>
+                <property name="child">
+                  <object class="GtkBox" id="mini_layout">
                     <child>
-                      <object class="AdwLayoutSlot">
-                        <property name="id">playback-controls</property>
+                      <object class="GtkBox">
+                        <property name="spacing">6</property>
+                        <property name="hexpand">true</property>
+                        <child>
+                          <object class="AdwLayoutSlot">
+                            <property name="id">album-art</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwLayoutSlot">
+                            <property name="id">info-box</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
-                      <object class="GtkButton" id="goto_pane">
-                        <property name="tooltip-text">Jump to Now Playing</property>
-                        <style>
-                          <class name="flat"/>
-                        </style>
-                        <property name="visible">false</property>
-                        <property name="icon-name">sidebar-show-right-symbolic</property>
+                      <object class="GtkBox" id="playback_controls_wrapper">
+                        <property name="spacing">6</property>
+                        <child>
+                          <object class="AdwLayoutSlot">
+                            <property name="id">playback-controls</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="goto_pane">
+                            <property name="tooltip-text">Jump to Now Playing</property>
+                            <style>
+                              <class name="flat"/>
+                            </style>
+                            <property name="visible">false</property>
+                            <property name="icon-name">sidebar-show-right-symbolic</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
