@@ -181,18 +181,21 @@
                 </child>
                 <child>
                   <object class="GtkBox">
-                    <style>
-                      <class name="toolbar"/>
-                    </style>
                     <property name="spacing">6</property>
                     <property name="halign">center</property>
                     <child>
                       <object class="GtkButton" id="rg_btn">
+                        <style>
+                          <class name="flat"/>
+                        </style>
                         <property name="icon-name">rg-off-symbolic</property>
                       </object>
                     </child>
                     <child>
                       <object class="GtkMenuButton" id="crossfade_btn">
+                        <style>
+                          <class name="flat"/>
+                        </style>
                         <property name="icon-name">crossfade-off-symbolic</property>
                         <property name="tooltip-text" translatable="true">Crossfade</property>
                         <property name="popover">crossfade_popover</property>
@@ -200,6 +203,9 @@
                     </child>
                     <child>
                       <object class="GtkMenuButton" id="mixramp_btn">
+                        <style>
+                          <class name="flat"/>
+                        </style>
                         <property name="icon-name">mixramp-off-symbolic</property>
                         <property name="tooltip-text" translatable="true">MixRamp</property>
                         <property name="popover">mixramp_popover</property>

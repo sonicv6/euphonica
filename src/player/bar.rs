@@ -38,12 +38,14 @@ mod imp {
     #[template(resource = "/org/euphonica/Euphonica/gtk/player/bar.ui")]
     pub struct PlayerBar {
         #[template_child]
-        pub layout: TemplateChild<RatioCenterBox>,
+        pub multi_layout_view: TemplateChild<adw::MultiLayoutView>,
+        #[template_child]
+        pub center_layout: TemplateChild<RatioCenterBox>,
         // Left side: current song info
         #[template_child]
-        pub info_box: TemplateChild<gtk::Box>,
-        #[template_child]
         pub albumart: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub info_box: TemplateChild<gtk::Box>,
         #[template_child]
         pub song_name: TemplateChild<Marquee>,
         #[template_child]
@@ -106,6 +108,19 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
             let obj = self.obj();
+
+            obj.bind_property("collapsed", &self.multi_layout_view.get(), "layout-name")
+                .transform_to(
+                    |_, collapsed: bool| {
+                        if collapsed {
+                            Some("mini")
+                        } else {
+                            Some("full")
+                        }
+                    },
+                )
+                .sync_create()
+                .build();
 
             obj.bind_property("collapsed", &self.albumart.get(), "pixel-size")
                 .transform_to(
@@ -258,6 +273,13 @@ impl PlayerBar {
 
     fn bind_state(&self, player: &Player) {
         let imp = self.imp();
+        let album_art = imp.albumart.get();
+        player
+            .bind_property("playback-state", &album_art, "visible")
+            .transform_to(|_, state: PlaybackState| Some(state != PlaybackState::Stopped))
+            .sync_create()
+            .build();
+
         let info_box = imp.info_box.get();
         player
             .bind_property("playback-state", &info_box, "visible")
