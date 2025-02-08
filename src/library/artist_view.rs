@@ -1,29 +1,23 @@
-use std::{
-    rc::Rc,
-    cell::Cell,
-    cmp::Ordering
-};
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{
-    gio, glib::{self, closure_local}, CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection
+    gio,
+    glib::{self, closure_local},
+    CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection,
 };
+use std::{cell::Cell, cmp::Ordering, rc::Rc};
 
 use glib::clone;
 
-use super::{
-    Library,
-    ArtistCell,
-    ArtistContentView
-};
+use super::{ArtistCell, ArtistContentView, Library};
 use crate::{
-    cache::Cache, client::{ClientState, ConnectionState}, common::Artist, utils::{g_cmp_str_options, g_search_substr, settings_manager}
+    cache::Cache,
+    client::{ClientState, ConnectionState},
+    common::Artist,
+    utils::{g_cmp_str_options, g_search_substr, settings_manager},
 };
 
 mod imp {
-    
-
-    
 
     use super::*;
 
@@ -62,7 +56,7 @@ mod imp {
         // items.
         // If search term is now shorter, only check non-matching items to see
         // if they now match.
-        pub last_search_len: Cell<usize>
+        pub last_search_len: Cell<usize>,
     }
 
     impl Default for ArtistView {
@@ -90,7 +84,7 @@ mod imp {
                 // items.
                 // If search term is now shorter, only check non-matching items to see
                 // if they now match.
-                last_search_len: Cell::new(0)
+                last_search_len: Cell::new(0),
             }
         }
     }
@@ -180,52 +174,44 @@ impl ArtistView {
         ));
         let sort_dir = self.imp().sort_dir.get();
         state
-            .bind(
-                "sort-direction",
-                &sort_dir,
-                "icon-name"
-            )
+            .bind("sort-direction", &sort_dir, "icon-name")
             .get_only()
-            .mapping(|dir, _| {
-                match dir.get::<String>().unwrap().as_ref() {
-                    "asc" => Some("view-sort-ascending-symbolic".to_value()),
-                    _ => Some("view-sort-descending-symbolic".to_value())
-                }
+            .mapping(|dir, _| match dir.get::<String>().unwrap().as_ref() {
+                "asc" => Some("view-sort-ascending-symbolic".to_value()),
+                _ => Some("view-sort-descending-symbolic".to_value()),
             })
             .build();
 
-        self.imp().sorter.set_sort_func(
-            clone!(
-                #[strong]
-                library_settings,
-                #[strong]
-                state,
-                move |obj1, obj2| {
-                    let artist1 = obj1
-                        .downcast_ref::<Artist>()
-                        .expect("Sort obj has to be a common::Artist.");
+        self.imp().sorter.set_sort_func(clone!(
+            #[strong]
+            library_settings,
+            #[strong]
+            state,
+            move |obj1, obj2| {
+                let artist1 = obj1
+                    .downcast_ref::<Artist>()
+                    .expect("Sort obj has to be a common::Artist.");
 
-                    let artist2 = obj2
-                        .downcast_ref::<Artist>()
-                        .expect("Sort obj has to be a common::Artist.");
+                let artist2 = obj2
+                    .downcast_ref::<Artist>()
+                    .expect("Sort obj has to be a common::Artist.");
 
-                    // Should we sort ascending?
-                    let asc = state.enum_("sort-direction") > 0;
-                    // Should the sorting be case-sensitive, i.e. uppercase goes first?
-                    let case_sensitive = library_settings.boolean("sort-case-sensitive");
-                    // Should nulls be put first or last?
-                    let nulls_first = library_settings.boolean("sort-nulls-first");
+                // Should we sort ascending?
+                let asc = state.enum_("sort-direction") > 0;
+                // Should the sorting be case-sensitive, i.e. uppercase goes first?
+                let case_sensitive = library_settings.boolean("sort-case-sensitive");
+                // Should nulls be put first or last?
+                let nulls_first = library_settings.boolean("sort-nulls-first");
 
-                    g_cmp_str_options(
-                        Some(artist1.get_name()),
-                        Some(artist2.get_name()),
-                        nulls_first,
-                        asc,
-                        case_sensitive
-                    )
-                }
-            )
-        );
+                g_cmp_str_options(
+                    Some(artist1.get_name()),
+                    Some(artist2.get_name()),
+                    nulls_first,
+                    asc,
+                    case_sensitive,
+                )
+            }
+        ));
 
         // Update when changing sort settings
         state.connect_changed(
@@ -238,7 +224,7 @@ impl ArtistView {
                     // Don't actually sort, just flip the results :)
                     this.imp().sorter.changed(gtk::SorterChange::Inverted);
                 }
-            )
+            ),
         );
     }
 
@@ -246,61 +232,59 @@ impl ArtistView {
         let settings = settings_manager();
         let library_settings = settings.child("library");
         // Set up search filter
-        self.imp().search_filter.set_filter_func(
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                #[strong]
-                library_settings,
-                #[upgrade_or]
-                true,
-                move |obj| {
-                    let artist = obj
-                        .downcast_ref::<Artist>()
-                        .expect("Search obj has to be a common::Artist.");
+        self.imp().search_filter.set_filter_func(clone!(
+            #[weak(rename_to = this)]
+            self,
+            #[strong]
+            library_settings,
+            #[upgrade_or]
+            true,
+            move |obj| {
+                let artist = obj
+                    .downcast_ref::<Artist>()
+                    .expect("Search obj has to be a common::Artist.");
 
-                    let search_term = this.imp().search_entry.text();
-                    if search_term.is_empty() {
-                        return true;
-                    }
-
-                    // Should the searching be case-sensitive?
-                    let case_sensitive = library_settings.boolean("search-case-sensitive");
-                    // Vary behaviour depending on dropdown
-                    g_search_substr(
-                        Some(artist.get_name()),
-                        &search_term,
-                        case_sensitive
-                    )
+                let search_term = this.imp().search_entry.text();
+                if search_term.is_empty() {
+                    return true;
                 }
-            )
-        );
+
+                // Should the searching be case-sensitive?
+                let case_sensitive = library_settings.boolean("search-case-sensitive");
+                // Vary behaviour depending on dropdown
+                g_search_substr(Some(artist.get_name()), &search_term, case_sensitive)
+            }
+        ));
 
         // Connect search entry to filter. Filter will later be put in GtkSearchModel.
         // That GtkSearchModel will listen to the filter's changed signal.
         let search_entry = self.imp().search_entry.get();
-        search_entry.connect_search_changed(
-            clone!(
-                #[weak(rename_to = this)]
-                self,
-                move |entry| {
-                    let text = entry.text();
-                    let new_len = text.len();
-                    let old_len = this.imp().last_search_len.replace(new_len);
-                    match new_len.cmp(&old_len) {
-                        Ordering::Greater => {
-                            this.imp().search_filter.changed(gtk::FilterChange::MoreStrict);
-                        }
-                        Ordering::Less => {
-                            this.imp().search_filter.changed(gtk::FilterChange::LessStrict);
-                        }
-                        Ordering::Equal => {
-                            this.imp().search_filter.changed(gtk::FilterChange::Different);
-                        }
+        search_entry.connect_search_changed(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |entry| {
+                let text = entry.text();
+                let new_len = text.len();
+                let old_len = this.imp().last_search_len.replace(new_len);
+                match new_len.cmp(&old_len) {
+                    Ordering::Greater => {
+                        this.imp()
+                            .search_filter
+                            .changed(gtk::FilterChange::MoreStrict);
+                    }
+                    Ordering::Less => {
+                        this.imp()
+                            .search_filter
+                            .changed(gtk::FilterChange::LessStrict);
+                    }
+                    Ordering::Equal => {
+                        this.imp()
+                            .search_filter
+                            .changed(gtk::FilterChange::Different);
                     }
                 }
-            )
-        );
+            }
+        ));
     }
 
     fn on_artist_clicked(&self, artist: Artist, library: Library) {
@@ -332,18 +316,21 @@ impl ArtistView {
         // Refresh upon reconnection.
         // User-initiated refreshes will also trigger a reconnection, which will
         // in turn trigger this.
-        client_state.connect_notify_local(Some("connection-state"), clone!(
-            #[weak(rename_to = this)]
-            self,
-            #[weak]
-            library,
-            move |state, _| {
-                if state.get_connection_state() == ConnectionState::Connected {
-                    this.clear();
-                    library.init_artists(false);
+        client_state.connect_notify_local(
+            Some("connection-state"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                #[weak]
+                library,
+                move |state, _| {
+                    if state.get_connection_state() == ConnectionState::Connected {
+                        this.clear();
+                        library.init_artists(false);
+                    }
                 }
-            }
-        ));
+            ),
+        );
         client_state.connect_closure(
             "artist-basic-info-downloaded",
             false,
@@ -353,7 +340,7 @@ impl ArtistView {
                 move |_: ClientState, artist: Artist| {
                     this.add_artist(artist);
                 }
-            )
+            ),
         );
         // Setup search bar
         let search_bar = self.imp().search_bar.get();
@@ -362,18 +349,18 @@ impl ArtistView {
 
         let search_btn = self.imp().search_btn.get();
         search_btn
-            .bind_property(
-                "active",
-                &search_bar,
-                "search-mode-enabled"
-            )
+            .bind_property("active", &search_bar, "search-mode-enabled")
             .sync_create()
             .build();
 
         // Chain search & sort. Put sort after search to reduce number of sort items.
-        let search_model = gtk::FilterListModel::new(Some(self.imp().artist_list.clone()), Some(self.imp().search_filter.clone()));
+        let search_model = gtk::FilterListModel::new(
+            Some(self.imp().artist_list.clone()),
+            Some(self.imp().search_filter.clone()),
+        );
         search_model.set_incremental(true);
-        let sort_model = gtk::SortListModel::new(Some(search_model), Some(self.imp().sorter.clone()));
+        let sort_model =
+            gtk::SortListModel::new(Some(search_model), Some(self.imp().sorter.clone()));
         sort_model.set_incremental(true);
         let sel_model = SingleSelection::new(Some(sort_model));
 
@@ -391,66 +378,58 @@ impl ArtistView {
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem");
                 let artist_cell = ArtistCell::new(&item, cache);
-                item
-                    .set_child(Some(&artist_cell));
+                item.set_child(Some(&artist_cell));
             }
         ));
 
-        factory.connect_teardown(
-            |_, list_item| {
-                // Get `AlbumCell` from `ListItem` (the UI widget)
-                let child: Option<ArtistCell> = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .child()
-                    .and_downcast::<ArtistCell>();
-                if let Some(c) = child {
-                    c.teardown();
-                }
+        factory.connect_teardown(|_, list_item| {
+            // Get `AlbumCell` from `ListItem` (the UI widget)
+            let child: Option<ArtistCell> = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .child()
+                .and_downcast::<ArtistCell>();
+            if let Some(c) = child {
+                c.teardown();
             }
-        );
+        });
 
         // Artist name has already been taken care of by the above property expression.
         // Here we only need to start listening to the cache for artist images.
-        factory.connect_bind(
-            move |_, list_item| {
-                // Get `Artist` from `ListItem` (that is, the data side)
-                let item: Artist = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .item()
-                    .and_downcast::<Artist>()
-                    .expect("The item has to be a common::Artist.");
+        factory.connect_bind(move |_, list_item| {
+            // Get `Artist` from `ListItem` (that is, the data side)
+            let item: Artist = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .item()
+                .and_downcast::<Artist>()
+                .expect("The item has to be a common::Artist.");
 
-                // Get `ArtistCell` from `ListItem` (the UI widget)
-                let child: ArtistCell = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .child()
-                    .and_downcast::<ArtistCell>()
-                    .expect("The child has to be an `ArtistCell`.");
+            // Get `ArtistCell` from `ListItem` (the UI widget)
+            let child: ArtistCell = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .child()
+                .and_downcast::<ArtistCell>()
+                .expect("The child has to be an `ArtistCell`.");
 
-                // Within this binding fn is where the cached album art texture gets used.
-                child.bind(&item);
-            }
-        );
-
+            // Within this binding fn is where the cached album art texture gets used.
+            child.bind(&item);
+        });
 
         // When cell goes out of sight, unbind from item to allow reuse with another.
         // Remember to also unset the thumbnail widget's texture to potentially free it from memory.
-        factory.connect_unbind(
-            move |_, list_item| {
-                // Get `ArtistCell` from `ListItem` (the UI widget)
-                let child: ArtistCell = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .child()
-                    .and_downcast::<ArtistCell>()
-                    .expect("The child has to be an `ArtistCell`.");
-                // Un-listen to cache, so that we don't update album art for cells that are not in view
-                child.unbind();
-            }
-        );
+        factory.connect_unbind(move |_, list_item| {
+            // Get `ArtistCell` from `ListItem` (the UI widget)
+            let child: ArtistCell = list_item
+                .downcast_ref::<ListItem>()
+                .expect("Needs to be ListItem")
+                .child()
+                .and_downcast::<ArtistCell>()
+                .expect("The child has to be an `ArtistCell`.");
+            // Un-listen to cache, so that we don't update album art for cells that are not in view
+            child.unbind();
+        });
 
         // Set the factory of the list view
         self.imp().grid_view.set_factory(Some(&factory));
@@ -469,8 +448,8 @@ impl ArtistView {
                     .expect("The item has to be a `common::Artist`.");
                 println!("Clicked on {:?}", &artist);
                 this.on_artist_clicked(artist, library);
-            })
-        );
+            }
+        ));
     }
 
     fn add_artist(&self, artist: Artist) {

@@ -1,5 +1,5 @@
-use once_cell::sync::Lazy;
 use gtk::gdk::Texture;
+use once_cell::sync::Lazy;
 
 pub static ALBUMART_PLACEHOLDER: Lazy<Texture> = Lazy::new(|| {
     println!("Loading placeholder texture...");

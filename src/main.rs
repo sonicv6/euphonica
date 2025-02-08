@@ -18,26 +18,26 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 mod application;
-mod common;
 mod cache;
-mod player;
-mod config;
-mod window;
 mod client;
-mod meta_providers;
+mod common;
+mod config;
 mod library;
+mod meta_providers;
+mod player;
+mod preferences;
 mod sidebar;
 mod utils;
-mod preferences;
+mod window;
 
 use self::application::EuphonicaApplication;
 use self::window::EuphonicaWindow;
 
 use config::{GETTEXT_PACKAGE, LOCALEDIR, PKGDATADIR};
-use gettextrs::{bind_textdomain_codeset, bindtextdomain, textdomain};
-use gtk::{gio, glib, gdk, CssProvider};
-use gtk::prelude::*;
 use gdk::Display;
+use gettextrs::{bind_textdomain_codeset, bindtextdomain, textdomain};
+use gtk::prelude::*;
+use gtk::{gdk, gio, glib, CssProvider};
 
 fn load_css() {
     // Load the CSS file and add it to the provider

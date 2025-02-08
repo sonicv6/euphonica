@@ -1,16 +1,6 @@
-use gtk::{
-    glib,
-    prelude::*,
-    subclass::prelude::*,
-    CompositeTemplate
-};
 use adw::prelude::*;
-use glib::{
-    clone,
-    Object,
-    Properties
-};
-
+use glib::{clone, Object, Properties};
+use gtk::{glib, subclass::prelude::*, CompositeTemplate};
 
 use crate::utils::meta_provider_settings;
 
@@ -36,7 +26,7 @@ mod imp {
         #[property(get, set)]
         pub priority: Cell<i32>,
         #[property(get, set)]
-        pub key: RefCell<String>
+        pub key: RefCell<String>,
     }
 
     // The central trait for subclassing a GObject
@@ -77,8 +67,8 @@ glib::wrapper! {
 impl ProviderRow {
     pub fn new(
         controller: &IntegrationsPreferences,
-        key: &str,  // For accessing GSettings
-        priority: i32
+        key: &str, // For accessing GSettings
+        priority: i32,
     ) -> Self {
         let res: Self = Object::builder().build();
         let _ = res.imp().priority.replace(priority);
@@ -88,13 +78,10 @@ impl ProviderRow {
         // At minimum, each provider's GSettings schema must contain these two keys:
         // - "name": a GUI-friendly name string (s)
         // - "enabled" (b)
-        res.upcast_ref::<adw::ActionRow>().set_title(settings.string("name").as_str());
+        res.upcast_ref::<adw::ActionRow>()
+            .set_title(settings.string("name").as_str());
         settings
-            .bind(
-                "enabled",
-                &res.imp().enabled.get(),
-                "active"
-            )
+            .bind("enabled", &res.imp().enabled.get(), "active")
             .build();
         res
     }

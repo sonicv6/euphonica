@@ -1,19 +1,18 @@
-use std::{rc::Rc, str::FromStr};
 use keyring::{Entry, Error as KeyringError};
+use std::{rc::Rc, str::FromStr};
 
-use adw::subclass::prelude::*;
 use adw::prelude::*;
-use gtk::{
-    glib,
-    CompositeTemplate
-};
+use adw::subclass::prelude::*;
+use gtk::{glib, CompositeTemplate};
 
 use glib::clone;
 
 use mpd::status::AudioFormat;
 
 use crate::{
-    client::{ClientState, ConnectionState, MpdWrapper}, player::{FftStatus, Player}, utils
+    client::{ClientState, ConnectionState, MpdWrapper},
+    player::{FftStatus, Player},
+    utils,
 };
 
 const FFT_SIZES: &'static [u32; 4] = &[512, 1024, 2048, 4096];
@@ -52,7 +51,7 @@ mod imp {
         #[template_child]
         pub fifo_status: TemplateChild<adw::ActionRow>,
         #[template_child]
-        pub fifo_reconnect: TemplateChild<gtk::Button>
+        pub fifo_reconnect: TemplateChild<gtk::Button>,
     }
 
     #[glib::object_subclass]
@@ -96,17 +95,17 @@ impl ClientPreferences {
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
-            },
+            }
             ConnectionState::Connecting => {
                 self.imp().mpd_status.set_subtitle("Connecting...");
                 self.imp().reconnect.set_sensitive(false);
-            },
+            }
             ConnectionState::Unauthenticated => {
                 self.imp().mpd_status.set_subtitle("Authentication failed");
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
-            },
+            }
             ConnectionState::CredentialStoreError => {
                 self.imp().mpd_status.set_subtitle("Credential store error");
                 if !self.imp().mpd_port.has_css_class("error") {
@@ -118,7 +117,7 @@ impl ClientPreferences {
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
-            },
+            }
             ConnectionState::Connected => {
                 self.imp().mpd_status.set_subtitle("Connected");
                 if !self.imp().mpd_port.has_css_class("error") {
@@ -142,7 +141,8 @@ impl ClientPreferences {
         // As such we won't bind the widgets directly to the settings.
         let conn_settings = settings.child("client");
         imp.mpd_host.set_text(&conn_settings.string("mpd-host"));
-        imp.mpd_port.set_text(&conn_settings.uint("mpd-port").to_string());
+        imp.mpd_port
+            .set_text(&conn_settings.uint("mpd-port").to_string());
         let maybe_keyring_entry = Entry::new("euphonica", "mpd-password");
         if let Ok(ref keyring_entry) = maybe_keyring_entry {
             // At startup the password entry is disabled with a tooltip stating that
@@ -169,8 +169,7 @@ impl ClientPreferences {
                         entry.add_css_class("error");
                         this.imp().reconnect.set_sensitive(false);
                     }
-                }
-                else if entry.has_css_class("error") {
+                } else if entry.has_css_class("error") {
                     entry.remove_css_class("error");
                     this.imp().reconnect.set_sensitive(true);
                 }
@@ -187,7 +186,7 @@ impl ClientPreferences {
                 move |cs, _| {
                     this.on_connection_state_changed(cs);
                 }
-            )
+            ),
         );
 
         imp.reconnect.connect_clicked(clone!(
@@ -199,18 +198,19 @@ impl ClientPreferences {
             client,
             move |_| {
                 let _ = conn_settings.set_string("mpd-host", &this.imp().mpd_host.text());
-                let _ = conn_settings.set_uint("mpd-port", this.imp().mpd_port.text().parse::<u32>().unwrap());
+                let _ = conn_settings.set_uint(
+                    "mpd-port",
+                    this.imp().mpd_port.text().parse::<u32>().unwrap(),
+                );
 
                 if let Ok(ref keyring_entry) = maybe_keyring_entry {
                     let password = this.imp().mpd_password.text();
                     if password.is_empty() {
-                        if let Err(KeyringError::NoEntry) = keyring_entry.delete_credential() {}
-                        else {
+                        if let Err(KeyringError::NoEntry) = keyring_entry.delete_credential() {
+                        } else {
                             panic!("Unable to clear MPD password from keyring");
                         }
-
-                    }
-                    else {
+                    } else {
                         keyring_entry
                             .set_password(password.as_str())
                             .expect("Unable to save MPD password to keyring");
@@ -221,11 +221,7 @@ impl ClientPreferences {
         ));
         let mpd_download_album_art = imp.mpd_download_album_art.get();
         conn_settings
-            .bind(
-                "mpd-download-album-art",
-                &mpd_download_album_art,
-                "active"
-            )
+            .bind("mpd-download-album-art", &mpd_download_album_art, "active")
             .build();
 
         // FIFO
@@ -238,11 +234,13 @@ impl ClientPreferences {
                 move |player, _| {
                     this.on_fifo_changed(player.fft_status());
                 }
-            )
+            ),
         );
         let player_settings = settings.child("player");
-        imp.fifo_path.set_text(&conn_settings.string("mpd-fifo-path"));
-        imp.fifo_format.set_text(&conn_settings.string("mpd-fifo-format"));
+        imp.fifo_path
+            .set_text(&conn_settings.string("mpd-fifo-path"));
+        imp.fifo_format
+            .set_text(&conn_settings.string("mpd-fifo-format"));
 
         // TODO: more input validation
         // Only accept valid MPD format strings
@@ -255,26 +253,26 @@ impl ClientPreferences {
                         entry.add_css_class("error");
                         this.imp().fifo_reconnect.set_sensitive(false);
                     }
-                }
-                else if entry.has_css_class("error") {
+                } else if entry.has_css_class("error") {
                     entry.remove_css_class("error");
                     this.imp().fifo_reconnect.set_sensitive(true);
                 }
             }
         ));
 
-        imp.fifo_fps.set_value(player_settings.uint("visualizer-fps") as f64);
+        imp.fifo_fps
+            .set_value(player_settings.uint("visualizer-fps") as f64);
         // 512 1024 2048 4096
-        imp.fft_n_samples.set_selected(
-            match &player_settings.uint("visualizer-fft-samples") {
+        imp.fft_n_samples
+            .set_selected(match &player_settings.uint("visualizer-fft-samples") {
                 512 => 0,
                 1024 => 1,
                 2048 => 2,
                 4096 => 3,
-                _ => unreachable!()
-            }
-        );
-        imp.fft_n_bins.set_value(player_settings.uint("visualizer-spectrum-bins") as f64);
+                _ => unreachable!(),
+            });
+        imp.fft_n_bins
+            .set_value(player_settings.uint("visualizer-spectrum-bins") as f64);
         imp.fifo_reconnect.connect_clicked(clone!(
             #[weak(rename_to = this)]
             self,
@@ -299,11 +297,14 @@ impl ClientPreferences {
                 player_settings
                     .set_uint(
                         "visualizer-fft-samples",
-                        FFT_SIZES[imp.fft_n_samples.selected() as usize]
+                        FFT_SIZES[imp.fft_n_samples.selected() as usize],
                     )
                     .expect("Cannot save FFT settings");
                 player_settings
-                    .set_uint("visualizer-spectrum-bins", imp.fft_n_bins.value().round() as u32)
+                    .set_uint(
+                        "visualizer-spectrum-bins",
+                        imp.fft_n_bins.value().round() as u32,
+                    )
                     .expect("Cannot save visualizer settings");
                 player.reconnect_fifo();
             }

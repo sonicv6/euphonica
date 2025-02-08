@@ -1,22 +1,23 @@
-mod controller;
-mod queue_row;
-mod queue_view;
 mod bar;
-mod pane;
+mod controller;
+mod fft;
 mod knob;
 mod output;
-mod seekbar;
+mod pane;
 mod playback_controls;
-mod fft;
+mod queue_row;
+mod queue_view;
+mod ratio_center_box;
+mod seekbar;
 
 use knob::VolumeKnob;
-use seekbar::Seekbar;
-use queue_row::QueueRow;
 use output::MpdOutput;
+use queue_row::QueueRow;
+use ratio_center_box::RatioCenterBox;
 
 pub use bar::PlayerBar;
+pub use controller::PlaybackState;
+pub use controller::{FftStatus, PlaybackFlow, Player};
 pub use pane::PlayerPane;
 pub use playback_controls::PlaybackControls;
-pub use controller::{Player, PlaybackFlow, FftStatus};
 pub use queue_view::QueueView;
-pub use controller::PlaybackState;
