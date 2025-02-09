@@ -1,9 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component type="desktop">
-	<id>io.github.htkhiem.Euphonica.desktop</id>
-	<metadata_license>CC0-1.0</metadata_license>
-	<project_license>GPL-3.0-or-later</project_license>
-	<description>
-	  <p>No description</p>
-	</description>
+<component type="desktop-application">
+  <id>io.github.htkhiem.Euphonica</id>
+
+  <name>Euphonica</name>
+  <summary>GTK4 libadwaita MPD client</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+
+  <description>
+    <p>
+      MPD client with integrated spectrum visualiser, metadata downloading &amp; more.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.htkhiem.Euphonica.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://i.ibb.co/ksWxmgCR/album-view-light.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://i.ibb.co/zTFHm0kg/queue-view-dark.png</image>
+    </screenshot>
+  </screenshots>
 </component>
