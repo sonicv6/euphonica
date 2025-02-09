@@ -297,24 +297,16 @@
                                     <property name="spacing">6</property>
                                     <child>
                                       <object class="GtkButton" id="sel_all">
-                                        <style>
-                                          <class name="circular"/>
-                                        </style>
                                         <property name="icon-name">edit-select-all-symbolic</property>
                                         <style>
-                                          <class name="circular"/>
                                           <class name="flat"/>
                                         </style>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkButton" id="sel_none">
-                                        <style>
-                                          <class name="circular"/>
-                                        </style>
                                         <property name="icon-name">edit-select-none-symbolic</property>
                                         <style>
-                                          <class name="circular"/>
                                           <class name="flat"/>
                                         </style>
                                       </object>
@@ -386,7 +378,6 @@
                         <property name="icon-name">up-symbolic</property>
                         <property name="valign">center</property>
                         <style>
-                          <class name="circular"/>
                           <class name="flat"/>
                         </style>
                       </object>

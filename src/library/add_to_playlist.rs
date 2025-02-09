@@ -46,6 +46,8 @@ mod imp {
         pub sel_model: OnceCell<gtk::SingleSelection>, // For playlists
         pub library: OnceCell<Library>,
         pub song_sel_model: OnceCell<gtk::MultiSelection>,
+        #[property(get, set)]
+        pub collapsed: Cell<bool>
     }
 
     #[glib::object_subclass]

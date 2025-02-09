@@ -22,8 +22,11 @@
                 <condition>max-width: 550px</condition>
                 <setter object="infobox" property="orientation">1</setter>
                 <setter object="infobox_text" property="margin-start">12</setter>
+                <setter object="discography_text" property="visible">false</setter>
+                <setter object="all_songs_text" property="visible">false</setter>
                 <setter object="replace_queue_text" property="visible">false</setter>
                 <setter object="append_queue_text" property="visible">false</setter>
+                <setter object="add_to_playlist" property="collapsed">true</setter>
               </object>
             </child>
             <property name="child">
@@ -169,20 +172,59 @@
                   <!-- Sub-view switcher. Switches between album sub-view and all songs sub-view. -->
                   <object class="GtkCenterBox">
                     <style>
-                      <class name="padding-6"/>
+                      <class name="toolbar"/>
                     </style>
-                    <property name="center-widget">
-                      <object class="GtkStackSwitcher">
-                        <property name="stack">subview_stack</property>
+                    <property name="start-widget">
+                      <object class="GtkBox">
+                        <style>
+                          <class name="linked"/>
+                        </style>
+                        <property name="margin-end">6</property>
+                        <child>
+                          <object class="GtkToggleButton" id="discography_btn">
+                            <property name="active">true</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="spacing">6</property>
+                                <child>
+                                  <object class="GtkImage">
+                                    <property name="icon-name">library-music-symbolic</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="discography_text">
+                                    <property name="label" translatable="true">Discography</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkToggleButton" id="all_songs_btn">
+                            <property name="group">discography_btn</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="spacing">6</property>
+                                <child>
+                                  <object class="GtkImage">
+                                    <property name="icon-name">music-note-single-symbolic</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel" id="all_songs_text">
+                                    <property name="label" translatable="true">All Songs</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
                     </property>
                     <property name="end-widget">
                       <object class="GtkToggleButton" id="collapse_infobox">
                         <property name="icon-name">up-symbolic</property>
-                        <style>
-                          <class name="circular"/>
-                          <class name="flat"/>
-                        </style>
                       </object>
                     </property>
                   </object>

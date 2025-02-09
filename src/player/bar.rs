@@ -47,6 +47,10 @@ mod imp {
         #[template_child]
         pub info_box: TemplateChild<gtk::Box>,
         #[template_child]
+        pub infobox_revealer: TemplateChild<gtk::Revealer>,
+        #[template_child]
+        pub mini_infobox_revealer: TemplateChild<gtk::Revealer>,
+        #[template_child]
         pub song_name: TemplateChild<Marquee>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
@@ -273,16 +277,18 @@ impl PlayerBar {
 
     fn bind_state(&self, player: &Player) {
         let imp = self.imp();
-        let album_art = imp.albumart.get();
+
+        let infobox_revealer = imp.infobox_revealer.get();
+        let mini_infobox_revealer = imp.mini_infobox_revealer.get();
+        // Also controls seekbar revealer, see binding in bar.ui
         player
-            .bind_property("playback-state", &album_art, "visible")
+            .bind_property("playback-state", &infobox_revealer, "reveal_child")
             .transform_to(|_, state: PlaybackState| Some(state != PlaybackState::Stopped))
             .sync_create()
             .build();
 
-        let info_box = imp.info_box.get();
         player
-            .bind_property("playback-state", &info_box, "visible")
+            .bind_property("playback-state", &mini_infobox_revealer, "reveal_child")
             .transform_to(|_, state: PlaybackState| Some(state != PlaybackState::Stopped))
             .sync_create()
             .build();

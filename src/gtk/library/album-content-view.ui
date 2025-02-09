@@ -25,6 +25,7 @@
                 <setter object="cover" property="pixel-size">128</setter>
                 <setter object="replace_queue_text" property="visible">false</setter>
                 <setter object="append_queue_text" property="visible">false</setter>
+                <setter object="add_to_playlist" property="collapsed">true</setter>
               </object>
             </child>
             <property name="child">
@@ -290,24 +291,16 @@
                         <property name="spacing">6</property>
                         <child>
                           <object class="GtkButton" id="sel_all">
-                            <style>
-                              <class name="circular"/>
-                            </style>
                             <property name="icon-name">edit-select-all-symbolic</property>
                             <style>
-                              <class name="circular"/>
                               <class name="flat"/>
                             </style>
                           </object>
                         </child>
                         <child>
                           <object class="GtkButton" id="sel_none">
-                            <style>
-                              <class name="circular"/>
-                            </style>
                             <property name="icon-name">edit-select-none-symbolic</property>
                             <style>
-                              <class name="circular"/>
                               <class name="flat"/>
                             </style>
                           </object>
@@ -316,7 +309,6 @@
                           <object class="GtkToggleButton" id="collapse_infobox">
                             <property name="icon-name">up-symbolic</property>
                             <style>
-                              <class name="circular"/>
                               <class name="flat"/>
                             </style>
                           </object>

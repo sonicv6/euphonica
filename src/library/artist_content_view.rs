@@ -49,6 +49,11 @@ mod imp {
         pub bio_attrib: TemplateChild<gtk::Label>,
         // #[template_child]
         // pub runtime: TemplateChild<gtk::Label>,
+        //
+        #[template_child]
+        pub all_songs_btn: TemplateChild<gtk::ToggleButton>,
+        #[template_child]
+        pub subview_stack: TemplateChild<gtk::Stack>,
 
         // All songs sub-view
         #[template_child]
@@ -96,6 +101,8 @@ mod imp {
                 bio_link: TemplateChild::default(),
                 bio_attrib: TemplateChild::default(),
                 // runtime: TemplateChild::default(),
+                all_songs_btn: TemplateChild::default(),
+                subview_stack: TemplateChild::default(),
                 // All songs sub-view
                 song_subview: TemplateChild::default(),
                 song_list: gio::ListStore::new::<Song>(),
@@ -207,6 +214,25 @@ mod imp {
                         .emit_by_name::<()>("album-clicked", &[&album.to_value()]);
                 }
             ));
+
+            self.all_songs_btn
+                .bind_property(
+                    "active",
+                    &self.subview_stack.get(),
+                    "visible-child-name"
+                )
+                .transform_to(
+                    |_, active| {
+                        if active {
+                            Some("songs")
+                        }
+                        else {
+                            Some("albums")
+                        }
+                    }
+                )
+                .sync_create()
+                .build();
         }
 
         fn signals() -> &'static [Signal] {
