@@ -24,7 +24,7 @@ mod imp {
 
     #[derive(Properties, Default, CompositeTemplate)]
     #[properties(wrapper_type = super::MpdOutput)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/player/output.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/player/output.ui")]
     pub struct MpdOutput {
         #[template_child]
         pub toggle_btn: TemplateChild<gtk::Button>,

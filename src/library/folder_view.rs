@@ -49,7 +49,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/folder-view.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/folder-view.ui")]
     pub struct FolderView {
         #[template_child]
         pub show_sidebar: TemplateChild<gtk::Button>,
@@ -425,7 +425,7 @@ impl FolderView {
 
                 // Vary behaviour depending on sort menu
                 match state.enum_("sort-by") {
-                    // Refer to the org.euphonica.Euphonica.sortby enum the gschema
+                    // Refer to the io.github.htkhiem.Euphonica.sortby enum the gschema
                     6 => {
                         // Filename
                         g_cmp_str_options(

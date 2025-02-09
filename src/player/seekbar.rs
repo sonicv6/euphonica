@@ -14,7 +14,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/player/seekbar.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/player/seekbar.ui")]
     pub struct Seekbar {
         pub position: Cell<f64>,
         #[template_child]

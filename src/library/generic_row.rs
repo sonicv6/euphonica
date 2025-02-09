@@ -16,7 +16,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/generic-row.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/generic-row.ui")]
     pub struct GenericRow {
         #[template_child]
         pub thumbnail: TemplateChild<gtk::Image>,

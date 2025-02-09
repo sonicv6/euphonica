@@ -467,7 +467,7 @@ impl Player {
         self.imp()
             .mpris_server
             .get_or_try_init(|| async {
-                let server = LocalServer::new("org.euphonica.Euphonica", self.clone()).await?;
+                let server = LocalServer::new("io.github.htkhiem.Euphonica", self.clone()).await?;
                 glib::spawn_future_local(server.run());
                 Ok(server)
             })
@@ -1417,7 +1417,7 @@ impl LocalRootInterface for Player {
     }
 
     async fn desktop_entry(&self) -> fdo::Result<String> {
-        Ok("org.euphonica.Euphonica".to_string())
+        Ok("io.github.htkhiem.Euphonica".to_string())
     }
 
     async fn supported_uri_schemes(&self) -> fdo::Result<Vec<String>> {
@@ -1469,7 +1469,7 @@ impl LocalPlayerInterface for Player {
     }
 
     /// Use MPD's queue ID to construct track_id in this format:
-    /// /org/euphonica/Euphonica/<queue_id>
+    /// io/github/htkhiem/Euphonica/<queue_id>
     async fn set_position(&self, track_id: TrackId, position: Time) -> fdo::Result<()> {
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             if track_id.as_str().split("/").last().unwrap() == &song.get_queue_id().to_string() {

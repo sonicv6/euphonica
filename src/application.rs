@@ -231,7 +231,7 @@ impl EuphonicaApplication {
         let window = self.active_window().unwrap();
         let about = adw::AboutDialog::builder()
             .application_name("Euphonica")
-            .application_icon("org.euphonica.Euphonica")
+            .application_icon("io.github.htkhiem.Euphonica")
             .developer_name("htkhiem2000")
             .version(VERSION)
             .developers(vec!["htkhiem2000"])

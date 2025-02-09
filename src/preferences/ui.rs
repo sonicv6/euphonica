@@ -11,7 +11,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/ui.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/preferences/ui.ui")]
     pub struct UIPreferences {
         #[template_child]
         pub recent_playlists_count: TemplateChild<adw::SpinRow>,

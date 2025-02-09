@@ -105,7 +105,7 @@ mod imp {
 
     #[derive(Debug, Default, Properties, gtk::CompositeTemplate)]
     #[properties(wrapper_type = super::EuphonicaWindow)]
-    #[template(resource = "/org/euphonica/Euphonica/window.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/window.ui")]
     pub struct EuphonicaWindow {
         // Top level widgets
         #[template_child]

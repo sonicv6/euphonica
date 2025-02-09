@@ -21,7 +21,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/preferences/client.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/preferences/client.ui")]
     pub struct ClientPreferences {
         // MPD
         #[template_child]

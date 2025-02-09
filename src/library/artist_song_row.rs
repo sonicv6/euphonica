@@ -19,7 +19,7 @@ mod imp {
     use once_cell::sync::Lazy;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/artist-song-row.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/artist-song-row.ui")]
     pub struct ArtistSongRow {
         #[template_child]
         pub quality_grade: TemplateChild<gtk::Image>,

@@ -23,7 +23,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/album-content-view.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/album-content-view.ui")]
     pub struct AlbumContentView {
         #[template_child]
         pub infobox_revealer: TemplateChild<gtk::Revealer>,

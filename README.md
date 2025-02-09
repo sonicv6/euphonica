@@ -1,4 +1,4 @@
-![Euphonica icon](data/icons/hicolor/scalable/apps/org.euphonica.Euphonica.svg)
+![Euphonica icon](data/icons/hicolor/scalable/apps/io.github.htkhiem.Euphonica.svg)
 # Euphonica
 
 An MPD frontend with delusions of grandeur. 

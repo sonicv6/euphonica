@@ -13,7 +13,7 @@ mod imp {
 
     #[derive(Debug, Properties, Default, CompositeTemplate)]
     #[properties(wrapper_type = super::Sidebar)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/sidebar.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/sidebar.ui")]
     pub struct Sidebar {
         #[template_child]
         pub albums_btn: TemplateChild<SidebarButton>,

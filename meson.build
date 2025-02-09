@@ -25,7 +25,7 @@ else
   version_suffix = ''
 endif
 
-application_id = 'org.euphonica.Euphonica@0@'.format(profile)
+application_id = 'io.github.htkhiem.Euphonica@0@'.format(profile)
 
 subdir('data')
 subdir('src')

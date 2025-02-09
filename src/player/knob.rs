@@ -17,7 +17,7 @@ mod imp {
     use once_cell::sync::Lazy;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/player/volume-knob.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/player/volume-knob.ui")]
     pub struct VolumeKnob {
         #[template_child]
         pub draw_area: TemplateChild<gtk::DrawingArea>,

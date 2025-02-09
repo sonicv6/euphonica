@@ -31,7 +31,7 @@ mod imp {
 
     #[derive(Debug, CompositeTemplate, Properties)]
     #[properties(wrapper_type = super::PlaylistView)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/playlist-view.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/playlist-view.ui")]
     pub struct PlaylistView {
         #[template_child]
         pub nav_view: TemplateChild<adw::NavigationView>,
@@ -334,7 +334,7 @@ impl PlaylistView {
 
                 // Vary behaviour depending on sort menu
                 match state.enum_("sort-by") {
-                    // Refer to the org.euphonica.Euphonica.sortby enum the gschema
+                    // Refer to the io.github.htkhiem.Euphonica.sortby enum the gschema
                     6 => {
                         // Filename
                         g_cmp_str_options(

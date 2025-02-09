@@ -23,7 +23,7 @@
             <child>
               <object class="GtkImage" id="albumart">
                 <property name="pixel-size">96</property>
-                <property name="resource">/org/euphonica/Euphonica/albumart-placeholder.png</property>
+                <property name="resource">io/github/htkhiem/Euphonica/albumart-placeholder.png</property>
               </object>
             </child>
           </object>

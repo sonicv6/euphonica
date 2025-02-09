@@ -100,7 +100,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/playlist-content-view.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/playlist-content-view.ui")]
     pub struct PlaylistContentView {
         #[template_child]
         pub infobox_revealer: TemplateChild<gtk::Revealer>,

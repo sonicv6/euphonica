@@ -16,7 +16,7 @@ mod imp {
     use once_cell::sync::Lazy;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/artist-cell.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/artist-cell.ui")]
     pub struct ArtistCell {
         #[template_child]
         pub avatar: TemplateChild<adw::Avatar>, // Use high-resolution version

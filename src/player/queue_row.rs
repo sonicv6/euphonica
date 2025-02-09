@@ -25,7 +25,7 @@ mod imp {
     use super::*;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/player/queue-row.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/player/queue-row.ui")]
     pub struct QueueRow {
         #[template_child]
         pub thumbnail: TemplateChild<Image>,

@@ -16,7 +16,7 @@ mod imp {
     use once_cell::sync::Lazy;
 
     #[derive(Default, CompositeTemplate)]
-    #[template(resource = "/org/euphonica/Euphonica/gtk/library/album-cell.ui")]
+    #[template(resource = "/io/github/htkhiem/Euphonica/gtk/library/album-cell.ui")]
     pub struct AlbumCell {
         #[template_child]
         pub cover: TemplateChild<gtk::Picture>, // Use high-resolution version
