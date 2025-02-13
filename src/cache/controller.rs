@@ -329,6 +329,9 @@ impl Cache {
                             "MPD does not have album art for {}, fetching remotely...",
                             &folder_uri
                         );
+                        // Fill out metadata before attempting to fetch album art from external sources.
+                        let _ = this.bg_sender
+                            .send_blocking(CacheTask::AlbumMeta(folder_uri.clone(), key.clone()));
                         let path =
                             self.get_path_for(&Metadata::AlbumArt(folder_uri.clone(), false));
                         let thumbnail_path =

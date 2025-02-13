@@ -121,11 +121,14 @@ mod background {
         path: PathBuf,
         thumbnail_path: PathBuf,
     ) {
-        if let Ok(bytes) = client.albumart(&uri) {
-            println!("Downloaded album art for {:?}", uri);
-            if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
-                let (hires, thumb) = utils::resize_convert_image(dyn_img);
-                if !path.exists() || !thumbnail_path.exists() {
+
+        if !path.exists() || !thumbnail_path.exists(){
+            // println!("Downloading album art for {:?}", &uri);
+            if let Ok(bytes) = client.albumart(&uri) {
+                // println!("Downloaded album art for {:?}", &uri);
+                if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
+                    let (hires, thumb) = utils::resize_convert_image(dyn_img);
+
                     if let (Ok(_), Ok(_)) = (hires.save(path), thumb.save(thumbnail_path)) {
                         sender_to_cache
                             .send_blocking(Metadata::AlbumArt(uri, false))
@@ -133,11 +136,14 @@ mod background {
                     }
                 }
             }
+            else {
+                // Fetch from local sources instead.
+                sender_to_cache
+                    .send_blocking(Metadata::AlbumArtNotAvailable(uri, key))
+                    .expect("Album art not available from MPD, but cannot notify cache of this.");
+            }
         } else {
-            // Fetch from local sources instead.
-            sender_to_cache
-                .send_blocking(Metadata::AlbumArtNotAvailable(uri, key))
-                .expect("Album art not available from MPD, but cannot notify cache of this.");
+            // println!("Skipped downloading album art for {:?}", &uri);
         }
     }
 
@@ -411,10 +417,12 @@ impl MpdWrapper {
                 let mut prev_size: usize = bg_receiver.len();
                 'outer: loop {
                     // Check if there is work to do
+                    let new_size = bg_receiver.len();
+                    println!("Child thread: {} remaining tasks", new_size);
                     if !bg_receiver.is_empty() {
                         if prev_size == 0 {
                             // We have tasks now, set state to busy
-                            prev_size = bg_receiver.len();
+                            prev_size = new_size;
                             let _ = sender_to_fg.send_blocking(AsyncClientMessage::Busy(true));
                         }
                         // TODO: Take one task for each loop
@@ -706,6 +714,7 @@ impl MpdWrapper {
                             match e {
                                 KeyringError::NoEntry => {}
                                 _ => {
+                                    println!("{:?}", e);
                                     let _ = client.close();
                                     self.state.set_connection_state(
                                         ConnectionState::CredentialStoreError,

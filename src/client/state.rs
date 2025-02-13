@@ -96,11 +96,6 @@ mod imp {
                             BoxedAnyObject::static_type(), // thumbnail
                         ])
                         .build(),
-                    Signal::builder("album-art-not-available")
-                        .param_types([
-                            String::static_type(), // folder URI
-                        ])
-                        .build(),
                     // Enough information about this album has been downloaded to display it
                     // as a thumbnail in the album view
                     Signal::builder("album-basic-info-downloaded")
