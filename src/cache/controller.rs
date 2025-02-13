@@ -330,7 +330,8 @@ impl Cache {
                             &folder_uri
                         );
                         // Fill out metadata before attempting to fetch album art from external sources.
-                        let _ = this.bg_sender
+                        let _ = this
+                            .bg_sender
                             .send_blocking(CacheTask::AlbumMeta(folder_uri.clone(), key.clone()));
                         let path =
                             self.get_path_for(&Metadata::AlbumArt(folder_uri.clone(), false));
@@ -451,13 +452,15 @@ impl Cache {
             }
             // That failed, so try downloading it
             else if settings.boolean("mpd-download-album-art") {
-                self.mpd_client()
-                    .queue_background(BackgroundTask::DownloadAlbumArt(
+                self.mpd_client().queue_background(
+                    BackgroundTask::DownloadAlbumArt(
                         folder_uri.to_string(),
                         bson_key,
                         path,
                         thumbnail_path,
-                    ));
+                    ),
+                    false,
+                );
             } else {
                 // Hop straight to remote providers. For this we'll need to have album metas ready,
                 // so schedule that first.

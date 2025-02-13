@@ -224,7 +224,7 @@ impl EuphonicaApplication {
         self.imp()
             .client
             .clone()
-            .queue_background(BackgroundTask::Update);
+            .queue_background(BackgroundTask::Update, true);
     }
 
     pub fn show_about(&self) {

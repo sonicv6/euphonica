@@ -121,8 +121,7 @@ mod background {
         path: PathBuf,
         thumbnail_path: PathBuf,
     ) {
-
-        if !path.exists() || !thumbnail_path.exists(){
+        if !path.exists() || !thumbnail_path.exists() {
             // println!("Downloading album art for {:?}", &uri);
             if let Ok(bytes) = client.albumart(&uri) {
                 // println!("Downloaded album art for {:?}", &uri);
@@ -135,8 +134,7 @@ mod background {
                             .expect("Cannot notify main cache of album art download result.");
                     }
                 }
-            }
-            else {
+            } else {
                 // Fetch from local sources instead.
                 sender_to_cache
                     .send_blocking(Metadata::AlbumArtNotAvailable(uri, key))
@@ -363,6 +361,7 @@ pub struct MpdWrapper {
     bg_handle: RefCell<Option<gio::JoinHandle<()>>>,
     bg_channel: Channel, // For waking up the child client
     bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
+    bg_sender_high: RefCell<Option<Sender<BackgroundTask>>>, // For sending high-priority tasks to background thread
     meta_sender: Sender<Metadata>, // For sending album arts to cache controller
     // Stored here so we can use them to get queue diffs.
     // It will be updated every time get_status() is called.
@@ -383,6 +382,7 @@ impl MpdWrapper {
             bg_handle: RefCell::new(None),   // Will be spawned later
             bg_channel: Channel::new(&ch_name).unwrap(),
             bg_sender: RefCell::new(None),
+            bg_sender_high: RefCell::new(None),
             meta_sender,
             queue_version: Cell::new(0),
         });
@@ -398,9 +398,19 @@ impl MpdWrapper {
 
     fn start_bg_thread(&self, addr: &str, password: Option<&str>) {
         let sender_to_fg = self.main_sender.clone();
+        // We have two queues here:
+        // A "normal" queue for tasks that don't require immediacy, like batch album art downloading
+        // on cold startups.
         let (bg_sender, bg_receiver) = async_channel::unbounded::<BackgroundTask>();
+        // A "high-priority" queue for tasks queued as a direct result of a user action, such as fetching
+        // album content.
+        let (bg_sender_high, bg_receiver_high) = async_channel::unbounded::<BackgroundTask>();
+        // The high-priority queue will always be exhausted first before the normal queue is processed.
+        // Since right now we only have two priority levels, having two queues is much simpler and faster
+        // than an actual heap/hash-based priority queue.
         let meta_sender = self.meta_sender.clone();
         self.bg_sender.replace(Some(bg_sender));
+        self.bg_sender_high.replace(Some(bg_sender_high));
         if let Ok(mut client) = Client::connect(addr) {
             // If we're unauthenticated, this will fail and no child thread
             // will be spawned.
@@ -414,87 +424,75 @@ impl MpdWrapper {
                 .expect("Child thread could not subscribe to inter-client channel");
             let bg_handle = gio::spawn_blocking(move || {
                 println!("Starting idle loop...");
-                let mut prev_size: usize = bg_receiver.len();
+                let mut busy: bool = false;
                 'outer: loop {
-                    // Check if there is work to do
-                    let new_size = bg_receiver.len();
-                    println!("Child thread: {} remaining tasks", new_size);
-                    if !bg_receiver.is_empty() {
-                        if prev_size == 0 {
+                    // Try to fetch a task
+                    let mut curr_task: Option<BackgroundTask> = None;
+                    if !bg_receiver_high.is_empty() {
+                        curr_task = Some(
+                            bg_receiver_high
+                                .recv_blocking()
+                                .expect("Unable to read from high-priority queue"),
+                        );
+                    } else if !bg_receiver.is_empty() {
+                        curr_task = Some(
+                            bg_receiver
+                                .recv_blocking()
+                                .expect("Unable to read from background queue"),
+                        );
+                    }
+                    if let Some(task) = curr_task {
+                        if !busy {
                             // We have tasks now, set state to busy
-                            prev_size = new_size;
+                            busy = true;
                             let _ = sender_to_fg.send_blocking(AsyncClientMessage::Busy(true));
                         }
-                        // TODO: Take one task for each loop
-                        if let Ok(task) = bg_receiver.recv_blocking() {
-                            // println!("Got task: {:?}", task);
-                            match task {
-                                BackgroundTask::Update => {
-                                    background::update_mpd_database(&mut client, &sender_to_fg)
-                                }
-                                BackgroundTask::DownloadAlbumArt(
-                                    uri,
-                                    key,
-                                    path,
-                                    thumbnail_path,
-                                ) => background::download_album_art(
+                        match task {
+                            BackgroundTask::Update => {
+                                background::update_mpd_database(&mut client, &sender_to_fg)
+                            }
+                            BackgroundTask::DownloadAlbumArt(uri, key, path, thumbnail_path) => {
+                                background::download_album_art(
                                     &mut client,
                                     &meta_sender,
                                     uri,
                                     key,
                                     path,
                                     thumbnail_path,
-                                ),
-                                BackgroundTask::FetchAlbums => {
-                                    background::fetch_all_albums(&mut client, &sender_to_fg)
-                                }
-                                BackgroundTask::FetchAlbumSongs(tag) => {
-                                    background::fetch_album_songs(&mut client, &sender_to_fg, tag)
-                                }
-                                BackgroundTask::FetchArtists(use_albumartist) => {
-                                    background::fetch_artists(
-                                        &mut client,
-                                        &sender_to_fg,
-                                        use_albumartist,
-                                    )
-                                }
-                                BackgroundTask::FetchArtistSongs(name) => {
-                                    background::fetch_songs_of_artist(
-                                        &mut client,
-                                        &sender_to_fg,
-                                        name,
-                                    )
-                                }
-                                BackgroundTask::FetchArtistAlbums(name) => {
-                                    background::fetch_albums_of_artist(
-                                        &mut client,
-                                        &sender_to_fg,
-                                        name,
-                                    )
-                                }
-                                BackgroundTask::FetchFolderContents(uri) => {
-                                    background::fetch_folder_contents(
-                                        &mut client,
-                                        &sender_to_fg,
-                                        uri,
-                                    )
-                                }
-                                BackgroundTask::FetchPlaylistSongs(name) => {
-                                    background::fetch_playlist_songs(
-                                        &mut client,
-                                        &sender_to_fg,
-                                        name,
-                                    )
-                                }
+                                )
+                            }
+                            BackgroundTask::FetchAlbums => {
+                                background::fetch_all_albums(&mut client, &sender_to_fg)
+                            }
+                            BackgroundTask::FetchAlbumSongs(tag) => {
+                                background::fetch_album_songs(&mut client, &sender_to_fg, tag)
+                            }
+                            BackgroundTask::FetchArtists(use_albumartist) => {
+                                background::fetch_artists(
+                                    &mut client,
+                                    &sender_to_fg,
+                                    use_albumartist,
+                                )
+                            }
+                            BackgroundTask::FetchArtistSongs(name) => {
+                                background::fetch_songs_of_artist(&mut client, &sender_to_fg, name)
+                            }
+                            BackgroundTask::FetchArtistAlbums(name) => {
+                                background::fetch_albums_of_artist(&mut client, &sender_to_fg, name)
+                            }
+                            BackgroundTask::FetchFolderContents(uri) => {
+                                background::fetch_folder_contents(&mut client, &sender_to_fg, uri)
+                            }
+                            BackgroundTask::FetchPlaylistSongs(name) => {
+                                background::fetch_playlist_songs(&mut client, &sender_to_fg, name)
                             }
                         }
                     } else {
-                        if prev_size > 0 {
-                            // No more tasks
-                            prev_size = 0;
+                        // If not, go into idle mode
+                        if busy {
+                            busy = false;
                             let _ = sender_to_fg.send_blocking(AsyncClientMessage::Busy(false));
                         }
-                        // If not, go into idle mode
                         if let Ok(changes) = client.wait(&[]) {
                             println!("Change: {:?}", changes);
                             if changes.contains(&Subsystem::Message) {
@@ -628,8 +626,13 @@ impl MpdWrapper {
         }
     }
 
-    pub fn queue_background(&self, task: BackgroundTask) {
-        if let Some(sender) = self.bg_sender.borrow().as_ref() {
+    pub fn queue_background(&self, task: BackgroundTask, high_priority: bool) {
+        let maybe_sender = if high_priority {
+            self.bg_sender_high.borrow()
+        } else {
+            self.bg_sender.borrow()
+        };
+        if let Some(sender) = maybe_sender.as_ref() {
             sender
                 .send_blocking(task)
                 .expect("Cannot queue background task");
@@ -645,11 +648,11 @@ impl MpdWrapper {
     }
 
     pub fn fetch_albums(&self) {
-        self.queue_background(BackgroundTask::FetchAlbums);
+        self.queue_background(BackgroundTask::FetchAlbums, false);
     }
 
     pub fn fetch_artists(&self, use_albumartists: bool) {
-        self.queue_background(BackgroundTask::FetchArtists(use_albumartists));
+        self.queue_background(BackgroundTask::FetchArtists(use_albumartists), false);
     }
 
     pub fn queue_connect(&self) {
@@ -1179,8 +1182,8 @@ impl MpdWrapper {
     pub fn get_artist_content(&self, name: String) {
         // For artists, we will need to find by substring to include songs and albums that they
         // took part in
-        self.queue_background(BackgroundTask::FetchArtistSongs(name.clone()));
-        self.queue_background(BackgroundTask::FetchArtistAlbums(name.clone()));
+        self.queue_background(BackgroundTask::FetchArtistSongs(name.clone()), true);
+        self.queue_background(BackgroundTask::FetchArtistAlbums(name.clone()), true);
     }
 
     pub fn find_add(&self, query: Query) {

@@ -89,7 +89,7 @@ impl Library {
         self.client()
             .queue_background(BackgroundTask::FetchAlbumSongs(
                 album.get_title().to_owned(),
-            ));
+            ), true);
     }
 
     /// Queue specific songs
@@ -184,7 +184,7 @@ impl Library {
     /// Retrieve songs in a playlist
     pub fn init_playlist(&self, name: &str) {
         self.client()
-            .queue_background(BackgroundTask::FetchPlaylistSongs(name.to_owned()));
+            .queue_background(BackgroundTask::FetchPlaylistSongs(name.to_owned()), true);
     }
 
     /// Queue a playlist for playback.
@@ -228,15 +228,15 @@ impl Library {
 
     pub fn get_folder_contents(&self, uri: &str) {
         self.client()
-            .queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()));
+            .queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()), true);
     }
 
     pub fn init_albums(&self) {
-        self.client().queue_background(BackgroundTask::FetchAlbums);
+        self.client().queue_background(BackgroundTask::FetchAlbums, false);
     }
 
     pub fn init_artists(&self, use_albumartists: bool) {
         self.client()
-            .queue_background(BackgroundTask::FetchArtists(use_albumartists));
+            .queue_background(BackgroundTask::FetchArtists(use_albumartists), false);
     }
 }
