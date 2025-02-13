@@ -40,7 +40,7 @@ An MPD frontend with delusions of grandeur.
   ![queue-view-dark](https://github.com/user-attachments/assets/0ed85f77-48dc-4dc6-9e43-850e731bcaaa)
 
 - Artist bio as fetched from Last.fm[^1][^2][^3]
-  ![artist-content-view-light](https://github.com/user-attachments/assets/63a715a2-05e4-4443-9dd2-f4f1f2760aa3)
+  ![artist-content-view-dark](https://github.com/user-attachments/assets/659c0ca3-08f6-44f5-9840-26060057fad7)
 
 - Album wiki as fetched from Last.fm[^1][^2]
   ![album-content-view-dark](https://github.com/user-attachments/assets/2665a48a-e81c-43ff-b3c1-76a6d7443f5e)
