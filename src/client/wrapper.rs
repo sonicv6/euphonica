@@ -427,7 +427,7 @@ impl MpdWrapper {
                 let mut busy: bool = false;
                 'outer: loop {
                     // Try to fetch a task
-                    let mut curr_task: Option<BackgroundTask> = None;
+                    let curr_task: Option<BackgroundTask>;
                     if !bg_receiver_high.is_empty() {
                         curr_task = Some(
                             bg_receiver_high
@@ -440,6 +440,9 @@ impl MpdWrapper {
                                 .recv_blocking()
                                 .expect("Unable to read from background queue"),
                         );
+                    }
+                    else {
+                        curr_task = None;
                     }
                     if let Some(task) = curr_task {
                         if !busy {

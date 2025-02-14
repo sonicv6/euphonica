@@ -39,7 +39,9 @@ mod imp {
 
         // FIFO output
         #[template_child]
-        pub fifo_path: TemplateChild<adw::EntryRow>,
+        pub fifo_path: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub fifo_browse: TemplateChild<gtk::Button>,
         #[template_child]
         pub fifo_format: TemplateChild<adw::EntryRow>,
         #[template_child]
@@ -70,7 +72,40 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for ClientPreferences {}
+    impl ObjectImpl for ClientPreferences {
+        fn constructed(&self) {
+            self.parent_constructed();
+
+            let fifo_settings = utils::settings_manager().child("client");
+            let fifo_path_row = self.fifo_path.get();
+            fifo_settings
+                .bind("mpd-fifo-path", &fifo_path_row, "subtitle")
+                .get_only()
+                .build();
+            self.fifo_browse.connect_clicked(move |_| {
+                let dialog = gtk::FileDialog::builder().modal(true).build();
+
+                dialog.open(
+                    Option::<adw::Window>::None.as_ref(),
+                    Option::<gio::Cancellable>::None.as_ref(),
+                    clone!(
+                        #[weak]
+                        fifo_settings,
+                        move |open_res| {
+                            if let Ok(file) = open_res {
+                                fifo_settings
+                                    .set_string(
+                                        "mpd-fifo-path",
+                                        file.path().unwrap().to_str().unwrap(),
+                                    )
+                                    .expect("Unable to save FIFO path");
+                            }
+                        }
+                    ),
+                )
+            });
+        }
+    }
     impl WidgetImpl for ClientPreferences {}
     impl PreferencesPageImpl for ClientPreferences {}
 }
@@ -237,8 +272,6 @@ impl ClientPreferences {
             ),
         );
         let player_settings = settings.child("player");
-        imp.fifo_path
-            .set_text(&conn_settings.string("mpd-fifo-path"));
         imp.fifo_format
             .set_text(&conn_settings.string("mpd-fifo-format"));
 
@@ -285,9 +318,6 @@ impl ClientPreferences {
             move |_| {
                 println!("Restarting FFT thread...");
                 let imp = this.imp();
-                conn_settings
-                    .set_string("mpd-fifo-path", &imp.fifo_path.text())
-                    .expect("Cannot save FIFO settings");
                 conn_settings
                     .set_string("mpd-fifo-format", &imp.fifo_format.text())
                     .expect("Cannot save FIFO settings");

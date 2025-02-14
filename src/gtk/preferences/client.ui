@@ -56,8 +56,15 @@
         <property name="title" translatable="true">FIFO</property>
         <property name="description" translatable="true">Specify a FIFO PCM output for the spectrum visualiser to read from.</property>
         <child>
-          <object class="AdwEntryRow" id="fifo_path">
-            <property name="title" translatable="true">Path to FIFO file</property>
+          <object class="AdwActionRow" id="fifo_path">
+            <property name="title" translatable="true">FIFO file</property>
+            <property name="subtitle">(none)</property>
+            <child type="suffix">
+              <object class="GtkButton" id="fifo_browse">
+                <property name="valign">center</property>
+                <property name="label" translatable="true">Browse...</property>
+              </object>
+            </child>
           </object>
         </child>
         <child>
