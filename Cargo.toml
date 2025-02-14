@@ -41,6 +41,7 @@ glib = "0.20.0"    # GHSA ID GHSA-wrw7-89jp-8q8g
 idna = "1.0.0"     # CVE-2024-12242
 libc = "0.2.169"
 spectrum-analyzer = "=0.5.2"
+ashpd = "0.10.2"
 
 [dependencies.gtk]
 package = "gtk4"

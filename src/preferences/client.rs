@@ -15,6 +15,11 @@ use crate::{
     utils,
 };
 
+// Allows us to implicitly grant read access to files outside of the sandbox.
+// The default FileDialog will simply copy the file to /run/..., which is
+// not applicable for opening namedpipes.
+use ashpd::desktop::file_chooser::{Choice, FileFilter, SelectedFiles};
+
 const FFT_SIZES: &'static [u32; 4] = &[512, 1024, 2048, 4096];
 
 mod imp {
@@ -83,26 +88,34 @@ mod imp {
                 .get_only()
                 .build();
             self.fifo_browse.connect_clicked(move |_| {
-                let dialog = gtk::FileDialog::builder().modal(true).build();
+                glib::MainContext::default().spawn_local(clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    #[weak]
+                    fifo_settings,
+                    async move {
+                        let maybe_files = SelectedFiles::open_file()
+                            .title("Select the FIFO output file")
+                            .modal(true)
+                            .multiple(false)
+                            .send()
+                            .await
+                            .expect("ashpd file open await failure")
+                            .response();
 
-                dialog.open(
-                    Option::<adw::Window>::None.as_ref(),
-                    Option::<gio::Cancellable>::None.as_ref(),
-                    clone!(
-                        #[weak]
-                        fifo_settings,
-                        move |open_res| {
-                            if let Ok(file) = open_res {
+                        if let Ok(files) = maybe_files {
+                            let uris = files.uris;
+                            if uris.len() > 0 {
                                 fifo_settings
                                     .set_string(
                                         "mpd-fifo-path",
-                                        file.path().unwrap().to_str().unwrap(),
+                                        uris[0],
                                     )
                                     .expect("Unable to save FIFO path");
                             }
                         }
-                    ),
-                )
+                    }
+                ));
             });
         }
     }
