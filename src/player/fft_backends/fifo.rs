@@ -3,6 +3,7 @@ use gio::{self, prelude::*};
 use std::{
     cell::RefCell, rc::Rc, str::FromStr, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread, time::Duration
 };
+use futures::executor;
 
 use mpd::status::AudioFormat;
 
@@ -48,6 +49,7 @@ impl FftBackend for FifoFftBackend {
                             if stop_flag.load(Ordering::Relaxed)
                                 || !settings.child("ui").boolean("use-visualizer")
                             {
+                                println!("Stopping FIFO FFT backend");
                                 break 'outer;
                             }
                             // These should be applied on-the-fly
@@ -140,7 +142,7 @@ impl FftBackend for FifoFftBackend {
     fn stop(&self) {
         let fft_stop = self.fft_stop.clone();
         if let Some(handle) = self.fft_handle.take() {
-            glib::MainContext::default().spawn_local(
+            let stop_future = glib::MainContext::default().spawn_local(
                 async move {
                     fft_stop.store(true, Ordering::Relaxed);
                     let _ = handle.await;
@@ -152,17 +154,21 @@ impl FftBackend for FifoFftBackend {
     fn restart(self: Rc<Self>, output: Arc<Mutex<(Vec<f32>, Vec<f32>)>>) -> Result<(), ()> {
         let fft_stop = self.fft_stop.clone();
         if let Some(handle) = self.fft_handle.take() {
-            glib::MainContext::default().spawn_local(clone!(
+            let restart_future = glib::MainContext::default().spawn_local(clone!(
                 #[strong(rename_to = this)]
                 self,
                 async move {
                     fft_stop.store(true, Ordering::Relaxed);
                     let _ = handle.await;
-                    this.start(output);
+                    this.start(output)
                 })
             );
+            Ok(())
         }
-        Ok(())
+        else {
+            Err(())
+        }
+
     }
 
     fn status(&self) -> FftStatus {

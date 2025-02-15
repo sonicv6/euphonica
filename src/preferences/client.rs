@@ -1,3 +1,4 @@
+use duplicate::duplicate;
 use keyring::{Entry, Error as KeyringError};
 use std::{rc::Rc, str::FromStr};
 
@@ -42,6 +43,9 @@ mod imp {
         #[template_child]
         pub mpd_download_album_art: TemplateChild<adw::SwitchRow>,
 
+        // Visualiser data source
+        #[template_child]
+        pub viz_source: TemplateChild<adw::ComboRow>,
         // FIFO output
         #[template_child]
         pub fifo_path: TemplateChild<adw::ActionRow>,
@@ -50,7 +54,7 @@ mod imp {
         #[template_child]
         pub fifo_format: TemplateChild<adw::EntryRow>,
         #[template_child]
-        pub fifo_fps: TemplateChild<adw::SpinRow>,
+        pub fft_fps: TemplateChild<adw::SpinRow>,
         #[template_child]
         pub fft_n_samples: TemplateChild<adw::ComboRow>,
         #[template_child]
@@ -115,6 +119,17 @@ mod imp {
                     }
                 });
             });
+
+            let viz_source = self.viz_source.get();
+            // Disable FIFO-specific rows when PipeWire is selected as data source
+            duplicate!{
+                [name; [fifo_path]; [fifo_format]; [fft_fps]; [fft_n_samples]; [fifo_status]]
+                viz_source
+                    .bind_property("selected", &self.name.get(), "sensitive")
+                    .transform_to(|_, val: u32| Some(val == 0))
+                    .sync_create()
+                    .build();
+            }
         }
     }
     impl WidgetImpl for ClientPreferences {}
@@ -304,7 +319,7 @@ impl ClientPreferences {
             }
         ));
 
-        imp.fifo_fps
+        imp.fft_fps
             .set_value(player_settings.uint("visualizer-fps") as f64);
         // 512 1024 2048 4096
         imp.fft_n_samples
@@ -333,7 +348,7 @@ impl ClientPreferences {
                     .set_string("mpd-fifo-format", &imp.fifo_format.text())
                     .expect("Cannot save FIFO settings");
                 player_settings
-                    .set_uint("visualizer-fps", imp.fifo_fps.value().round() as u32)
+                    .set_uint("visualizer-fps", imp.fft_fps.value().round() as u32)
                     .expect("Cannot save visualizer settings");
                 player_settings
                     .set_uint(

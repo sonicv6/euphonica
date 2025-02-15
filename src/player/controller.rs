@@ -1,6 +1,11 @@
 extern crate mpd;
 use crate::{
-    application::EuphonicaApplication, cache::{Cache, CacheState}, client::{ClientState, ConnectionState, MpdWrapper}, common::{AlbumInfo, QualityGrade, Song}, player::fft_backends::fifo::FifoFftBackend, utils::{prettify_audio_format, settings_manager}
+    application::EuphonicaApplication,
+    cache::{Cache, CacheState},
+    client::{ClientState, ConnectionState, MpdWrapper},
+    common::{AlbumInfo, QualityGrade, Song},
+    player::fft_backends::fifo::FifoFftBackend,
+    utils::{prettify_audio_format, settings_manager},
 };
 use async_lock::OnceCell as AsyncOnceCell;
 use mpris_server::{
@@ -20,12 +25,15 @@ use mpd::{
     ReplayGain, SaveMode, Subsystem,
 };
 use std::{
-    cell::{Cell, OnceCell, RefCell}, ops::Deref, path::PathBuf, rc::Rc, sync::{
-        Arc, Mutex, OnceLock,
-    }, vec::Vec
+    cell::{Cell, OnceCell, RefCell},
+    ops::Deref,
+    path::PathBuf,
+    rc::Rc,
+    sync::{Arc, Mutex, OnceLock},
+    vec::Vec,
 };
 
-use super::fft_backends::backend::{FftStatus, FftBackend};
+use super::fft_backends::{backend::{FftBackend, FftStatus}, PipeWireFftBackend};
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "EuphonicaPlaybackState")]
@@ -156,12 +164,21 @@ fn get_replaygain_icon_name(mode: ReplayGain) -> &'static str {
     }
 }
 
+fn get_fft_backend() -> Rc<dyn FftBackend> {
+    let client_settings = settings_manager().child("client");
+    match client_settings.enum_("mpd-visualizer-pcm-source") {
+        0 => Rc::new(FifoFftBackend::default()),
+        1 => Rc::new(PipeWireFftBackend::default()),
+        _ => unimplemented!(),
+    }
+
+}
+
 mod imp {
     use super::*;
     use crate::application::EuphonicaApplication;
     use glib::{
-        ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat,
-        ParamSpecObject, ParamSpecString, ParamSpecUInt, ParamSpecUInt64,
+        ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecInt, ParamSpecObject, ParamSpecString, ParamSpecUInt, ParamSpecUInt64
     };
     use once_cell::sync::Lazy;
 
@@ -201,6 +218,7 @@ mod imp {
         pub fft_backend: RefCell<Rc<dyn FftBackend>>,
         pub fft_data: Arc<Mutex<(Vec<f32>, Vec<f32>)>>, // Binned magnitudes, in stereo
         pub use_visualizer: Cell<bool>,
+        pub fft_backend_idx: Cell<i32>
     }
 
     #[glib::object_subclass]
@@ -209,7 +227,9 @@ mod imp {
         type Type = super::Player;
 
         fn new() -> Self {
-
+            // 0 = fifo
+            // 1 = pipewire
+            let fft_backend: RefCell<Rc<dyn FftBackend>> = RefCell::new(get_fft_backend());
             Self {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
@@ -232,7 +252,7 @@ mod imp {
                 mpris_server: AsyncOnceCell::new(),
                 mpris_enabled: Cell::new(false),
                 app: OnceCell::new(),
-                fft_backend: RefCell::new(Rc::new(FifoFftBackend::default())),
+                fft_backend,
                 fft_data: Arc::new(Mutex::new((
                     vec![
                         0.0;
@@ -248,21 +268,40 @@ mod imp {
                     ],
                 ))),
                 use_visualizer: Cell::new(false),
+                fft_backend_idx: Cell::new(0)
             }
         }
     }
 
-impl Default for Player {
-    fn default() -> Self {
-        Self::new()
+    impl Default for Player {
+        fn default() -> Self {
+            Self::new()
+        }
     }
-}
 
     impl ObjectImpl for Player {
         fn constructed(&self) {
             self.parent_constructed();
 
             let settings = settings_manager();
+            settings
+                .child("client")
+                .bind("mpd-visualizer-pcm-source", self.obj().as_ref(), "fft-backend-idx")
+                .get_only()
+                .mapping(|var, _| {
+                    if let Some(name) = var.get::<String>() {
+                        match name.as_str() {
+                            "fifo" => Some(0i32.to_value()),
+                            "pipewire" => Some(1i32.to_value()),
+                            _ => unimplemented!()
+                        }
+                    }
+                    else {
+                        None
+                    }
+                })
+                .build();
+
             settings
                 .child("ui")
                 .bind("use-visualizer", self.obj().as_ref(), "use-visualizer")
@@ -310,6 +349,7 @@ impl Default for Player {
                         .read_only()
                         .build(),
                     ParamSpecString::builder("format-desc").read_only().build(),
+                    ParamSpecInt::builder("fft-backend-idx").build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -339,6 +379,7 @@ impl Default for Player {
                 "quality-grade" => obj.quality_grade().to_value(),
                 "fft-status" => obj.fft_status().to_value(),
                 "format-desc" => obj.format_desc().to_value(),
+                "fft-backend-idx" => self.fft_backend_idx.get().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -398,6 +439,21 @@ impl Default for Player {
                             // Visualiser turned off. FFT thread should
                             // have stopped by itself. Join & yeet handle.
                             self.obj().maybe_stop_fft_thread();
+                        }
+                    }
+                }
+                "fft-backend-idx" => {
+                    if let Ok(new) = value.get::<i32>() {
+                        let old = self.fft_backend_idx.replace(new);
+
+                        if old != new {
+                            println!("Switching FFT backend...");
+                            self.obj().maybe_stop_fft_thread();
+                            self.fft_backend.replace(get_fft_backend());
+                            if self.use_visualizer.get() {
+                                self.obj().maybe_start_fft_thread();
+                            }
+                            self.obj().notify("fft-backend-idx");
                         }
                     }
                 }
