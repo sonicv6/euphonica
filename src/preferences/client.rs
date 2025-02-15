@@ -87,35 +87,33 @@ mod imp {
                 .bind("mpd-fifo-path", &fifo_path_row, "subtitle")
                 .get_only()
                 .build();
-            self.fifo_browse.connect_clicked(move |_| {
-                glib::MainContext::default().spawn_local(clone!(
-                    #[weak(rename_to = this)]
-                    self,
-                    #[weak]
-                    fifo_settings,
-                    async move {
-                        let maybe_files = SelectedFiles::open_file()
-                            .title("Select the FIFO output file")
-                            .modal(true)
-                            .multiple(false)
-                            .send()
-                            .await
-                            .expect("ashpd file open await failure")
-                            .response();
+            self.fifo_browse.connect_clicked(|_| {
+                utils::tokio_runtime().spawn(async move {
+                    let maybe_files = SelectedFiles::open_file()
+                        .title("Select the FIFO output file")
+                        .modal(true)
+                        .multiple(false)
+                        .send()
+                        .await
+                        .expect("ashpd file open await failure")
+                        .response();
 
-                        if let Ok(files) = maybe_files {
-                            let uris = files.uris;
-                            if uris.len() > 0 {
-                                fifo_settings
-                                    .set_string(
-                                        "mpd-fifo-path",
-                                        uris[0],
-                                    )
-                                    .expect("Unable to save FIFO path");
-                            }
+                    if let Ok(files) = maybe_files {
+                        let fifo_settings = utils::settings_manager().child("client");
+                        let uris = files.uris();
+                        if uris.len() > 0 {
+                            fifo_settings
+                                .set_string(
+                                    "mpd-fifo-path",
+                                    uris[0].as_str(),
+                                )
+                                .expect("Unable to save FIFO path");
                         }
                     }
-                ));
+                    else {
+                        println!("{:?}", maybe_files);
+                    }
+                });
             });
         }
     }

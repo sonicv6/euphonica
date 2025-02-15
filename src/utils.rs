@@ -7,7 +7,17 @@ use image::{imageops::FilterType, io::Reader as ImageReader, DynamicImage, RgbIm
 use mpd::status::AudioFormat;
 use once_cell::sync::Lazy;
 use rustc_hash::FxHashSet;
+use std::sync::OnceLock;
 use std::{hash::Hash, io::Cursor, sync::RwLock};
+use tokio::runtime::Runtime;
+
+/// Spawn a Tokio runtime on a new thread. This is needed by the zbus dependency.
+pub fn tokio_runtime() -> &'static Runtime {
+    static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(|| {
+        Runtime::new().expect("Setting up tokio runtime needs to succeed.")
+    })
+}
 
 /// Get GSettings for the entire application.
 pub fn settings_manager() -> gio::Settings {
