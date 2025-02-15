@@ -1,6 +1,6 @@
 mod bar;
 mod controller;
-mod fft;
+mod fft_backends;
 mod knob;
 mod output;
 mod pane;
@@ -15,9 +15,10 @@ use output::MpdOutput;
 use queue_row::QueueRow;
 use ratio_center_box::RatioCenterBox;
 
+pub use fft_backends::backend::FftStatus;
 pub use bar::PlayerBar;
 pub use controller::PlaybackState;
-pub use controller::{FftStatus, PlaybackFlow, Player};
+pub use controller::{PlaybackFlow, Player};
 pub use pane::PlayerPane;
 pub use playback_controls::PlaybackControls;
 pub use queue_view::QueueView;

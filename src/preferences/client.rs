@@ -18,7 +18,7 @@ use crate::{
 // Allows us to implicitly grant read access to files outside of the sandbox.
 // The default FileDialog will simply copy the file to /run/..., which is
 // not applicable for opening namedpipes.
-use ashpd::desktop::file_chooser::{Choice, FileFilter, SelectedFiles};
+use ashpd::desktop::file_chooser::SelectedFiles;
 
 const FFT_SIZES: &'static [u32; 4] = &[512, 1024, 2048, 4096];
 
@@ -347,7 +347,7 @@ impl ClientPreferences {
                         imp.fft_n_bins.value().round() as u32,
                     )
                     .expect("Cannot save visualizer settings");
-                player.reconnect_fifo();
+                player.restart_fft_thread();
             }
         ));
     }

@@ -15,6 +15,11 @@
 		<value nick="desc" value="0"/>  <!-- Works as boolean too -->
 	</enum>
 
+	<enum id="io.github.htkhiem.Euphonica.pcmsource">
+		<value nick="pipewire" value="1"/>
+		<value nick="fifo" value="0"/>
+	</enum>
+
 	<enum id="io.github.htkhiem.Euphonica.volumeunit">
 		<value nick="percents" value="0"/>
 		<value nick="decibels" value="1"/>  <!-- Works as boolean too -->
@@ -50,6 +55,10 @@
 		</key>
 		<key name="mpd-download-album-art" type="b">
 			<default>true</default>
+		</key>
+
+		<key name="mpd-visualizer-pcm-source" enum='io.github.htkhiem.Euphonica.pcmsource'>
+			<default>'fifo'</default>
 		</key>
 
 		<key name="mpd-fifo-path" type="s">

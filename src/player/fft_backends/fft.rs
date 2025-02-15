@@ -2,9 +2,14 @@ use libc;
 use std::{
     f32::consts::PI,
     fs::{File, OpenOptions},
+    // Option 1: read from MPD FIFO output (default)
     io::{self, prelude::*, BufReader, Error},
     os::unix::fs::OpenOptionsExt,
 };
+
+// Option 2: read from local Pipewire output (works in Flatpak)
+use pipewire as pw;
+use pw::spa;
 
 use mpd::status::AudioFormat;
 
