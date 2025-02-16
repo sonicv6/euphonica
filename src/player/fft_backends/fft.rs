@@ -9,7 +9,6 @@ use std::{
 
 // Option 2: read from local Pipewire output (works in Flatpak)
 use pipewire as pw;
-use pw::spa;
 
 use mpd::status::AudioFormat;
 

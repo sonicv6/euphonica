@@ -1,5 +1,4 @@
-use std::{cell::RefCell, rc::Rc, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, RwLock}, thread, time::Duration};
-use futures::executor;
+use std::{cell::RefCell, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread, time::Duration};
 use gio::prelude::SettingsExt;
 use mpd::status::AudioFormat;
 use pipewire as pw;

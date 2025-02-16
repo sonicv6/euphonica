@@ -1,9 +1,8 @@
-use glib::{self, clone};
+use glib::{self};
 use gio::{self, prelude::*};
 use std::{
-    cell::RefCell, rc::Rc, str::FromStr, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread, time::Duration
+    cell::RefCell, str::FromStr, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread, time::Duration
 };
-use futures::executor;
 
 use mpd::status::AudioFormat;
 
