@@ -46,10 +46,7 @@ impl FftBackend for FifoFftBackend {
                         let mut curr_step_left: Vec<f32> = vec![0.0; n_bins];
                         let mut curr_step_right: Vec<f32> = vec![0.0; n_bins];
                         'outer: loop {
-                            if stop_flag.load(Ordering::Relaxed)
-                                || !settings.child("ui").boolean("use-visualizer")
-                            {
-                                println!("Stopping FIFO FFT backend");
+                            if stop_flag.load(Ordering::Relaxed) {
                                 break 'outer;
                             }
                             // These should be applied on-the-fly
@@ -148,27 +145,8 @@ impl FftBackend for FifoFftBackend {
                     let _ = handle.await;
                 }
             );
+            let _ = glib::MainContext::default().block_on(stop_future);
         }
-    }
-
-    fn restart(self: Rc<Self>, output: Arc<Mutex<(Vec<f32>, Vec<f32>)>>) -> Result<(), ()> {
-        let fft_stop = self.fft_stop.clone();
-        if let Some(handle) = self.fft_handle.take() {
-            let restart_future = glib::MainContext::default().spawn_local(clone!(
-                #[strong(rename_to = this)]
-                self,
-                async move {
-                    fft_stop.store(true, Ordering::Relaxed);
-                    let _ = handle.await;
-                    this.start(output)
-                })
-            );
-            Ok(())
-        }
-        else {
-            Err(())
-        }
-
     }
 
     fn status(&self) -> FftStatus {

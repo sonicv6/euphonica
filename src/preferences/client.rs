@@ -85,9 +85,9 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
 
-            let fifo_settings = utils::settings_manager().child("client");
+            let viz_settings = utils::settings_manager().child("client");
             let fifo_path_row = self.fifo_path.get();
-            fifo_settings
+            viz_settings
                 .bind("mpd-fifo-path", &fifo_path_row, "subtitle")
                 .get_only()
                 .build();
@@ -119,11 +119,38 @@ mod imp {
                     }
                 });
             });
-
             let viz_source = self.viz_source.get();
+            viz_settings
+                .bind("mpd-visualizer-pcm-source", &viz_source, "selected")
+                .mapping(|var, _| {
+                    if let Some(typ) = var.get::<String>() {
+                        match typ.as_str() {
+                            "fifo" => Some(0u32.to_value()),
+                            "pipewire" => Some(1u32.to_value()),
+                            _ => unimplemented!()
+                        }
+                    }
+                    else {
+                        Option::<glib::Value>::None
+                    }
+                })
+                .set_mapping(|val, _| {
+                    println!("Setting backend idx...");
+                    if let Ok(idx) = val.get::<u32>() {
+                        match idx {
+                            0 => Some("fifo".to_variant()),
+                            1 => Some("pipewire".to_variant()),
+                            _ => unimplemented!()
+                        }
+                    }
+                    else {
+                        Option::<glib::Variant>::None
+                    }
+                })
+                .build();
             // Disable FIFO-specific rows when PipeWire is selected as data source
             duplicate!{
-                [name; [fifo_path]; [fifo_format]; [fft_fps]; [fft_n_samples]; [fifo_status]]
+                [name; [fifo_path]; [fifo_format];]
                 viz_source
                     .bind_property("selected", &self.name.get(), "sensitive")
                     .transform_to(|_, val: u32| Some(val == 0))
@@ -285,7 +312,7 @@ impl ClientPreferences {
             .bind("mpd-download-album-art", &mpd_download_album_art, "active")
             .build();
 
-        // FIFO
+        // Visualiser
         self.on_fifo_changed(player.fft_status());
         player.connect_notify_local(
             Some("fft-status"),

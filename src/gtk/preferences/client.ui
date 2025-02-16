@@ -140,7 +140,7 @@
             <property name="subtitle">Invalid</property>
             <child type="suffix">
               <object class="GtkButton" id="fifo_reconnect">
-                <property name="label" translatable="true">Reconnect</property>
+                <property name="label" translatable="true">Apply</property>
                 <property name="valign">center</property>
                 <style>
                   <class name="suggested-action"/>

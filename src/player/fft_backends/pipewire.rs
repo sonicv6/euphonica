@@ -231,9 +231,7 @@ impl FftBackend for PipeWireFftBackend {
                 let mut curr_step_left: Vec<f32> = vec![0.0; n_bins];
                 let mut curr_step_right: Vec<f32> = vec![0.0; n_bins];
                 'outer: loop {
-                    if stop_flag.load(Ordering::Relaxed)
-                        || !settings.child("ui").boolean("use-visualizer")
-                    {
+                    if stop_flag.load(Ordering::Relaxed) {
                         break 'outer;
                     }
                     // Just get our own copy to minimise blocking
@@ -327,18 +325,13 @@ impl FftBackend for PipeWireFftBackend {
         if let Some(sender) = self.pw_sender.take() {
             if sender.send(Terminate).is_ok() {
                 if let Some(handle) = self.pw_handle.take() {
-                    // let _ = executor::block_on(handle);
+                    let _ = glib::MainContext::default().block_on(handle);
                 }
                 if let Some(handle) = self.fft_handle.take() {
-                    // let _ = executor::block_on(handle);
+                    let _ = glib::MainContext::default().block_on(handle);
                 }
             }
         }
-    }
-
-    fn restart(self: Rc<Self>, output: Arc<Mutex<(Vec<f32>, Vec<f32>)>>) -> Result<(), ()> {
-        self.stop();
-        self.start(output)
     }
 
     fn status(&self) -> FftStatus {

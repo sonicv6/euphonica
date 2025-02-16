@@ -522,11 +522,12 @@ impl Player {
 
     fn maybe_stop_fft_thread(&self) {
         self.imp().fft_backend.borrow().stop();
+        self.notify("fft-status");
     }
 
     pub fn restart_fft_thread(&self) {
-        let output = self.imp().fft_data.clone();
-        self.imp().fft_backend.borrow().clone().restart(output);
+        self.maybe_stop_fft_thread();
+        self.maybe_start_fft_thread();
     }
 
     pub fn fft_data(&self) -> Arc<Mutex<(Vec<f32>, Vec<f32>)>> {

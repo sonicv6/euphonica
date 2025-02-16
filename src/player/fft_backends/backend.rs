@@ -17,8 +17,5 @@ pub trait FftBackend {
     /// Stop the FFT thread of this backend.
     fn stop(&self);
 
-    /// Convenience function to wait for the current thread to stop, then start a new thread.
-    fn restart(self: Rc<Self>, output: Arc<Mutex<(Vec<f32>, Vec<f32>)>>) -> Result<(), ()>;
-
     fn status(&self) -> FftStatus;
 }
