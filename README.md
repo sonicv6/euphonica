@@ -36,6 +36,9 @@ An MPD frontend with delusions of grandeur.
 - Album View in light mode[^1]
   ![album-view-light](https://github.com/user-attachments/assets/302b0e37-ff4a-4151-b688-6d6b5e1dcb60)
 
+- UI at different sizes (v0.12+)
+![mini-layouts-light](https://github.com/user-attachments/assets/af7b2cb0-7f85-42ce-ac16-14a3c0cf2153)
+
 - Queue View in dark mode[^1]
   ![queue-view-dark](https://github.com/user-attachments/assets/0ed85f77-48dc-4dc6-9e43-850e731bcaaa)
 
