@@ -71,7 +71,7 @@ This builds and installs Euphonica as a sandboxed Flatpak app on your system, co
 Flatpak-aware app stores (like GNOME Software, KDE Discover, etc). It should also work on virtually any 
 distribution, and does not require root privileges.
 
-1. Download the [latest Flatpak manifest](...) to an empty folder somewhere.
+1. Download the [latest Flatpak manifest](https://github.com/htkhiem/euphonica/releases/download/v0.12.0-alpha/io.github.htkhiem.Euphonica.json) to an empty folder somewhere.
 2. Run `flatpak-builder` as follows:
   ```bash
   cd /path/to/flatpak/manifest
