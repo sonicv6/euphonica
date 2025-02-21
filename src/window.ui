@@ -9,7 +9,7 @@
     <property name="width-request">360</property>
     <child>
       <object class="AdwBreakpoint">
-        <condition>max-width: 1000</condition>
+        <condition>max-width: 990</condition>
         <setter object="player_bar" property="collapsed">true</setter>
         <setter object="queue_view" property="pane-collapsed">true</setter>
       </object>

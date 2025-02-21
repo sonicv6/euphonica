@@ -4,7 +4,7 @@
 An MPD frontend with delusions of grandeur. 
 
 ## Features
-- GTK4 Libadwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration
+- Responsive GTK4 LibAdwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration
 - Built-in, customisable spectrum visualiser, reading from MPD FIFO or system PipeWire.
 - Audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums & detailed format printout
 - Browse your library by album, artist and folders with multiselection support
@@ -56,13 +56,40 @@ An MPD frontend with delusions of grandeur.
 [^2]: Artist bios and album wikis are user-contributed and licensed by Last.fm under CC-BY-SA.
 [^3]: The displayed image has been released into the public domain. More information at [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Johann_Sebastian_Bach.jpg).
 
-## Build
+## Installation
 
 Euphonica is still in very early development, and so far has only been tested on Arch Linux (btw).
 
+I'm gearing up for AUR & Flathub releases, but before that happens, Euphonica must be built from source.
+
+### Using `flatpak-builder`
+
+This builds and installs Euphonica as a sandboxed Flatpak app on your system, complete with an entry in 
+Flatpak-aware app stores (like GNOME Software, KDE Discover, etc). It should also work on virtually any 
+distribution, and does not require root privileges.
+
+1. Download the [latest Flatpak manifest](...) to an empty folder somewhere.
+2. Run `flatpak-builder` as follows:
+  ```bash
+  cd /path/to/flatpak/manifest
+  flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica.json
+  ```
+3. Once the above has completed, you can run Euphonica using:
+
+  ``` bash
+  flatpak run io.github.htkhiem.Euphonica
+  ```
+
+A desktop should also have been installed for you, although it might take a reboot to show up.
+
+### Using Meson 
+
+This builds Euphonica against system library packages, then installs it directly into `/usr/local/bin`.
+It is the most lightweight option, but has only been tested on Arch Linux.
+
 1. Make sure you have these dependencies installed beforehand:
   - `gtk4` >= 4.16
-  - `libadwaita` >= 1.5
+  - `libadwaita` >= 1.6
   - `rustup` >= 1.27
   - `meson` >= 1.5
   - `gettext` >= 0.23
@@ -84,8 +111,6 @@ Euphonica is still in very early development, and so far has only been tested on
   cd build
   meson install
   ```
-
-Flatpak & AUR releases are also planned.
 
 ## Setting up Euphonica with your MPD instance
 
@@ -110,12 +135,14 @@ Euphonica is developed with Beets tagging in mind and can take advantage of its 
 Most libraries, especially those that ran well with other MPD clients like [Cantata](https://github.com/CDrummond/cantata), should require no reorganisation.
 
 ## TODO
+- Local storage management UI (to allow re-fetching metadata, clearing album art cache and the like)
 - Stickers DB support to enable the following features:
   - Recently played
   - Ratings (song, album, etc)
   - User-editable album wikis and artist bios
   - Metadata sync between Euphonica instances (instead of being stored locally)
   - Should follow existing sticker schemas, such as that proposed by myMPD, where possible.
+- Refactor current metadata storage from MongoDB-like to indexed SQLite.
 - Special support for local socket connection, or remote filesystem access, to enable the following features:
   - Library management operations such as tag editing (will require access to the files themselves)
   - Save downloaded album arts and artist avatars directly into the music folders themselves so other instances

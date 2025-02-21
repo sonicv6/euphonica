@@ -24,7 +24,7 @@
       Euphonica is an MPD client with integrated spectrum visualiser, metadata downloading &amp; more.
     </p>
     <ul>
-      <li>GTK4 Libadwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration</li>
+      <li>Responsive GTK4 LibAdwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration</li>
       <li>Built-in, customisable spectrum visualiser, reading from MPD FIFO or system PipeWire.</li>
       <li>Audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums &amp; detailed format printout</li>
       <li>Browse your library by album, artist and folders with multiselection support. Browsing by genre and other criteria are planned.</li>
