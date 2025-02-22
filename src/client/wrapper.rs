@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{Album, AlbumInfo, Artist, ArtistInfo, INode, Song, SongInfo},
-    meta_providers::Metadata,
+    meta_providers::ProviderMessage,
     player::PlaybackFlow,
     utils,
 };
@@ -115,7 +115,7 @@ mod background {
 
     pub fn download_album_art(
         client: &mut mpd::Client,
-        sender_to_cache: &Sender<Metadata>,
+        sender_to_cache: &Sender<ProviderMessage>,
         uri: String,
         key: bson::Document,
         path: PathBuf,
@@ -130,14 +130,14 @@ mod background {
 
                     if let (Ok(_), Ok(_)) = (hires.save(path), thumb.save(thumbnail_path)) {
                         sender_to_cache
-                            .send_blocking(Metadata::AlbumArt(uri, false))
+                            .send_blocking(ProviderMessage::AlbumArtAvailable(uri))
                             .expect("Cannot notify main cache of album art download result.");
                     }
                 }
             } else {
                 // Fetch from local sources instead.
                 sender_to_cache
-                    .send_blocking(Metadata::AlbumArtNotAvailable(uri, key))
+                    .send_blocking(ProviderMessage::AlbumArtNotAvailable(uri, key))
                     .expect("Album art not available from MPD, but cannot notify cache of this.");
             }
         } else {
@@ -362,14 +362,14 @@ pub struct MpdWrapper {
     bg_channel: Channel, // For waking up the child client
     bg_sender: RefCell<Option<Sender<BackgroundTask>>>, // For sending tasks to background thread
     bg_sender_high: RefCell<Option<Sender<BackgroundTask>>>, // For sending high-priority tasks to background thread
-    meta_sender: Sender<Metadata>, // For sending album arts to cache controller
+    meta_sender: Sender<ProviderMessage>, // For sending album arts to cache controller
     // Stored here so we can use them to get queue diffs.
     // It will be updated every time get_status() is called.
     queue_version: Cell<u32>,
 }
 
 impl MpdWrapper {
-    pub fn new(meta_sender: Sender<Metadata>) -> Rc<Self> {
+    pub fn new(meta_sender: Sender<ProviderMessage>) -> Rc<Self> {
         // Set up channels for communication with client object
         let (sender, receiver): (Sender<AsyncClientMessage>, Receiver<AsyncClientMessage>) =
             async_channel::unbounded();

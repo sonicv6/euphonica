@@ -1,6 +1,6 @@
 extern crate bson;
 use gtk::prelude::*;
-use std::{thread, time::Duration};
+use std::{path::PathBuf, thread, time::Duration};
 
 use crate::utils::settings_manager;
 
@@ -13,18 +13,33 @@ pub fn sleep_after_request() {
     ));
 }
 
-pub enum Metadata {
-    // folder-level URI, true for thumbnail
-    AlbumArt(String, bool),
-    // Reserved for MpdWrapper to notify that we don't have one locally.
-    // Used by cache controller to trigger downloading from daisy-chained metadata.
+/// Enum for communication with provider threads from the cache controller living on the main thread.
+/// Can be used for both request and response.
+pub enum ProviderMessage {
+    AlbumArt(String, bson::Document, PathBuf, PathBuf),
+    AlbumArtAvailable(String),
+    /// Negative response (currently only used by MpdWrapper)
     AlbumArtNotAvailable(String, bson::Document),
+    /// Both request and positive response
+    AlbumMeta(String, bson::Document),
+    AlbumMetaAvailable(String),
+    /// Both request and positive response
+    ArtistAvatar(bson::Document, PathBuf, PathBuf),
+    ArtistAvatarAvailable(String), // name
+    /// Both request and positive response. Includes downloading artist avatar.
+    ArtistMeta(bson::Document, PathBuf, PathBuf),
+    ArtistMetaAvailable(String)
+}
+
+pub enum MetadataType<'a> {
+    // folder-level URI, true for thumbnail
+    AlbumArt(&'a str, bool),
     // folder-level URI
-    AlbumMeta(String),
+    AlbumMeta(&'a str),
     // Tag, true for thumbnail
-    ArtistAvatar(String, bool),
+    ArtistAvatar(&'a str, bool),
     // Tag
-    ArtistMeta(String),
+    ArtistMeta(&'a str),
 }
 
 /// Common provider-agnostic utilities.
