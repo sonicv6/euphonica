@@ -1,3 +1,4 @@
+use duplicate::duplicate;
 use adw::subclass::prelude::*;
 use glib::{clone, closure_local, signal::SignalHandlerId, Binding};
 use gtk::{gdk, gio, glib, prelude::*, CompositeTemplate, ListItem, SignalListItemFactory};
@@ -37,6 +38,8 @@ mod imp {
         #[template_child]
         pub infobox_revealer: TemplateChild<gtk::Revealer>,
         #[template_child]
+        pub infobox_spinner: TemplateChild<gtk::Stack>,
+        #[template_child]
         pub collapse_infobox: TemplateChild<gtk::ToggleButton>,
 
         #[template_child]
@@ -56,6 +59,8 @@ mod imp {
         pub subview_stack: TemplateChild<gtk::Stack>,
 
         // All songs sub-view
+        #[template_child]
+        pub song_spinner: TemplateChild<gtk::Stack>,
         #[template_child]
         pub song_subview: TemplateChild<gtk::ListView>,
         pub song_list: gio::ListStore,
@@ -77,6 +82,8 @@ mod imp {
 
         // Discography sub-view
         #[template_child]
+        pub album_spinner: TemplateChild<gtk::Stack>,
+        #[template_child]
         pub album_subview: TemplateChild<gtk::GridView>,
         pub album_list: gio::ListStore,
 
@@ -94,6 +101,7 @@ mod imp {
                 name: TemplateChild::default(),
                 song_count: TemplateChild::default(),
                 album_count: TemplateChild::default(),
+                infobox_spinner: TemplateChild::default(),
                 infobox_revealer: TemplateChild::default(),
                 collapse_infobox: TemplateChild::default(),
                 bio_box: TemplateChild::default(),
@@ -104,6 +112,7 @@ mod imp {
                 all_songs_btn: TemplateChild::default(),
                 subview_stack: TemplateChild::default(),
                 // All songs sub-view
+                song_spinner: TemplateChild::default(),
                 song_subview: TemplateChild::default(),
                 song_list: gio::ListStore::new::<Song>(),
                 song_sel_model: gtk::MultiSelection::new(Option::<gio::ListStore>::None),
@@ -115,6 +124,7 @@ mod imp {
                 sel_all: TemplateChild::default(),
                 sel_none: TemplateChild::default(),
                 // Discography sub-view
+                album_spinner: TemplateChild::default(),
                 album_subview: TemplateChild::default(),
                 album_list: gio::ListStore::new::<Album>(),
                 artist: RefCell::new(None),
@@ -280,6 +290,10 @@ impl ArtistContentView {
                 bio_attrib.set_label(&bio.attribution);
             } else {
                 bio_box.set_visible(false);
+            }
+            let stack = self.imp().infobox_spinner.get();
+            if stack.visible_child_name().unwrap() != "content" {
+                stack.set_visible_child_name("content");
             }
         } else {
             bio_box.set_visible(false);
@@ -600,6 +614,12 @@ impl ArtistContentView {
         self.imp().bio_box.set_visible(false);
         self.imp().avatar.set_text(None);
         self.clear_content();
+        duplicate!{
+            [stack; [infobox_spinner]; [song_spinner]; [album_spinner];]
+            if self.imp().stack.visible_child_name().unwrap() != "spinner" {
+                self.imp().stack.set_visible_child_name("spinner");
+            }
+        }
     }
 
     fn add_album(&self, album: Album, cache: Rc<Cache>) {
@@ -608,6 +628,10 @@ impl ArtistContentView {
         self.imp()
             .album_count
             .set_label(&self.imp().album_list.n_items().to_string());
+        let stack = self.imp().album_spinner.get();
+        if stack.visible_child_name().unwrap() != "content" {
+            stack.set_visible_child_name("content");
+        }
     }
 
     pub fn add_songs(&self, songs: &[Song], cache: Rc<Cache>) {
@@ -624,6 +648,10 @@ impl ArtistContentView {
         self.imp()
             .song_count
             .set_label(&self.imp().song_list.n_items().to_string());
+        let stack = self.imp().song_spinner.get();
+        if stack.visible_child_name().unwrap() != "content" {
+            stack.set_visible_child_name("content");
+        }
     }
 
     fn clear_content(&self) {
