@@ -55,7 +55,7 @@ enum AsyncClientMessage {
 #[derive(Debug)]
 pub enum BackgroundTask {
     Update,
-    DownloadAlbumArt(String, bson::Document, PathBuf, PathBuf), // folder-level URI
+    DownloadAlbumArt(AlbumInfo, PathBuf, PathBuf), // folder-level URI
     FetchFolderContents(String), // Gradually get all inodes in folder at path
     FetchAlbums,                 // Gradually get all albums
     FetchAlbumSongs(String),     // Get songs of album with given tag
@@ -116,11 +116,11 @@ mod background {
     pub fn download_album_art(
         client: &mut mpd::Client,
         sender_to_cache: &Sender<ProviderMessage>,
-        uri: String,
-        key: bson::Document,
+        key: AlbumInfo,
         path: PathBuf,
         thumbnail_path: PathBuf,
     ) {
+        let uri = key.uri.to_owned();
         if !path.exists() || !thumbnail_path.exists() {
             // println!("Downloading album art for {:?}", &uri);
             if let Ok(bytes) = client.albumart(&uri) {
@@ -137,7 +137,7 @@ mod background {
             } else {
                 // Fetch from local sources instead.
                 sender_to_cache
-                    .send_blocking(ProviderMessage::AlbumArtNotAvailable(uri, key))
+                    .send_blocking(ProviderMessage::AlbumArtNotAvailable(key))
                     .expect("Album art not available from MPD, but cannot notify cache of this.");
             }
         } else {
@@ -454,11 +454,10 @@ impl MpdWrapper {
                             BackgroundTask::Update => {
                                 background::update_mpd_database(&mut client, &sender_to_fg)
                             }
-                            BackgroundTask::DownloadAlbumArt(uri, key, path, thumbnail_path) => {
+                            BackgroundTask::DownloadAlbumArt(key, path, thumbnail_path) => {
                                 background::download_album_art(
                                     &mut client,
                                     &meta_sender,
-                                    uri,
                                     key,
                                     path,
                                     thumbnail_path,

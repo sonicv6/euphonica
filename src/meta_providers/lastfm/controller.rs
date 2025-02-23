@@ -8,7 +8,7 @@ use reqwest::{
     header::USER_AGENT,
 };
 
-use crate::{config::APPLICATION_USER_AGENT, utils::meta_provider_settings};
+use crate::{common::{AlbumInfo, ArtistInfo}, config::APPLICATION_USER_AGENT, utils::meta_provider_settings};
 
 use super::models::{LastfmAlbumResponse, LastfmArtistResponse};
 use super::{
@@ -24,7 +24,7 @@ pub struct LastfmWrapper {
 }
 
 impl LastfmWrapper {
-    fn get_lastfm(&self, method: &str, params: &[(&str, String)]) -> Option<Response> {
+    fn get_lastfm(&self, method: &str, params: &[(&str, &str)]) -> Option<Response> {
         let settings = meta_provider_settings(PROVIDER_KEY);
         let key = settings.string("api-key").to_string();
         // Return None if there is no API key specified.
@@ -75,26 +75,21 @@ impl MetadataProvider for LastfmWrapper {
     /// A signal will be emitted to notify the caller when the result arrives.
     fn get_album_meta(
         &self,
-        key: bson::Document,
+        key: &mut AlbumInfo,
         existing: Option<models::AlbumMeta>,
     ) -> Option<models::AlbumMeta> {
         if meta_provider_settings(PROVIDER_KEY).boolean("enabled") {
-            // Will panic if key document is not a simple map of String to String
-            let params: Vec<(&str, String)> = key
-                .iter()
-                .map(|kv: (&String, &bson::Bson)| {
-                    // Last.fm wants "album" in query param but will return "name".
-                    // Our bson key follows the returned result schema so it'll have to be renamed here.
-                    (
-                        if kv.0 == "name" {
-                            "album"
-                        } else {
-                            kv.0.as_ref()
-                        },
-                        kv.1.as_str().unwrap().to_owned(),
-                    )
-                })
-                .collect();
+            let mut params: Vec<(&str, &str)> = Vec::new();
+            if let Some(id) = key.mbid.as_ref() {
+                params.push(("mbid", id));
+            }
+            else if let (name, Some(artist)) = (&key.title, key.get_artist_tag().as_ref()) {
+                params.push(("album", name));
+                params.push(("artist", artist));
+            }
+            else {
+                return existing;
+            }
 
             if let Some(resp) = self.get_lastfm("album.getinfo", &params) {
                 // TODO: Get summary
@@ -106,17 +101,17 @@ impl MetadataProvider for LastfmWrapper {
                                 // Might have to put the mbid back in, as Last.fm won't return
                                 // it if we queried using it in the first place.
                                 let mut new: models::AlbumMeta = parsed.album.into();
-                                if let Some(id) = key.get("mbid") {
-                                    new.mbid = Some(id.as_str().unwrap().to_owned());
+                                if let Some(id) = key.mbid.as_ref() {
+                                    new.mbid = Some(id.to_owned());
                                 }
                                 // Override album & artist names in case the returned values
                                 // are slightly different (casing, apostrophes, etc.), else
                                 // we won't be able to query it back using our own tags.
-                                if let Some(artist) = key.get("artist") {
-                                    new.artist = Some(artist.as_str().unwrap().to_owned());
+                                if let Some(artist) = key.get_artist_tag() {
+                                    new.artist = Some(artist.to_owned());
                                 }
-                                if let Some(name) = key.get("album") {
-                                    new.name = name.as_str().unwrap().to_owned();
+                                if &new.name != &key.title {
+                                    new.name = key.title.to_owned();
                                 }
                                 // If there is existing data, merge new data to it
                                 if let Some(old) = existing {
@@ -151,26 +146,17 @@ impl MetadataProvider for LastfmWrapper {
     /// artist image URLs.
     fn get_artist_meta(
         &self,
-        key: bson::Document,
+        key: &mut ArtistInfo,
         existing: std::option::Option<models::ArtistMeta>,
     ) -> Option<models::ArtistMeta> {
         if meta_provider_settings(PROVIDER_KEY).boolean("enabled") {
-            // Will panic if key document is not a simple map of String to String
-            let params: Vec<(&str, String)> = key
-                .iter()
-                .map(|kv: (&String, &bson::Bson)| {
-                    // Last.fm wants "artist" in query param but will return "name".
-                    // Our bson key follows the returned result schema so it'll have to be renamed here.
-                    (
-                        if kv.0 == "name" {
-                            "artist"
-                        } else {
-                            kv.0.as_ref()
-                        },
-                        kv.1.as_str().unwrap().to_owned(),
-                    )
-                })
-                .collect();
+            let mut params: Vec<(&str, &str)> = Vec::new();
+            if let Some(id) = key.mbid.as_ref() {
+                params.push(("mbid", id));
+            }
+            else {
+                params.push(("artist", &key.name))
+            }
             if let Some(resp) = self.get_lastfm("artist.getinfo", &params) {
                 // TODO: Get summary
                 match resp.status() {
@@ -181,14 +167,14 @@ impl MetadataProvider for LastfmWrapper {
                                 // Might have to put the mbid back in, as Last.fm won't return
                                 // it if we queried using it in the first place.
                                 let mut new: models::ArtistMeta = parsed.artist.into();
-                                if let Some(id) = key.get("mbid") {
-                                    new.mbid = Some(id.as_str().unwrap().to_owned());
+                                if let Some(id) = key.mbid.as_ref() {
+                                    new.mbid = Some(id.to_owned());
                                 }
                                 // Override artist name in case the returned values
                                 // are slightly different (casing, apostrophes, etc.), else
                                 // we won't be able to query it back using our own tags.
-                                if let Some(name) = key.get("artist") {
-                                    new.name = name.as_str().unwrap().to_owned();
+                                if &new.name != &key.name {
+                                    new.name = key.name.to_owned();
                                 }
                                 if let Some(old) = existing {
                                     Some(old.merge(new))

@@ -2,7 +2,7 @@ extern crate bson;
 use gtk::prelude::*;
 use std::{path::PathBuf, thread, time::Duration};
 
-use crate::utils::settings_manager;
+use crate::{common::{AlbumInfo, ArtistInfo}, utils::settings_manager};
 
 use super::models;
 
@@ -16,19 +16,19 @@ pub fn sleep_after_request() {
 /// Enum for communication with provider threads from the cache controller living on the main thread.
 /// Can be used for both request and response.
 pub enum ProviderMessage {
-    AlbumArt(String, bson::Document, PathBuf, PathBuf),
-    AlbumArtAvailable(String),
+    AlbumArt(AlbumInfo, PathBuf, PathBuf),
+    AlbumArtAvailable(String), // Only return folder URI
     /// Negative response (currently only used by MpdWrapper)
-    AlbumArtNotAvailable(String, bson::Document),
+    AlbumArtNotAvailable(AlbumInfo),
     /// Both request and positive response
-    AlbumMeta(String, bson::Document),
-    AlbumMetaAvailable(String),
+    AlbumMeta(AlbumInfo),
+    AlbumMetaAvailable(String), // Only return folder URI
     /// Both request and positive response
-    ArtistAvatar(bson::Document, PathBuf, PathBuf),
-    ArtistAvatarAvailable(String), // name
+    ArtistAvatar(ArtistInfo, PathBuf, PathBuf),
+    ArtistAvatarAvailable(String), // Only return name
     /// Both request and positive response. Includes downloading artist avatar.
-    ArtistMeta(bson::Document, PathBuf, PathBuf),
-    ArtistMetaAvailable(String)
+    ArtistMeta(ArtistInfo, PathBuf, PathBuf),
+    ArtistMetaAvailable(String) // Only return name
 }
 
 pub enum MetadataType<'a> {
@@ -115,7 +115,7 @@ pub trait MetadataProvider: Send + Sync {
     /// data will always overwrite existing fields.
     fn get_album_meta(
         &self,
-        key: bson::Document,
+        key: &mut AlbumInfo,
         existing: Option<models::AlbumMeta>,
     ) -> Option<models::AlbumMeta>;
 
@@ -124,7 +124,7 @@ pub trait MetadataProvider: Send + Sync {
     /// data will always overwrite existing fields.
     fn get_artist_meta(
         &self,
-        key: bson::Document,
+        key: &mut ArtistInfo,
         existing: Option<models::ArtistMeta>,
     ) -> Option<models::ArtistMeta>;
 }

@@ -8,7 +8,7 @@ use musicbrainz_rs::{
     prelude::*,
 };
 
-use crate::utils::meta_provider_settings;
+use crate::{common::{AlbumInfo, ArtistInfo}, utils::meta_provider_settings};
 
 use super::{
     super::{models, prelude::*, MetadataProvider},
@@ -43,14 +43,14 @@ impl MetadataProvider for MusicBrainzWrapper {
     /// A signal will be emitted to notify the caller when the result arrives.
     fn get_album_meta(
         &self,
-        key: bson::Document,
+        key: &mut AlbumInfo,
         existing: Option<models::AlbumMeta>,
     ) -> Option<models::AlbumMeta> {
         if meta_provider_settings(PROVIDER_KEY).boolean("enabled") {
-            if let Some(mbid) = key.get("mbid") {
+            if let Some(mbid) = key.mbid.as_ref() {
                 println!("[MusicBrainz] Fetching release by MBID: {}", &mbid);
                 let res = Release::fetch()
-                    .id(mbid.as_str().unwrap())
+                    .id(mbid)
                     .with_artist_credits()
                     .execute();
                 if let Ok(release) = res {
@@ -70,7 +70,7 @@ impl MetadataProvider for MusicBrainzWrapper {
                 }
             }
             // Else there must be an artist tag before we can search reliably
-            else if let (Some(title), Some(artist)) = (key.get("name"), key.get("artist")) {
+            else if let (title, Some(artist)) = (&key.title, key.get_artist_tag()) {
                 // Ensure linkages match those on MusicBrainz.
                 // TODO: use multiple ORed artist clauses instead.
                 println!(
@@ -78,8 +78,8 @@ impl MetadataProvider for MusicBrainzWrapper {
                 );
                 let res = Release::search(
                     ReleaseSearchQuery::query_builder()
-                        .release(title.as_str().unwrap())
-                        .artist(artist.as_str().unwrap())
+                        .release(title)
+                        .artist(artist)
                         .build(),
                 )
                 .with_artist_credits()
@@ -119,14 +119,14 @@ impl MetadataProvider for MusicBrainzWrapper {
     /// algorithm.
     fn get_artist_meta(
         &self,
-        key: bson::Document,
+        key: &mut ArtistInfo,
         existing: std::option::Option<models::ArtistMeta>,
     ) -> Option<models::ArtistMeta> {
         if meta_provider_settings(PROVIDER_KEY).boolean("enabled") {
-            if let Some(mbid) = key.get("mbid") {
-                println!("[MusicBrainz] Fetching artist by MBID: {}", &mbid);
+            if let Some(mbid) = key.mbid.as_ref() {
+                println!("[MusicBrainz] Fetching artist by MBID: {}", mbid);
                 let res = Artist::fetch()
-                    .id(mbid.as_str().unwrap())
+                    .id(mbid)
                     .with_url_relations()
                     .execute();
                 if let Ok(artist) = res {
@@ -147,11 +147,12 @@ impl MetadataProvider for MusicBrainzWrapper {
             }
             // If MBID is not available we'll need to search solely by artist name.
             // TODO: add some more clues, such as a song or album name.
-            else if let Some(name) = key.get("name") {
+            else {
+                let name = &key.name;
                 println!("[MusicBrainz] Fetching artist with name = {}", &name);
                 let res = Artist::search(
                     ArtistSearchQuery::query_builder()
-                        .artist(name.as_str().unwrap())
+                        .artist(name)
                         .build(),
                 )
                 .with_url_relations()
@@ -177,9 +178,6 @@ impl MetadataProvider for MusicBrainzWrapper {
                     );
                     return existing;
                 }
-            } else {
-                println!("[MusicBrainz] Key document is empty, will not fetch artist metadata");
-                return existing;
             }
         } else {
             return existing;

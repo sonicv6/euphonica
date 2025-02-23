@@ -2,6 +2,8 @@ use chrono::NaiveDate;
 use musicbrainz_rs::entity::artist::ArtistType;
 use serde::{Deserialize, Serialize};
 
+use crate::common::{AlbumInfo, ArtistInfo};
+
 // Common building blocks that can be shared between different providers
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tag {
@@ -84,16 +86,10 @@ pub struct AlbumMeta {
 impl AlbumMeta {
     /// Create a minimal AlbumMeta. Useful for blocking further calls to an album
     /// whose information are unavailable on any remote source.
-    pub fn from_key(key: &bson::Document) -> Self {
-        let mbid: Option<String>;
-        if let Ok(mbid_str) = key.get_str("mbid") {
-            mbid = Some(mbid_str.to_owned());
-        } else {
-            mbid = None;
-        }
+    pub fn from_key(key: &AlbumInfo) -> Self {
         Self {
-            name: key.get_str("name").unwrap_or_default().to_string(),
-            mbid,
+            name: key.title.to_owned(),
+            mbid: key.mbid.clone(),
             artist: None,
             tags: Vec::with_capacity(0),
             image: Vec::with_capacity(0),
@@ -169,16 +165,10 @@ pub struct ArtistMeta {
 impl ArtistMeta {
     /// Create a minimal ArtistMeta. Useful for blocking further calls to an artist
     /// whose information are unavailable on any remote source.
-    pub fn from_key(key: &bson::Document) -> Self {
-        let mbid: Option<String>;
-        if let Ok(mbid_str) = key.get_str("mbid") {
-            mbid = Some(mbid_str.to_owned());
-        } else {
-            mbid = None;
-        }
+    pub fn from_key(key: &ArtistInfo) -> Self {
         Self {
-            name: key.get_str("name").unwrap_or_default().to_string(),
-            mbid,
+            name: key.name.to_owned(),
+            mbid: key.mbid.clone(),
             similar: Vec::with_capacity(0),
             tags: Vec::with_capacity(0),
             image: Vec::with_capacity(0),

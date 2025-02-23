@@ -1,3 +1,5 @@
+use crate::common::{AlbumInfo, ArtistInfo};
+
 use super::{lastfm::LastfmWrapper, models, musicbrainz::MusicBrainzWrapper, MetadataProvider};
 
 /// A meta-MetadataProvider that works by daisy-chaining actual MetadataProviders.
@@ -34,18 +36,15 @@ impl MetadataProvider for MetadataChain {
 
     fn get_album_meta(
         self: &Self,
-        key: bson::Document,
+        key: &mut AlbumInfo,
         mut existing: Option<models::AlbumMeta>,
     ) -> Option<models::AlbumMeta> {
-        let mut current_key: bson::Document = key.clone();
         for provider in self.providers.iter() {
-            existing = provider.get_album_meta(current_key.clone(), existing);
+            existing = provider.get_album_meta(key, existing);
             // Update key document with new fields
             if let Some(meta) = &existing {
-                if let Some(id) = &meta.mbid {
-                    if !current_key.contains_key("mbid") {
-                        current_key.insert("mbid", id.to_owned());
-                    }
+                if let (Some(id), None) = (&meta.mbid, &key.mbid) {
+                    key.mbid = Some(id.to_owned());
                 }
             }
         }
@@ -54,18 +53,15 @@ impl MetadataProvider for MetadataChain {
 
     fn get_artist_meta(
         self: &Self,
-        key: bson::Document,
+        key: &mut ArtistInfo,
         mut existing: Option<models::ArtistMeta>,
     ) -> Option<models::ArtistMeta> {
-        let mut current_key: bson::Document = key.clone();
         for provider in self.providers.iter() {
-            existing = provider.get_artist_meta(current_key.clone(), existing);
+            existing = provider.get_artist_meta(key, existing);
             // Update key document with new fields
             if let Some(meta) = &existing {
-                if let Some(id) = &meta.mbid {
-                    if !current_key.contains_key("mbid") {
-                        current_key.insert("mbid", id.to_owned());
-                    }
+                if let (Some(id), None) = (&meta.mbid, &key.mbid) {
+                    key.mbid = Some(id.to_owned());
                 }
             }
         }
