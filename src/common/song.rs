@@ -12,7 +12,7 @@ use std::{
 };
 use time::{Date, Month};
 
-use crate::{cache::Cache, meta_providers::Metadata, utils::strip_filename_linux};
+use crate::{cache::Cache, meta_providers::MetadataType, utils::strip_filename_linux};
 
 use super::{artists_to_string, parse_mb_artist_tag, AlbumInfo, ArtistInfo};
 
@@ -380,8 +380,8 @@ impl Song {
         }
 
         // Album art, if available
-        let thumbnail_path = cache.get_path_for(&Metadata::AlbumArt(
-            strip_filename_linux(self.get_uri()).to_owned(),
+        let thumbnail_path = cache.get_path_for(&MetadataType::AlbumArt(
+            strip_filename_linux(self.get_uri()),
             true,
         ));
         if thumbnail_path.exists() {

@@ -1,8 +1,8 @@
 extern crate bson;
 use gtk::prelude::*;
-use std::{thread, time::Duration};
+use std::{path::PathBuf, thread, time::Duration};
 
-use crate::utils::settings_manager;
+use crate::{common::{AlbumInfo, ArtistInfo}, utils::settings_manager};
 
 use super::models;
 
@@ -13,18 +13,33 @@ pub fn sleep_after_request() {
     ));
 }
 
-pub enum Metadata {
+/// Enum for communication with provider threads from the cache controller living on the main thread.
+/// Can be used for both request and response.
+pub enum ProviderMessage {
+    AlbumArt(AlbumInfo, PathBuf, PathBuf),
+    AlbumArtAvailable(String), // Only return folder URI
+    /// Negative response (currently only used by MpdWrapper)
+    AlbumArtNotAvailable(AlbumInfo),
+    /// Both request and positive response
+    AlbumMeta(AlbumInfo),
+    AlbumMetaAvailable(String), // Only return folder URI
+    /// Both request and positive response
+    ArtistAvatar(ArtistInfo, PathBuf, PathBuf),
+    ArtistAvatarAvailable(String), // Only return name
+    /// Both request and positive response. Includes downloading artist avatar.
+    ArtistMeta(ArtistInfo, PathBuf, PathBuf),
+    ArtistMetaAvailable(String) // Only return name
+}
+
+pub enum MetadataType<'a> {
     // folder-level URI, true for thumbnail
-    AlbumArt(String, bool),
-    // Reserved for MpdWrapper to notify that we don't have one locally.
-    // Used by cache controller to trigger downloading from daisy-chained metadata.
-    AlbumArtNotAvailable(String, bson::Document),
+    AlbumArt(&'a str, bool),
     // folder-level URI
-    AlbumMeta(String),
+    AlbumMeta(&'a str),
     // Tag, true for thumbnail
-    ArtistAvatar(String, bool),
+    ArtistAvatar(&'a str, bool),
     // Tag
-    ArtistMeta(String),
+    ArtistMeta(&'a str),
 }
 
 /// Common provider-agnostic utilities.
@@ -100,7 +115,7 @@ pub trait MetadataProvider: Send + Sync {
     /// data will always overwrite existing fields.
     fn get_album_meta(
         &self,
-        key: bson::Document,
+        key: &mut AlbumInfo,
         existing: Option<models::AlbumMeta>,
     ) -> Option<models::AlbumMeta>;
 
@@ -109,7 +124,7 @@ pub trait MetadataProvider: Send + Sync {
     /// data will always overwrite existing fields.
     fn get_artist_meta(
         &self,
-        key: bson::Document,
+        key: &mut ArtistInfo,
         existing: Option<models::ArtistMeta>,
     ) -> Option<models::ArtistMeta>;
 }

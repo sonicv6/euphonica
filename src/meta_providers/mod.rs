@@ -4,7 +4,7 @@ pub mod lastfm;
 pub mod models;
 pub mod musicbrainz;
 
-pub use base::{utils, Metadata, MetadataProvider};
+pub use base::{utils, ProviderMessage, MetadataType, MetadataProvider};
 pub use chain::{get_provider_with_priority, MetadataChain};
 
 pub mod prelude {

@@ -32,7 +32,12 @@ mod imp {
         #[template_child]
         pub cover: TemplateChild<gtk::Image>,
         #[template_child]
+        pub content_spinner: TemplateChild<gtk::Stack>,
+        #[template_child]
         pub content: TemplateChild<gtk::ListView>,
+
+        #[template_child]
+        pub infobox_spinner: TemplateChild<gtk::Stack>,
         #[template_child]
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
@@ -87,6 +92,7 @@ mod imp {
                 artist: TemplateChild::default(),
                 release_date: TemplateChild::default(),
                 track_count: TemplateChild::default(),
+                infobox_spinner: TemplateChild::default(),
                 infobox_revealer: TemplateChild::default(),
                 collapse_infobox: TemplateChild::default(),
                 wiki_box: TemplateChild::default(),
@@ -94,6 +100,7 @@ mod imp {
                 wiki_link: TemplateChild::default(),
                 wiki_attrib: TemplateChild::default(),
                 runtime: TemplateChild::default(),
+                content_spinner: TemplateChild::default(),
                 content: TemplateChild::default(),
                 song_list: gio::ListStore::new::<Song>(),
                 sel_model: gtk::MultiSelection::new(Option::<gio::ListStore>::None),
@@ -220,6 +227,10 @@ impl AlbumContentView {
                 wiki_attrib.set_label(&wiki.attribution);
             } else {
                 wiki_box.set_visible(false);
+            }
+            let infobox_spinner = self.imp().infobox_spinner.get();
+            if infobox_spinner.visible_child_name().unwrap() != "content" {
+                infobox_spinner.set_visible_child_name("content");
             }
         } else {
             wiki_box.set_visible(false);
@@ -485,9 +496,21 @@ impl AlbumContentView {
         // Unset metadata widgets
         self.imp().wiki_box.set_visible(false);
         self.imp().song_list.remove_all();
+        let content_spinner = self.imp().content_spinner.get();
+        if content_spinner.visible_child_name().unwrap() != "spinner" {
+            content_spinner.set_visible_child_name("spinner");
+        }
+        let infobox_spinner = self.imp().infobox_spinner.get();
+        if infobox_spinner.visible_child_name().unwrap() != "spinner" {
+            infobox_spinner.set_visible_child_name("spinner");
+        }
     }
 
     fn add_songs(&self, songs: &[Song]) {
+        let content_spinner = self.imp().content_spinner.get();
+        if content_spinner.visible_child_name().unwrap() != "content" {
+            content_spinner.set_visible_child_name("content");
+        }
         self.imp().song_list.extend_from_slice(songs);
         self.imp()
             .track_count

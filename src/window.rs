@@ -599,9 +599,8 @@ mod imp {
                         (height - level * scale * 1000000.0).max(0.0),
                     );
                 }
-                path_builder.line_to(width, height);
             }
-
+            path_builder.line_to(width, height);
             let path = path_builder.to_path();
 
             snapshot.push_fill(&path, gsk::FillRule::Winding);

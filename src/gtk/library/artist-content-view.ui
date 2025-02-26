@@ -49,7 +49,20 @@
                           </object>
                         </child>
                         <child>
-                          <object class="GtkBox" id="infobox_text">
+                          <object class="GtkStack" id="infobox_spinner">
+                            <child>
+                              <object class="GtkStackPage">
+                                <property name="name">spinner</property>
+                                <property name="child">
+                                  <object class="AdwSpinner"/>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkStackPage">
+                                <property name="name">content</property>
+                                <property name="child">
+                                  <object class="GtkBox" id="infobox_text">
                             <property name="orientation">1</property>
                             <property name="spacing">6</property>
                             <property name="hexpand">true</property>
@@ -163,6 +176,10 @@
                               </object>
                             </child>
                           </object>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
                         </child>
                       </object>
                     </property>
@@ -246,14 +263,31 @@
                                 <property name="has-frame">false</property>
                                 <property name="vexpand">true</property>
                                 <property name="child">
-                                  <object class="GtkGridView" id="album_subview">
-                                    <property name="orientation">1</property>
-                                    <property name="min-columns">1</property>
-                                    <property name="single-click-activate">true</property>
-                                    <style>
-                                      <class name="no-bg"/>
-                                      <class name="padding-12"/>
-                                    </style>
+                                  <object class="GtkStack" id="album_spinner">
+                                    <child>
+                                      <object class="GtkStackPage">
+                                        <property name="name">spinner</property>
+                                        <property name="child">
+                                          <object class="AdwSpinner"/>
+                                        </property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkStackPage">
+                                        <property name="name">content</property>
+                                        <property name="child">
+                                          <object class="GtkGridView" id="album_subview">
+                                            <property name="orientation">1</property>
+                                            <property name="min-columns">1</property>
+                                            <property name="single-click-activate">true</property>
+                                            <style>
+                                              <class name="no-bg"/>
+                                              <class name="padding-12"/>
+                                            </style>
+                                          </object>
+                                        </property>
+                                      </object>
+                                    </child>
                                   </object>
                                 </property>
                               </object>
@@ -365,11 +399,28 @@
                                 <property name="has-frame">false</property>
                                 <property name="vexpand">true</property>
                                 <property name="child">
-                                  <object class="GtkListView" id="song_subview">
-                                    <property name="show-separators">true</property>
-                                    <style>
-                                      <class name="no-bg"/>
-                                    </style>
+                                  <object class="GtkStack" id="song_spinner">
+                                    <child>
+                                      <object class="GtkStackPage">
+                                        <property name="name">spinner</property>
+                                        <property name="child">
+                                          <object class="AdwSpinner"/>
+                                        </property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkStackPage">
+                                        <property name="name">content</property>
+                                        <property name="child">
+                                          <object class="GtkListView" id="song_subview">
+                                            <property name="show-separators">true</property>
+                                            <style>
+                                              <class name="no-bg"/>
+                                            </style>
+                                          </object>
+                                        </property>
+                                      </object>
+                                    </child>
                                   </object>
                                 </property>
                               </object>

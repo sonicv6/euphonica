@@ -1079,8 +1079,8 @@ impl Player {
             if let Some(album) = song.get_album() {
                 // Always read from disk
                 Some(
-                    cache.get_path_for(&crate::meta_providers::Metadata::AlbumArt(
-                        album.uri.to_owned(),
+                    cache.get_path_for(&crate::meta_providers::MetadataType::AlbumArt(
+                        &album.uri,
                         thumbnail,
                     )),
                 )
