@@ -44,8 +44,8 @@ mod imp {
             Self {
                 connection_state: Cell::default(),
                 busy: Cell::new(false),
-                supports_stickers: Cell::new(false),
-                supports_playlists: Cell::new(false),
+                supports_stickers: Cell::new(true),
+                supports_playlists: Cell::new(true),
             }
         }
     }

@@ -11,8 +11,12 @@ use crate::{
 };
 
 mod imp {
+    use std::cell::Cell;
+
+    use crate::common::Rating;
+
     use super::*;
-    use glib::{ParamSpec, ParamSpecString};
+    use glib::{ParamSpec, ParamSpecChar, ParamSpecString};
     use once_cell::sync::Lazy;
 
     #[derive(Default, CompositeTemplate)]
@@ -26,6 +30,9 @@ mod imp {
         pub artist: TemplateChild<Label>,
         #[template_child]
         pub quality_grade: TemplateChild<Image>,
+        #[template_child]
+        pub rating: TemplateChild<Rating>,
+        pub rating_val: Cell<i8>,
         pub album: RefCell<Option<Album>>,
         // Vector holding the bindings to properties of the Album GObject
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
@@ -51,12 +58,28 @@ mod imp {
 
     // Trait shared by all GObjects
     impl ObjectImpl for AlbumCell {
+        fn constructed(&self) {
+            self.parent_constructed();
+
+            self.obj()
+                .bind_property("rating", &self.rating.get(), "value")
+                .sync_create()
+                .build();
+
+            self.obj()
+                .bind_property("rating", &self.rating.get(), "visible")
+                .transform_to(|_, r: i8| {Some(r >= 0)})
+                .sync_create()
+                .build();
+        }
+
         fn properties() -> &'static [ParamSpec] {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
                     ParamSpecString::builder("title").build(),
                     ParamSpecString::builder("artist").build(),
                     ParamSpecString::builder("quality-grade").build(),
+                    ParamSpecChar::builder("rating").build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -67,6 +90,7 @@ mod imp {
                 "title" => self.title.label().to_value(),
                 "artist" => self.artist.label().to_value(),
                 "quality-grade" => self.quality_grade.icon_name().to_value(),
+                "rating" => self.rating_val.get().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -95,6 +119,14 @@ mod imp {
                         self.quality_grade.set_visible(false);
                     }
                 }
+                "rating" => {
+                    if let Ok(new) = value.get::<i8>() {
+                        let old = self.rating_val.replace(new);
+                        if old != new {
+                            obj.notify("rating");
+                        }
+                    }
+                },
                 _ => unimplemented!(),
             }
         }
@@ -159,6 +191,10 @@ impl AlbumCell {
         item.property_expression("item")
             .chain_property::<Album>("quality-grade")
             .bind(self, "quality-grade", gtk::Widget::NONE);
+
+        item.property_expression("item")
+            .chain_property::<Album>("rating")
+            .bind(self, "rating", gtk::Widget::NONE);
     }
 
     fn update_album_art(&self, info: &AlbumInfo) {

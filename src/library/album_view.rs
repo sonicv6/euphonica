@@ -22,6 +22,8 @@ mod imp {
 
     use glib::subclass::Signal;
 
+    use crate::common::Rating;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate, Properties)]
@@ -48,6 +50,8 @@ mod imp {
         pub search_bar: TemplateChild<gtk::SearchBar>,
         #[template_child]
         pub search_entry: TemplateChild<gtk::SearchEntry>,
+        #[template_child]
+        pub rating: TemplateChild<Rating>,
 
         // Content
         #[template_child]
@@ -86,6 +90,7 @@ mod imp {
                 search_mode: TemplateChild::default(),
                 search_bar: TemplateChild::default(),
                 search_entry: TemplateChild::default(),
+                rating: TemplateChild::default(),
                 // Content
                 grid_view: TemplateChild::default(),
                 content_page: TemplateChild::default(),
@@ -231,11 +236,11 @@ impl AlbumView {
         state
             .bind("sort-by", &sort_mode, "selected")
             .mapping(|val, _| {
-                // TODO: i18n
                 match val.get::<String>().unwrap().as_ref() {
                     "album-title" => Some(0.to_value()),
                     "album-artist" => Some(1.to_value()),
                     "release-date" => Some(2.to_value()),
+                    "rating" => Some(3.to_value()),
                     _ => unreachable!(),
                 }
             })
@@ -243,6 +248,7 @@ impl AlbumView {
                 0 => Some("album-title".to_variant()),
                 1 => Some("album-artist".to_variant()),
                 2 => Some("release-date".to_variant()),
+                3 => Some("rating".to_variant()),
                 _ => unreachable!(),
             })
             .build();
@@ -295,6 +301,15 @@ impl AlbumView {
                         g_cmp_options(
                             album1.get_release_date().as_ref(),
                             album2.get_release_date().as_ref(),
+                            nulls_first,
+                            asc,
+                        )
+                    }
+                    8 => {
+                        // Release date
+                        g_cmp_options(
+                            album1.get_rating().as_ref(),
+                            album2.get_rating().as_ref(),
                             nulls_first,
                             asc,
                         )

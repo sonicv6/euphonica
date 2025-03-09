@@ -76,3 +76,7 @@ windowhandle {
 .no-shading .nested-split-view > .background {
   background: transparent;
 }
+
+.rating {
+    transition: opacity 0.5s;
+}

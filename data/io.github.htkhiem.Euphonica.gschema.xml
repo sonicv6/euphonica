@@ -8,6 +8,7 @@
 		<value nick="release-date" value="5"/>
 		<value nick="filename" value="6"/>
 		<value nick="last-modified" value="7"/>
+		<value nick="rating" value="8"/>
 	</enum>
 
 	<enum id="io.github.htkhiem.Euphonica.sortdir">
@@ -193,10 +194,10 @@
 			<default>true</default>
 		</key>
 		<key name="bg-blur-radius" type="u">
-			<default>24</default>
+			<default>48</default>
 		</key>
 		<key name="bg-opacity" type="d">
-			<default>0.5</default>
+			<default>0.36</default>
 		</key>
 		<key name="bg-transition-duration-s" type="d">
 			<default>1.0</default>

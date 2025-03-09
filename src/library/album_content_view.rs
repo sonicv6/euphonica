@@ -11,14 +11,14 @@ use super::{AlbumSongRow, Library};
 use crate::{
     cache::{placeholders::ALBUMART_PLACEHOLDER, Cache, CacheState},
     client::ClientState,
-    common::{Album, AlbumInfo, Song},
+    common::{Album, AlbumInfo, Rating, Song},
     utils::format_secs_as_duration,
 };
 
 mod imp {
     use std::cell::Cell;
 
-    use crate::library::add_to_playlist::AddToPlaylistButton;
+    use crate::{common::Rating, library::add_to_playlist::AddToPlaylistButton};
 
     use super::*;
 
@@ -42,6 +42,10 @@ mod imp {
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
         pub artist: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub rating: TemplateChild<Rating>,
+        #[template_child]
+        pub rating_readout: TemplateChild<gtk::Label>,
 
         #[template_child]
         pub wiki_box: TemplateChild<gtk::ScrolledWindow>,
@@ -90,6 +94,8 @@ mod imp {
                 cover: TemplateChild::default(),
                 title: TemplateChild::default(),
                 artist: TemplateChild::default(),
+                rating: TemplateChild::default(),
+                rating_readout: TemplateChild::default(),
                 release_date: TemplateChild::default(),
                 track_count: TemplateChild::default(),
                 infobox_spinner: TemplateChild::default(),
@@ -189,6 +195,19 @@ mod imp {
                     sel_model.unselect_all();
                 }
             ));
+
+            // Rating readout
+            self.rating
+                .bind_property(
+                    "value", &self.rating_readout.get(), "label"
+                )
+                .transform_to(|_, r: i8| {
+                    // TODO: l10n
+                    if r < 0 { Some("Unrated".to_value()) }
+                    else { Some(format!("{:.1}", r as f32 / 2.0).to_value()) }
+                })
+                .sync_create()
+                .build();
         }
     }
 
@@ -253,6 +272,28 @@ impl AlbumContentView {
                 }
             ),
         );
+
+        self.imp().rating
+            .connect_closure(
+                "changed",
+                false,
+                closure_local!(
+                    #[strong(rename_to = this)]
+                    self,
+                    #[weak]
+                    library,
+                    move |rating: Rating| {
+                        if let Some(album) = this.imp().album.borrow().as_ref() {
+                            let rating_val = rating.value();
+                            let rating_opt = if rating_val > 0 { Some(rating_val)} else { None };
+                            println!("Writing rating {:?} as sticker...", &rating_opt);
+                            album.set_rating(rating_opt);
+                            library.rate_album(album, rating_opt);
+                        }
+                    }
+                )
+            );
+
         cache.get_cache_state().connect_closure(
             "album-meta-downloaded",
             false,
@@ -432,6 +473,7 @@ impl AlbumContentView {
     pub fn bind(&self, album: Album) {
         let title_label = self.imp().title.get();
         let artist_label = self.imp().artist.get();
+        let rating = self.imp().rating.get();
         let release_date_label = self.imp().release_date.get();
         let mut bindings = self.imp().bindings.borrow_mut();
 
@@ -448,6 +490,13 @@ impl AlbumContentView {
             .build();
         // Save binding
         bindings.push(artist_binding);
+
+        let rating_binding = album
+            .bind_property("rating", &rating, "value")
+            .sync_create()
+            .build();
+        // Save binding
+        bindings.push(rating_binding);
 
         self.update_meta(&album);
         let release_date_binding = album
