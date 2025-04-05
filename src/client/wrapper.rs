@@ -826,9 +826,6 @@ impl MpdWrapper {
                                 println!("get_sticker: Disabling sticker-dependent features...");
                                 self.state.set_supports_stickers(false);
                             }
-                            else {
-                                println!("{:?}", server_err);
-                            }
                         }
                         _ => {
                             println!("{:?}", error);

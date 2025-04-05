@@ -11,6 +11,12 @@
                 <property name="title" translatable="true">Album Info</property>
               </object>
             </property>
+            <child type="end">
+              <object class="GtkMenuButton" id="edit_menu">
+                <property name="menu-model">edit_menu_model</property>
+                <property name="icon-name">view-more-symbolic</property>
+              </object>
+            </child>
           </object>
         </child>
         <property name="content">
@@ -394,5 +400,11 @@
         </property>
       </object>
     </child>
+    <menu id="edit_menu_model">
+      <item>
+        <attribute name="label" translatable="true">Clear rating</attribute>
+        <attribute name="action">acv.clear-rating</attribute>
+      </item>
+    </menu>
   </template>
 </interface>

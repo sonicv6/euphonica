@@ -1,4 +1,5 @@
 use adw::subclass::prelude::*;
+use gio::{ActionEntry, SimpleActionGroup};
 use glib::{clone, closure_local, signal::SignalHandlerId, Binding};
 use gtk::{gio, glib, prelude::*, BitsetIter, CompositeTemplate, ListItem, SignalListItemFactory};
 use std::{
@@ -81,6 +82,7 @@ mod imp {
         pub song_list: gio::ListStore,
         pub sel_model: gtk::MultiSelection,
 
+        pub library: OnceCell<Library>,
         pub album: RefCell<Option<Album>>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
@@ -117,6 +119,7 @@ mod imp {
                 add_to_playlist: TemplateChild::default(),
                 sel_all: TemplateChild::default(),
                 sel_none: TemplateChild::default(),
+                library: OnceCell::new(),
                 album: RefCell::new(None),
                 bindings: RefCell::new(Vec::new()),
                 cover_signal_id: RefCell::new(None),
@@ -208,6 +211,29 @@ mod imp {
                 })
                 .sync_create()
                 .build();
+
+            // Edit actions
+            let obj = self.obj();
+            let action_clear_rating = ActionEntry::builder("clear-rating")
+                .activate(clone!(
+                    #[strong]
+                    obj,
+                    move |_, _, _| {
+                        if let (Some(album), Some(library)) = (
+                            obj.imp().album.borrow().as_ref(),
+                            obj.imp().library.get()
+                        ) {
+                            library.rate_album(album, None);
+                            obj.imp().rating.set_value(-1);
+                        }
+                    }
+                ))
+                .build();
+
+            // Create a new action group and add actions to it
+            let actions = SimpleActionGroup::new();
+            actions.add_action_entries([action_clear_rating]);
+            self.obj().insert_action_group("acv", Some(&actions));
         }
     }
 
@@ -227,6 +253,10 @@ impl Default for AlbumContentView {
 }
 
 impl AlbumContentView {
+    fn get_library(&self) -> Option<&Library> {
+        self.imp().library.get()
+    }
+
     fn update_meta(&self, album: &Album) {
         let cache = self.imp().cache.get().unwrap().clone();
         let wiki_box = self.imp().wiki_box.get();
@@ -257,6 +287,10 @@ impl AlbumContentView {
     }
 
     pub fn setup(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+        self.imp()
+            .add_to_playlist
+            .setup(library.clone(), self.imp().sel_model.clone());
+        self.imp().library.set(library).expect("Could not register album content view with library controller");
         cache.get_cache_state().connect_closure(
             "album-art-downloaded",
             false,
@@ -280,10 +314,11 @@ impl AlbumContentView {
                 closure_local!(
                     #[strong(rename_to = this)]
                     self,
-                    #[weak]
-                    library,
                     move |rating: Rating| {
-                        if let Some(album) = this.imp().album.borrow().as_ref() {
+                        if let (Some(album), Some(library)) = (
+                            this.imp().album.borrow().as_ref(),
+                            this.get_library()
+                        ) {
                             let rating_val = rating.value();
                             let rating_opt = if rating_val > 0 { Some(rating_val)} else { None };
                             println!("Writing rating {:?} as sticker...", &rating_opt);
@@ -351,10 +386,11 @@ impl AlbumContentView {
         replace_queue_btn.connect_clicked(clone!(
             #[strong(rename_to = this)]
             self,
-            #[weak]
-            library,
             move |_| {
-                if let Some(album) = this.imp().album.borrow().as_ref() {
+                if let (Some(album), Some(library)) = (
+                    this.imp().album.borrow().as_ref(),
+                    this.get_library()
+                ) {
                     if this.imp().selecting_all.get() {
                         library.queue_album(album.clone(), true, true);
                     } else {
@@ -376,10 +412,11 @@ impl AlbumContentView {
         append_queue_btn.connect_clicked(clone!(
             #[strong(rename_to = this)]
             self,
-            #[weak]
-            library,
             move |_| {
-                if let Some(album) = this.imp().album.borrow().as_ref() {
+                if let (Some(album), Some(library)) = (
+                    this.imp().album.borrow().as_ref(),
+                    this.get_library()
+                ) { 
                     if this.imp().selecting_all.get() {
                         library.queue_album(album.clone(), false, false);
                     } else {
@@ -403,13 +440,16 @@ impl AlbumContentView {
 
         // Create an empty `AlbumSongRow` during setup
         factory.connect_setup(clone!(
-            #[weak]
-            library,
+            #[strong(rename_to = this)]
+            self,
             move |_, list_item| {
                 let item = list_item
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem");
-                let row = AlbumSongRow::new(library.clone(), &item);
+                let row = AlbumSongRow::new(
+                    this.get_library().expect("Error: album content view not connected to library").clone(),
+                    &item
+                );
                 item.set_child(Some(&row));
             }
         ));
@@ -449,10 +489,6 @@ impl AlbumContentView {
 
         // Set the factory of the list view
         self.imp().content.set_factory(Some(&factory));
-
-        self.imp()
-            .add_to_playlist
-            .setup(library.clone(), self.imp().sel_model.clone());
     }
 
     /// Returns true if an album art was successfully retrieved.
