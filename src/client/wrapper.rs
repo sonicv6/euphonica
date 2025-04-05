@@ -1204,9 +1204,11 @@ impl MpdWrapper {
 
     fn on_album_downloaded(&self, signal_name: &str, tag: Option<&str>, info: AlbumInfo) {
         let album = Album::from(info);
-        let mut stickers = album.get_stickers().borrow_mut();
-        if let Some(val) = self.get_sticker("album", album.get_title(), Stickers::RATING_KEY) {
-            stickers.set_rating(&val);
+        {
+            let mut stickers = album.get_stickers().borrow_mut();
+            if let Some(val) = self.get_sticker("album", album.get_title(), Stickers::RATING_KEY) {
+                stickers.set_rating(&val);
+            }
         }
         // Append to listener lists
         if let Some(tag) = tag {

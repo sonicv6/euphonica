@@ -61,48 +61,55 @@
                   <object class="GtkSearchBar" id="search_bar">
                     <property name="key-capture-widget">nav_view</property>
                     <child>
-                      <object class="GtkBox">
-                        <property name="spacing">6</property>
+                      <object class="GtkScrolledWindow">
+                        <property name="has-frame">false</property>
+                        <property name="propagate-natural-width">true</property>
+                        <property name="vscrollbar-policy">2</property>
                         <child>
-                          <object class="GtkDropDown" id="search_mode">
-                            <property name="model">
-                              <object class="GtkStringList">
-                                <items>
-                                  <!-- Rust code matches by index, not string content, to avoid string comparisons.-->
-                                  <item translatable="yes">Either</item>
-                                  <item translatable="yes">Album title</item>
-                                  <item translatable="yes">AlbumArtist tag</item>
-                                </items>
+                          <object class="GtkBox">
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkDropDown" id="search_mode">
+                                <property name="model">
+                                  <object class="GtkStringList">
+                                    <items>
+                                      <!-- Rust code matches by index, not string content, to avoid string comparisons.-->
+                                      <item translatable="yes">Either</item>
+                                      <item translatable="yes">Album title</item>
+                                      <item translatable="yes">AlbumArtist tag</item>
+                                    </items>
+                                  </object>
+                                </property>
                               </object>
-                            </property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkSearchEntry" id="search_entry">
-                            <property name="search-delay">150</property>
-                            <property name="width-request">100</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkSeparator"/>
-                        </child>
-                        <child>
-                          <object class="GtkDropDown" id="rating_mode">
-                            <property name="model">
-                              <object class="GtkStringList">
-                                <items>
-                                  <!-- Rust code matches by index, not string content, to avoid string comparisons.-->
-                                  <item translatable="yes">At least</item>
-                                  <item translatable="yes">Below</item>
-                                  <item translatable="yes">Exactly</item>
-                                </items>
+                            </child>
+                            <child>
+                              <object class="GtkSearchEntry" id="search_entry">
+                                <property name="search-delay">150</property>
+                                <property name="width-request">100</property>
                               </object>
-                            </property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="EuphonicaRating" id="rating">
-                            <property name="editable">true</property>
+                            </child>
+                            <child>
+                              <object class="GtkSeparator"/>
+                            </child>
+                            <child>
+                              <object class="GtkDropDown" id="rating_mode">
+                                <property name="model">
+                                  <object class="GtkStringList">
+                                    <items>
+                                      <!-- Rust code matches by index, not string content, to avoid string comparisons.-->
+                                      <item translatable="yes">At least</item>
+                                      <item translatable="yes">Below</item>
+                                      <item translatable="yes">Exactly</item>
+                                    </items>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="EuphonicaRating" id="rating">
+                                <property name="editable">true</property>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>
