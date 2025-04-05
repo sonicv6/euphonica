@@ -6,6 +6,7 @@ An MPD frontend with delusions of grandeur.
 ## Features
 - Responsive GTK4 LibAdwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration
 - Built-in, customisable spectrum visualiser, reading from MPD FIFO or system PipeWire.
+- Rate albums (requires MPD 0.24+)
 - Audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums & detailed format printout
 - Browse your library by album, artist and folders with multiselection support
   - Browsing by genre and other criteria are planned.
@@ -139,13 +140,12 @@ Most libraries, especially those that ran well with other MPD clients like [Cant
 
 ## TODO
 - Local storage management UI (to allow re-fetching metadata, clearing album art cache and the like)
-- Stickers DB support to enable the following features:
+- Support more stickers-based features:
   - Recently played
-  - Ratings (song, album, etc)
+  - Per-song ratings
   - User-editable album wikis and artist bios
   - Metadata sync between Euphonica instances (instead of being stored locally)
   - Should follow existing sticker schemas, such as that proposed by myMPD, where possible.
-- Refactor current metadata storage from MongoDB-like to indexed SQLite.
 - Special support for local socket connection, or remote filesystem access, to enable the following features:
   - Library management operations such as tag editing (will require access to the files themselves)
   - Save downloaded album arts and artist avatars directly into the music folders themselves so other instances
