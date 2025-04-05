@@ -52,6 +52,8 @@ mod imp {
         pub search_entry: TemplateChild<gtk::SearchEntry>,
         #[template_child]
         pub rating: TemplateChild<Rating>,
+        #[template_child]
+        pub rating_mode: TemplateChild<gtk::DropDown>,
 
         // Content
         #[template_child]
@@ -91,6 +93,7 @@ mod imp {
                 search_bar: TemplateChild::default(),
                 search_entry: TemplateChild::default(),
                 rating: TemplateChild::default(),
+                rating_mode: TemplateChild::default(),
                 // Content
                 grid_view: TemplateChild::default(),
                 content_page: TemplateChild::default(),
@@ -361,6 +364,21 @@ impl AlbumView {
                     .downcast_ref::<Album>()
                     .expect("Search obj has to be a common::Album.");
 
+                // Filter by rating
+                let this_rating = album.get_rating();
+                let filter_rating = this.imp().rating.value();
+                let matches_rating = match this.imp().rating_mode.selected() {
+                    0 => true,
+                    1 => this_rating.is_some() && this_rating.unwrap() >= filter_rating,
+                    2 => this_rating.is_some() && this_rating.unwrap() < filter_rating,
+                    3 => this_rating.is_some() && this_rating.unwrap() == filter_rating,
+                    _ => unimplemented!()
+                };
+
+                if !matches_rating {
+                    return false;
+                }
+
                 let search_term = this.imp().search_entry.text();
                 if search_term.is_empty() {
                     return true;
@@ -427,20 +445,53 @@ impl AlbumView {
             }
         ));
 
+        let rating = self.imp().rating.get();
+        let rating_mode = self.imp().rating_mode.get();
         let search_mode = self.imp().search_mode.get();
-        search_mode.connect_notify_local(
-            Some("selected"),
+        for mode in [
+            &rating_mode,
+            &search_mode
+        ] {
+            mode.connect_notify_local(
+                Some("selected"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |_, _| {
+                        this.imp()
+                            .search_filter
+                            .changed(gtk::FilterChange::Different);
+                    }
+                ),
+            );
+        }
+
+        rating.connect_notify_local(
+            Some("value"),
             clone!(
                 #[weak(rename_to = this)]
                 self,
                 move |_, _| {
-                    println!("Changed search mode");
-                    this.imp()
-                        .search_filter
-                        .changed(gtk::FilterChange::Different);
+                    if this.imp().rating_mode.selected() > 0 {
+                        this.imp()
+                            .search_filter
+                            .changed(gtk::FilterChange::Different);
+                    }
                 }
-            ),
+            )
         );
+
+        rating_mode
+            .bind_property(
+                "selected",
+                &rating,
+                "visible"
+            )
+            .transform_to(|_, val: u32| {
+                Some(val > 0)
+            })
+            .sync_create()
+            .build();
     }
 
     pub fn on_album_clicked(&self, album: &Album) {
