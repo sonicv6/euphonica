@@ -2,10 +2,10 @@ use gtk::gdk::Texture;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-use std::cell::OnceCell;
+use std::cell::{Cell, OnceCell, RefCell};
 use time::Date;
 
-use super::{artists_to_string, parse_mb_artist_tag, ArtistInfo, QualityGrade, SongInfo};
+use super::{artists_to_string, parse_mb_artist_tag, ArtistInfo, QualityGrade, SongInfo, Stickers};
 
 // This is a model class for queue view displays.
 // It does not contain any actual song in terms of data.
@@ -85,12 +85,7 @@ impl From<SongInfo> for AlbumInfo {
 mod imp {
     use super::*;
     use glib::{
-        ParamSpec,
-        ParamSpecObject,
-        // ParamSpecUInt,
-        // ParamSpecUInt64,
-        // ParamSpecBoolean,
-        ParamSpecString,
+        ParamSpec, ParamSpecChar, ParamSpecObject, ParamSpecString
     };
     use once_cell::sync::Lazy;
 
@@ -103,6 +98,7 @@ mod imp {
     #[derive(Default, Debug)]
     pub struct Album {
         pub info: OnceCell<AlbumInfo>,
+        pub stickers: RefCell<Stickers>
     }
 
     #[glib::object_subclass]
@@ -113,6 +109,7 @@ mod imp {
         fn new() -> Self {
             Self {
                 info: OnceCell::new(),
+                stickers: RefCell::new(Stickers::default())
             }
         }
     }
@@ -124,6 +121,7 @@ mod imp {
                     ParamSpecString::builder("uri").read_only().build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
+                    ParamSpecChar::builder("rating").build(),
                     ParamSpecObject::builder::<glib::BoxedAnyObject>("release-date")
                         .read_only()
                         .build(),
@@ -141,9 +139,31 @@ mod imp {
                 "uri" => obj.get_uri().to_value(),
                 "title" => obj.get_title().to_value(),
                 "artist" => obj.get_artist_str().to_value(),
+                "rating" => obj.get_rating().unwrap_or(-1).to_value(),
                 "release-date" => glib::BoxedAnyObject::new(obj.get_release_date()).to_value(),
                 "quality-grade" => obj.get_quality_grade().to_icon_name().to_value(),
                 _ => unimplemented!(),
+            }
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &ParamSpec) {
+            let obj = self.obj();
+            match pspec.name() {
+                "rating" => {
+                    if let (Ok(r), mut st) = (value.get::<i8>(), self.stickers.borrow_mut()) {
+                        let new_rating: Option<i8> = if r < 0 {
+                            Some(r)
+                        }
+                        else {
+                            None
+                        };
+                        if st.rating != new_rating {
+                            st.rating = new_rating;
+                            obj.notify("rating");
+                        }
+                    }
+                },
+                _ => unimplemented!()
             }
         }
     }
@@ -193,6 +213,22 @@ impl Album {
 
     pub fn get_quality_grade(&self) -> QualityGrade {
         self.get_info().quality_grade.clone()
+    }
+
+    pub fn get_rating(&self) -> Option<i8> {
+        self.imp().stickers.borrow().rating.clone()
+    }
+
+    pub fn set_rating(&self, new: Option<i8>) {
+        let old = self.get_rating();
+        if new != old {
+            self.imp().stickers.borrow_mut().rating = new;
+            self.notify("rating");
+        }
+    }
+
+    pub fn get_stickers(&self) -> &RefCell<Stickers> {
+        &self.imp().stickers
     }
 }
 

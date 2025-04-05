@@ -13,6 +13,7 @@ use mpd::{
     Channel, EditAction, Idle, Output, SaveMode, Subsystem,
 };
 use rustc_hash::FxHashSet;
+
 use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
@@ -21,6 +22,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::common::Stickers;
 use crate::{
     common::{Album, AlbumInfo, Artist, ArtistInfo, INode, Song, SongInfo},
     meta_providers::ProviderMessage,
@@ -37,7 +39,6 @@ const FETCH_LIMIT: usize = 10000000; // Fetch at most ten million songs at once 
 // Messages to be sent from child thread or synchronous methods
 enum AsyncClientMessage {
     Connect, // Host and port are always read from gsettings
-    Disconnect,
     Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
     Idle(Vec<Subsystem>), // Will only be sent from the child thread
     AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model.
@@ -64,7 +65,6 @@ pub enum BackgroundTask {
     FetchArtistAlbums(String), // Get all albums of an artist with given name
     FetchPlaylistSongs(String), // Get songs of playlist with given name
 }
-
 // Thin wrapper around the blocking mpd::Client. It contains two separate client
 // objects connected to the same address. One lives on the main thread along
 // with the GUI and takes care of sending user commands to the daemon, while the
@@ -580,7 +580,7 @@ impl MpdWrapper {
         // println!("Received MpdMessage {:?}", request);
         match request {
             AsyncClientMessage::Connect => self.connect_async().await,
-            AsyncClientMessage::Disconnect => self.disconnect_async().await,
+            // AsyncClientMessage::Disconnect => self.disconnect_async().await,
             AsyncClientMessage::Idle(changes) => self.handle_idle_changes(changes).await,
             AsyncClientMessage::AlbumBasicInfoDownloaded(info) => {
                 self.on_album_downloaded("album-basic-info-downloaded", None, info)
@@ -597,7 +597,7 @@ impl MpdWrapper {
             AsyncClientMessage::ArtistAlbumBasicInfoDownloaded(artist_name, album_info) => self
                 .on_album_downloaded(
                     "artist-album-basic-info-downloaded",
-                    Some(artist_name),
+                    Some(&artist_name),
                     album_info,
                 ),
             AsyncClientMessage::FolderContentsDownloaded(uri, contents) => {
@@ -692,6 +692,15 @@ impl MpdWrapper {
         let addr_clone = addr.clone();
         let handle = gio::spawn_blocking(move || mpd::Client::connect(addr_clone)).await;
         if let Ok(Ok(mut client)) = handle {
+            // Euphonica relies on 0.24+ stickers capabilities. Disable if connected to
+            // an older daemon.
+            if client.version.1 < 24 {
+                self.state.set_supports_stickers(false);
+            }
+            else {
+                // Set to true for now, to be updated by sticker command handlers later
+                self.state.set_supports_stickers(true);
+            }
             // If there is a password configured, use it to authenticate.
             let password_access_failed: bool;
             let client_password: Option<String>;
@@ -700,8 +709,7 @@ impl MpdWrapper {
                     password_access_failed = false;
                     match entry.get_password() {
                         Ok(password) => {
-                            let password_res = client.login(&password);
-                            client_password = Some(password);
+                            let password_res = client.login(&password);                            client_password = Some(password);
                             if let Err(MpdError::Server(se)) = password_res {
                                 let _ = client.close();
                                 if se.code == MpdErrorCode::Password {
@@ -805,7 +813,7 @@ impl MpdWrapper {
     }
 
     pub fn get_sticker(&self, typ: &str, uri: &str, name: &str) -> Option<String> {
-        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+        if let (true, Some(client)) = (self.state.supports_stickers(), self.main_client.borrow_mut().as_mut()) {
             match client.sticker(typ, uri, name) {
                 Ok(sticker) => {
                     self.state.set_supports_stickers(true);
@@ -815,10 +823,12 @@ impl MpdWrapper {
                     match error {
                         MpdError::Server(server_err) => {
                             if server_err.detail.contains("disabled") {
+                                println!("get_sticker: Disabling sticker-dependent features...");
                                 self.state.set_supports_stickers(false);
                             }
                         }
                         _ => {
+                            println!("{:?}", error);
                             // Not handled yet
                         }
                     };
@@ -830,12 +840,34 @@ impl MpdWrapper {
     }
 
     pub fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
-        if let Some(client) = self.main_client.borrow_mut().as_mut() {
+        if let (true, Some(client)) = (self.state.supports_stickers(), self.main_client.borrow_mut().as_mut()) {
             match client.set_sticker(typ, uri, name, value) {
                 Ok(()) => self.state.set_supports_stickers(true),
                 Err(err) => match err {
                     MpdError::Server(server_err) => {
+                        println!("{:?}", &server_err);
                         if server_err.detail.contains("disabled") {
+                            println!("set_sticker: Disabling sticker-dependent features...");
+                            self.state.set_supports_stickers(false);
+                        }
+                    }
+                    _ => {
+                        println!("{:?}", err);
+                        // Not handled yet
+                    }
+                },
+            }
+        }
+    }
+
+    pub fn delete_sticker(&self, typ: &str, uri: &str, name: &str) {
+        if let (true, Some(client)) = (self.state.supports_stickers(), self.main_client.borrow_mut().as_mut()) {
+            match client.delete_sticker(typ, uri, name) {
+                Ok(()) => self.state.set_supports_stickers(true),
+                Err(err) => match err {
+                    MpdError::Server(server_err) => {
+                        if server_err.detail.contains("disabled") {
+                            println!("delete_sticker: Disabling sticker-dependent features...");
                             self.state.set_supports_stickers(false);
                         }
                     }
@@ -1170,14 +1202,21 @@ impl MpdWrapper {
         }
     }
 
-    fn on_album_downloaded(&self, signal_name: &str, tag: Option<String>, info: AlbumInfo) {
+    fn on_album_downloaded(&self, signal_name: &str, tag: Option<&str>, info: AlbumInfo) {
+        let album = Album::from(info);
+        {
+            let mut stickers = album.get_stickers().borrow_mut();
+            if let Some(val) = self.get_sticker("album", album.get_title(), Stickers::RATING_KEY) {
+                stickers.set_rating(&val);
+            }
+        }
         // Append to listener lists
         if let Some(tag) = tag {
             self.state
-                .emit_by_name::<()>(signal_name, &[&tag, &Album::from(info)]);
+                .emit_by_name::<()>(signal_name, &[&tag, &album]);
         } else {
             self.state
-                .emit_by_name::<()>(signal_name, &[&Album::from(info)]);
+                .emit_by_name::<()>(signal_name, &[&album]);
         }
     }
 

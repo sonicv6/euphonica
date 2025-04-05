@@ -22,6 +22,8 @@ mod imp {
 
     use glib::subclass::Signal;
 
+    use crate::common::Rating;
+
     use super::*;
 
     #[derive(Debug, CompositeTemplate, Properties)]
@@ -48,6 +50,10 @@ mod imp {
         pub search_bar: TemplateChild<gtk::SearchBar>,
         #[template_child]
         pub search_entry: TemplateChild<gtk::SearchEntry>,
+        #[template_child]
+        pub rating: TemplateChild<Rating>,
+        #[template_child]
+        pub rating_mode: TemplateChild<gtk::DropDown>,
 
         // Content
         #[template_child]
@@ -86,6 +92,8 @@ mod imp {
                 search_mode: TemplateChild::default(),
                 search_bar: TemplateChild::default(),
                 search_entry: TemplateChild::default(),
+                rating: TemplateChild::default(),
+                rating_mode: TemplateChild::default(),
                 // Content
                 grid_view: TemplateChild::default(),
                 content_page: TemplateChild::default(),
@@ -231,11 +239,11 @@ impl AlbumView {
         state
             .bind("sort-by", &sort_mode, "selected")
             .mapping(|val, _| {
-                // TODO: i18n
                 match val.get::<String>().unwrap().as_ref() {
                     "album-title" => Some(0.to_value()),
                     "album-artist" => Some(1.to_value()),
                     "release-date" => Some(2.to_value()),
+                    "rating" => Some(3.to_value()),
                     _ => unreachable!(),
                 }
             })
@@ -243,6 +251,7 @@ impl AlbumView {
                 0 => Some("album-title".to_variant()),
                 1 => Some("album-artist".to_variant()),
                 2 => Some("release-date".to_variant()),
+                3 => Some("rating".to_variant()),
                 _ => unreachable!(),
             })
             .build();
@@ -299,6 +308,15 @@ impl AlbumView {
                             asc,
                         )
                     }
+                    8 => {
+                        // Release date
+                        g_cmp_options(
+                            album1.get_rating().as_ref(),
+                            album2.get_rating().as_ref(),
+                            nulls_first,
+                            asc,
+                        )
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -345,6 +363,21 @@ impl AlbumView {
                 let album = obj
                     .downcast_ref::<Album>()
                     .expect("Search obj has to be a common::Album.");
+
+                // Filter by rating
+                let this_rating = album.get_rating();
+                let filter_rating = this.imp().rating.value();
+                let matches_rating = match this.imp().rating_mode.selected() {
+                    0 => true,
+                    1 => this_rating.is_some() && this_rating.unwrap() >= filter_rating,
+                    2 => this_rating.is_some() && this_rating.unwrap() < filter_rating,
+                    3 => this_rating.is_some() && this_rating.unwrap() == filter_rating,
+                    _ => unimplemented!()
+                };
+
+                if !matches_rating {
+                    return false;
+                }
 
                 let search_term = this.imp().search_entry.text();
                 if search_term.is_empty() {
@@ -412,20 +445,53 @@ impl AlbumView {
             }
         ));
 
+        let rating = self.imp().rating.get();
+        let rating_mode = self.imp().rating_mode.get();
         let search_mode = self.imp().search_mode.get();
-        search_mode.connect_notify_local(
-            Some("selected"),
+        for mode in [
+            &rating_mode,
+            &search_mode
+        ] {
+            mode.connect_notify_local(
+                Some("selected"),
+                clone!(
+                    #[weak(rename_to = this)]
+                    self,
+                    move |_, _| {
+                        this.imp()
+                            .search_filter
+                            .changed(gtk::FilterChange::Different);
+                    }
+                ),
+            );
+        }
+
+        rating.connect_notify_local(
+            Some("value"),
             clone!(
                 #[weak(rename_to = this)]
                 self,
                 move |_, _| {
-                    println!("Changed search mode");
-                    this.imp()
-                        .search_filter
-                        .changed(gtk::FilterChange::Different);
+                    if this.imp().rating_mode.selected() > 0 {
+                        this.imp()
+                            .search_filter
+                            .changed(gtk::FilterChange::Different);
+                    }
                 }
-            ),
+            )
         );
+
+        rating_mode
+            .bind_property(
+                "selected",
+                &rating,
+                "visible"
+            )
+            .transform_to(|_, val: u32| {
+                Some(val > 0)
+            })
+            .sync_create()
+            .build();
     }
 
     pub fn on_album_clicked(&self, album: &Album) {

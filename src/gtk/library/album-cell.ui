@@ -63,6 +63,14 @@
 						</property>
 					</object>
 				</child>
+				<child>
+					<object class="EuphonicaRating" id="rating">
+						<property name="editable">false</property>
+						<style>
+							<class name="dim-label"/>
+						</style>
+					</object>
+				</child>
 				<style>
 					<class name="flat" />
 				</style>

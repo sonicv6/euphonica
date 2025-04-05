@@ -1,7 +1,7 @@
 use crate::{
     cache::Cache,
     client::{BackgroundTask, MpdWrapper},
-    common::{Album, Artist, INode, Song},
+    common::{Album, Artist, INode, Song, Stickers},
 };
 use glib::subclass::Signal;
 use gtk::{gio, glib, prelude::*};
@@ -122,6 +122,15 @@ impl Library {
         self.client().find_add(query);
         if replace && play {
             self.client().play_at(0, false);
+        }
+    }
+
+    pub fn rate_album(&self, album: &Album, score: Option<i8>) {
+        if let Some(score) = score {
+            self.client().set_sticker("album", album.get_title(), Stickers::RATING_KEY, &score.to_string());
+        }
+        else {
+            self.client().delete_sticker("album", album.get_title(), Stickers::RATING_KEY);
         }
     }
 
