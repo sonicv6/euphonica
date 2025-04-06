@@ -81,29 +81,26 @@ mod imp {
             //     1b. Else (there is a previous texture and/or fade is at 1.0), just draw at full opacity.
             // 2. Check if there's a previous texture. If there is and fade < 1.0, draw it at 1-fade opacity.
             let fade = self.fade.get();
-            let current_has_content = self.current.borrow().is_some();
-            let previous_has_content = self.previous.borrow().is_some();
-            if current_has_content {
-                if !previous_has_content && fade < 1.0 {
+            let current = self.current.borrow();
+            let previous = self.previous.borrow();
+            if current.is_some() {
+                if !previous.is_some() && fade < 1.0 {
                     snapshot.push_opacity(fade);
-                    self.current
-                        .borrow()
+                    current
                         .as_ref()
                         .unwrap()
                         .snapshot(snapshot, width, height);
                     snapshot.pop();
                 } else {
-                    self.current
-                        .borrow()
+                    current
                         .as_ref()
                         .unwrap()
                         .snapshot(snapshot, width, height);
                 }
             }
-            if previous_has_content && fade < 1.0 {
+            if previous.is_some() && fade < 1.0 {
                 snapshot.push_opacity(1.0 - fade);
-                self.previous
-                    .borrow()
+                previous
                     .as_ref()
                     .unwrap()
                     .snapshot(snapshot, width, height);
