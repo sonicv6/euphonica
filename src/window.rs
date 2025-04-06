@@ -495,16 +495,8 @@ mod imp {
                 let width32 = widget.width() as f32;
                 let height32 = widget.height() as f32;
                 let data = mutex.lock().unwrap();
-                if should_blend {
-                    snapshot.push_blend(blend_mode.into());
-                    self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
-                    snapshot.pop();
-                    self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
-                    snapshot.pop();
-                } else {
-                    self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
-                    self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
-                }
+                self.draw_spectrum(snapshot, width32, height32, &data.0, scale, &fg);
+                self.draw_spectrum(snapshot, width32, height32, &data.1, scale, &fg);
             }
             if should_blend {
                 // Add top layer of blend node
