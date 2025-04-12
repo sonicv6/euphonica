@@ -46,6 +46,8 @@ mod imp {
         #[template_child]
         pub seekbar: TemplateChild<Seekbar>,
         #[template_child]
+        pub seekbar_revealer: TemplateChild<gtk::Revealer>,
+        #[template_child]
         pub rg_btn: TemplateChild<gtk::Button>,
         #[template_child]
         pub crossfade_btn: TemplateChild<gtk::MenuButton>,
@@ -57,8 +59,6 @@ mod imp {
         pub mixramp_db: TemplateChild<gtk::SpinButton>,
         #[template_child]
         pub mixramp_delay: TemplateChild<gtk::SpinButton>,
-        #[template_child]
-        pub format_info: TemplateChild<gtk::Box>,
 
         // Bottom: output info, volume control & quality
         #[template_child]
@@ -71,10 +71,6 @@ mod imp {
         pub next_output: TemplateChild<gtk::Button>,
         #[template_child]
         pub vol_knob: TemplateChild<VolumeKnob>,
-        #[template_child]
-        pub quality_grade: TemplateChild<gtk::Image>,
-        #[template_child]
-        pub format_desc: TemplateChild<gtk::Label>,
 
         // Kept here so we can access it in snapshot()
         pub bg_paintable: FadePaintable,
@@ -268,15 +264,15 @@ impl PlayerPane {
     fn bind_state(&self, player: &Player) {
         let imp = self.imp();
         let info_box = imp.info_box.get();
-        let format_info = imp.format_info.get();
         player
             .bind_property("playback-state", &info_box, "visible")
             .transform_to(|_, state: PlaybackState| Some(state != PlaybackState::Stopped))
             .sync_create()
             .build();
 
+        let seekbar_revealer = imp.seekbar_revealer.get();
         player
-            .bind_property("playback-state", &format_info, "visible")
+            .bind_property("playback-state", &seekbar_revealer, "reveal_child")
             .transform_to(|_, state: PlaybackState| Some(state != PlaybackState::Stopped))
             .sync_create()
             .build();
@@ -296,25 +292,6 @@ impl PlayerPane {
         let artist = imp.artist.get();
         player
             .bind_property("artist", &artist, "label")
-            .sync_create()
-            .build();
-
-        let quality_grade = imp.quality_grade.get();
-        player
-            .bind_property("quality-grade", &quality_grade, "icon-name")
-            .transform_to(|_, grade: QualityGrade| Some(grade.to_icon_name()))
-            .sync_create()
-            .build();
-
-        player
-            .bind_property("quality-grade", &quality_grade, "visible")
-            .transform_to(|_, grade: QualityGrade| Some(grade != QualityGrade::Lossy))
-            .sync_create()
-            .build();
-
-        let format_desc = imp.format_desc.get();
-        player
-            .bind_property("format-desc", &format_desc, "label")
             .sync_create()
             .build();
 

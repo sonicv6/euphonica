@@ -246,8 +246,8 @@ impl VolumeKnob {
         draw_area.set_draw_func(clone!(
             #[weak(rename_to = this)]
             self,
-            move |_, cr, w, h| {
-                let fg = this.color();
+            move |da, cr, w, h| {
+                let fg = da.color();
                 cr.set_source_rgb(fg.red() as f64, fg.green() as f64, fg.blue() as f64);
                 // Match seekbar thickness
                 cr.set_line_width(4.0);
@@ -256,7 +256,7 @@ impl VolumeKnob {
                 // At 0 => 5pi/4
                 let angle = -1.25 * PI + 1.5 * PI * this.imp().value.get() / 100.0;
                 // u w0t m8
-                cr.arc(w as f64 / 2.0, h as f64 / 2.0, 40.0, -1.25 * PI, angle);
+                cr.arc(w as f64 / 2.0, h as f64 / 2.0, 50.0, -1.25 * PI, angle);
                 let _ = cr.stroke();
             }
         ));

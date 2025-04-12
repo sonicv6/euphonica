@@ -20,8 +20,7 @@ use super::{
     PlaybackControls,
     PlaybackState,
     Player,
-    VolumeKnob,
-    RatioCenterBox
+    VolumeKnob
 };
 
 mod imp {
@@ -39,8 +38,6 @@ mod imp {
     pub struct PlayerBar {
         #[template_child]
         pub multi_layout_view: TemplateChild<adw::MultiLayoutView>,
-        #[template_child]
-        pub center_layout: TemplateChild<RatioCenterBox>,
         // Left side: current song info
         #[template_child]
         pub albumart: TemplateChild<gtk::Image>,
@@ -56,14 +53,12 @@ mod imp {
         pub artist: TemplateChild<gtk::Label>,
         #[template_child]
         pub album: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub quality_grade: TemplateChild<gtk::Image>,
-        #[template_child]
-        pub format_desc: TemplateChild<gtk::Label>,
 
         // Centre: playback controls
         #[template_child]
         pub playback_controls: TemplateChild<PlaybackControls>,
+        #[template_child]
+        pub seekbar_revealer: TemplateChild<gtk::Revealer>,
         #[template_child]
         pub seekbar: TemplateChild<Seekbar>,
 
@@ -132,7 +127,7 @@ mod imp {
                         if collapsed {
                             Some(48)
                         } else {
-                            Some(96)
+                            Some(115)
                         }
                     },
                 )
@@ -146,16 +141,6 @@ mod imp {
 
             // Hide certain widgets when in compact mode
             obj.bind_property("collapsed", &self.album.get(), "visible")
-                .invert_boolean()
-                .sync_create()
-                .build();
-
-            obj.bind_property("collapsed", &self.quality_grade.get(), "visible")
-                .invert_boolean()
-                .sync_create()
-                .build();
-
-            obj.bind_property("collapsed", &self.format_desc.get(), "visible")
                 .invert_boolean()
                 .sync_create()
                 .build();
@@ -280,6 +265,7 @@ impl PlayerBar {
 
         let infobox_revealer = imp.infobox_revealer.get();
         let mini_infobox_revealer = imp.mini_infobox_revealer.get();
+        let seekbar_revealer = imp.seekbar_revealer.get();
         // Also controls seekbar revealer, see binding in bar.ui
         player
             .bind_property("playback-state", &infobox_revealer, "reveal_child")
@@ -289,6 +275,12 @@ impl PlayerBar {
 
         player
             .bind_property("playback-state", &mini_infobox_revealer, "reveal_child")
+            .transform_to(|_, state: PlaybackState| Some(state != PlaybackState::Stopped))
+            .sync_create()
+            .build();
+
+        player
+            .bind_property("playback-state", &seekbar_revealer, "reveal_child")
             .transform_to(|_, state: PlaybackState| Some(state != PlaybackState::Stopped))
             .sync_create()
             .build();
@@ -308,25 +300,6 @@ impl PlayerBar {
         let artist = imp.artist.get();
         player
             .bind_property("artist", &artist, "label")
-            .sync_create()
-            .build();
-
-        let quality_grade = imp.quality_grade.get();
-        player
-            .bind_property("quality-grade", &quality_grade, "icon-name")
-            .transform_to(|_, grade: QualityGrade| Some(grade.to_icon_name()))
-            .sync_create()
-            .build();
-
-        player
-            .bind_property("quality-grade", &quality_grade, "visible")
-            .transform_to(|_, grade: QualityGrade| Some(grade != QualityGrade::Lossy))
-            .sync_create()
-            .build();
-
-        let format_desc = imp.format_desc.get();
-        player
-            .bind_property("format-desc", &format_desc, "label")
             .sync_create()
             .build();
 
