@@ -4,6 +4,7 @@ use glib::clone;
 use gtk::{gio, glib};
 use gtk::{gio::prelude::*, glib::BoxedAnyObject};
 use keyring::{error::Error as KeyringError, Entry};
+use mpd::error::ServerError;
 use mpd::{
     client::Client,
     error::{Error as MpdError, ErrorCode as MpdErrorCode},
@@ -30,7 +31,7 @@ use crate::{
     utils,
 };
 
-use super::state::{ClientState, ConnectionState};
+use super::state::{ClientState, ConnectionState, StickersSupportLevel};
 
 const BATCH_SIZE: u32 = 1024;
 const FETCH_LIMIT: usize = 10000000; // Fetch at most ten million songs at once (same
@@ -692,14 +693,15 @@ impl MpdWrapper {
         let addr_clone = addr.clone();
         let handle = gio::spawn_blocking(move || mpd::Client::connect(addr_clone)).await;
         if let Ok(Ok(mut client)) = handle {
+            // Set to maximum supported level first. Any subsequent sticker command will then
+            // update it to a lower state upon encountering related errors.
             // Euphonica relies on 0.24+ stickers capabilities. Disable if connected to
             // an older daemon.
             if client.version.1 < 24 {
-                self.state.set_supports_stickers(false);
+                self.state.set_stickers_support_level(StickersSupportLevel::SongsOnly);
             }
             else {
-                // Set to true for now, to be updated by sticker command handlers later
-                self.state.set_supports_stickers(true);
+                self.state.set_stickers_support_level(StickersSupportLevel::All);
             }
             // If there is a password configured, use it to authenticate.
             let password_access_failed: bool;
@@ -709,7 +711,8 @@ impl MpdWrapper {
                     password_access_failed = false;
                     match entry.get_password() {
                         Ok(password) => {
-                            let password_res = client.login(&password);                            client_password = Some(password);
+                            let password_res = client.login(&password);
+                            client_password = Some(password);
                             if let Err(MpdError::Server(se)) = password_res {
                                 let _ = client.close();
                                 if se.code == MpdErrorCode::Password {
@@ -807,25 +810,33 @@ impl MpdWrapper {
 
     pub fn set_output(&self, id: u32, state: bool) {
         if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            println!("Setting output ID {} to {}", id, state);
             let _ = client.output(id, state);
         }
     }
 
+    fn handle_sticker_server_error(&self, err: ServerError) {
+        match err.code {
+            MpdErrorCode::UnknownCmd => {
+                self.state.set_stickers_support_level(StickersSupportLevel::Disabled);
+            }
+            MpdErrorCode::Argument => {
+                self.state.set_stickers_support_level(StickersSupportLevel::SongsOnly);
+            }
+            _ => {}
+        }
+    }
+
     pub fn get_sticker(&self, typ: &str, uri: &str, name: &str) -> Option<String> {
-        if let (true, Some(client)) = (self.state.supports_stickers(), self.main_client.borrow_mut().as_mut()) {
+        let min_lvl = if typ == "song" { StickersSupportLevel::SongsOnly } else { StickersSupportLevel::All };
+        if let (true, Some(client)) = (self.state.get_stickers_support_level() >= min_lvl, self.main_client.borrow_mut().as_mut()) {
             match client.sticker(typ, uri, name) {
                 Ok(sticker) => {
-                    self.state.set_supports_stickers(true);
                     return Some(sticker);
                 }
                 Err(error) => {
                     match error {
                         MpdError::Server(server_err) => {
-                            if server_err.detail.contains("disabled") {
-                                println!("get_sticker: Disabling sticker-dependent features...");
-                                self.state.set_supports_stickers(false);
-                            }
+                            self.handle_sticker_server_error(server_err);
                         }
                         _ => {
                             println!("{:?}", error);
@@ -840,16 +851,13 @@ impl MpdWrapper {
     }
 
     pub fn set_sticker(&self, typ: &str, uri: &str, name: &str, value: &str) {
-        if let (true, Some(client)) = (self.state.supports_stickers(), self.main_client.borrow_mut().as_mut()) {
+        let min_lvl = if typ == "song" { StickersSupportLevel::SongsOnly } else { StickersSupportLevel::All };
+        if let (true, Some(client)) = (self.state.get_stickers_support_level() >= min_lvl, self.main_client.borrow_mut().as_mut()) {
             match client.set_sticker(typ, uri, name, value) {
-                Ok(()) => self.state.set_supports_stickers(true),
+                Ok(()) => {},
                 Err(err) => match err {
                     MpdError::Server(server_err) => {
-                        println!("{:?}", &server_err);
-                        if server_err.detail.contains("disabled") {
-                            println!("set_sticker: Disabling sticker-dependent features...");
-                            self.state.set_supports_stickers(false);
-                        }
+                        self.handle_sticker_server_error(server_err);
                     }
                     _ => {
                         println!("{:?}", err);
@@ -861,15 +869,13 @@ impl MpdWrapper {
     }
 
     pub fn delete_sticker(&self, typ: &str, uri: &str, name: &str) {
-        if let (true, Some(client)) = (self.state.supports_stickers(), self.main_client.borrow_mut().as_mut()) {
+        let min_lvl = if typ == "song" { StickersSupportLevel::SongsOnly } else { StickersSupportLevel::All };
+        if let (true, Some(client)) = (self.state.get_stickers_support_level() > min_lvl, self.main_client.borrow_mut().as_mut()) {
             match client.delete_sticker(typ, uri, name) {
-                Ok(()) => self.state.set_supports_stickers(true),
+                Ok(()) => {},
                 Err(err) => match err {
                     MpdError::Server(server_err) => {
-                        if server_err.detail.contains("disabled") {
-                            println!("delete_sticker: Disabling sticker-dependent features...");
-                            self.state.set_supports_stickers(false);
-                        }
+                        self.handle_sticker_server_error(server_err);
                     }
                     _ => {
                         // Not handled yet

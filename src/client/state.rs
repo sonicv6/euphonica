@@ -20,6 +20,15 @@ pub enum ConnectionState {
     Connected,
 }
 
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, glib::Enum, PartialOrd, Ord)]
+#[enum_type(name = "EuphonicaStickersSupportLevel")]
+pub enum StickersSupportLevel {
+    #[default]
+    Disabled,  // Sticker DB has not been set up
+    SongsOnly, // MPD <0.23.15 only supports attaching stickers directly to songs
+    All // MPD 0.24+ also supports attaching stickers to tags
+}
+
 mod imp {
     use glib::{ParamSpec, ParamSpecBoolean, ParamSpecEnum};
 
@@ -31,8 +40,8 @@ mod imp {
         pub connection_state: Cell<ConnectionState>,
         // Used to indicate that the background client is busy.
         pub busy: Cell<bool>,
-        pub supports_stickers: Cell<bool>,
         pub supports_playlists: Cell<bool>,
+        pub stickers_support_level: Cell<StickersSupportLevel>,
     }
 
     #[glib::object_subclass]
@@ -44,7 +53,7 @@ mod imp {
             Self {
                 connection_state: Cell::default(),
                 busy: Cell::new(false),
-                supports_stickers: Cell::new(true),
+                stickers_support_level: Cell::default(),
                 supports_playlists: Cell::new(true),
             }
         }
@@ -55,7 +64,7 @@ mod imp {
             static PROPERTIES: Lazy<Vec<ParamSpec>> = Lazy::new(|| {
                 vec![
                     ParamSpecBoolean::builder("busy").read_only().build(),
-                    ParamSpecBoolean::builder("supports-stickers")
+                    ParamSpecEnum::builder::<StickersSupportLevel>("stickers-support-level")
                         .read_only()
                         .build(),
                     ParamSpecBoolean::builder("supports-playlists")
@@ -74,7 +83,7 @@ mod imp {
             match pspec.name() {
                 "connection-state" => obj.get_connection_state().to_value(),
                 "busy" => obj.is_busy().to_value(),
-                "supports-stickers" => obj.supports_stickers().to_value(),
+                "stickers-support-level" => obj.get_stickers_support_level().to_value(),
                 "supports-playlists" => obj.supports_playlists().to_value(),
                 _ => unimplemented!(),
             }
@@ -187,14 +196,14 @@ impl ClientState {
         self.emit_by_name::<()>(signal_name, &[&BoxedAnyObject::new(to_box)]);
     }
 
-    pub fn supports_stickers(&self) -> bool {
-        self.imp().supports_stickers.get()
+    pub fn get_stickers_support_level(&self) -> StickersSupportLevel {
+        self.imp().stickers_support_level.get()
     }
 
-    pub fn set_supports_stickers(&self, state: bool) {
-        let old = self.imp().supports_stickers.replace(state);
-        if old != state {
-            self.notify("supports-stickers");
+    pub fn set_stickers_support_level(&self, new: StickersSupportLevel) {
+        let old = self.imp().stickers_support_level.replace(new);
+        if old != new {
+            self.notify("stickers-support-level");
         }
     }
 

@@ -32,21 +32,58 @@
           </object>
         </child>
         <child>
-          <object class="AdwActionRow" id="mpd_status">
+          <object class="AdwExpanderRow" id="mpd_status">
             <style>
               <class name="property"/>
             </style>
             <property name="title" translatable="true">Status</property>
-            <property name="subtitle">Not connected</property>
-            <child type="suffix">
-              <object class="GtkButton" id="reconnect">
-                <property name="label" translatable="true">Reconnect</property>
-                <property name="valign">center</property>
+            <property name="subtitle">Connected</property>
+            <child type="prefix">
+              <object class="GtkImage" id="mpd_status_icon">
                 <style>
-                  <class name="suggested-action"/>
+                  <class name="error"/>
                 </style>
+                <property name="icon-name">disabled-feature-symbolic</property>
               </object>
             </child>
+
+            <child>
+              <object class="AdwActionRow" id="playlists_status">
+                <property name="title" translatable="true">Playlists</property>
+                <property name="subtitle" translatable="true">Database disabled</property>
+                <child type="prefix">
+                  <object class="GtkImage" id="playlists_status_icon">
+                    <style>
+                      <class name="error"/>
+                    </style>
+                    <property name="icon-name">disabled-feature-symbolic</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+
+            <child>
+              <object class="AdwActionRow" id="stickers_status">
+                <property name="title" translatable="true">Stickers</property>
+                <property name="subtitle" translatable="true">Database disabled</property>
+                <child type="prefix">
+                  <object class="GtkImage" id="stickers_status_icon">
+                    <style>
+                      <class name="error"/>
+                    </style>
+                    <property name="icon-name">disabled-feature-symbolic</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwButtonRow" id="reconnect">
+            <style>
+              <class name="suggested-action"/>
+            </style>
+            <property name="title" translatable="true">Reconnect</property>
           </object>
         </child>
       </object>

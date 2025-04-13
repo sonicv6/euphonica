@@ -96,5 +96,8 @@
     <file preprocess="xml-stripblanks" alias="star-outline-half-left-symbolic.svg">gtk/icons/star-outline-half-left-symbolic.svg</file>
     <file preprocess="xml-stripblanks" alias="star-outline-rounded-symbolic.svg">gtk/icons/star-outline-rounded-symbolic.svg</file>
     <file preprocess="xml-stripblanks" alias="view-more-symbolic.svg">gtk/icons/view-more-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="enabled-feature-symbolic.svg">gtk/icons/check-round-outline-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="disabled-feature-symbolic.svg">gtk/icons/cross-small-circle-outline-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="content-loading-symbolic.svg">gtk/icons/content-loading-symbolic.svg</file>
   </gresource>
 </gresources>

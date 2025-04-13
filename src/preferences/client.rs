@@ -11,7 +11,7 @@ use glib::clone;
 use mpd::status::AudioFormat;
 
 use crate::{
-    client::{ClientState, ConnectionState, MpdWrapper},
+    client::{state::StickersSupportLevel, ClientState, ConnectionState, MpdWrapper},
     player::{FftStatus, Player},
     utils,
 };
@@ -22,6 +22,57 @@ use crate::{
 use ashpd::desktop::file_chooser::SelectedFiles;
 
 const FFT_SIZES: &'static [u32; 4] = &[512, 1024, 2048, 4096];
+
+pub enum StatusIconState {
+    Disabled,
+    Loading,
+    Partial,
+    Full
+}
+
+impl StickersSupportLevel {
+    // TODO: translatable
+    pub fn get_ui_elements(&self) -> (StatusIconState, String, String) {
+        match self {
+            StickersSupportLevel::Disabled => (
+                StatusIconState::Disabled,
+                String::from("Stickers support: disabled"),
+                String::from("Features such as song and album rating are unavailable. Enable stickers DB in your mpd.conf first.")
+            ),
+            StickersSupportLevel::SongsOnly => (
+                StatusIconState::Partial,
+                String::from("Stickers support: partial"),
+                String::from("Album-level stickers are unavailable on MPD older than 0.24.")
+            ),
+            StickersSupportLevel::All => (
+                StatusIconState::Full,
+                String::from("Stickers support: full"),
+                String::from("All stickers-based features are enabled.")
+            )
+        }
+    }
+}
+
+fn set_status_icon(img: &gtk::Image, state: StatusIconState) {
+    match state {
+        StatusIconState::Disabled => {
+            img.set_css_classes(&["error"]);
+            img.set_icon_name(Some("disabled-feature-symbolic"));
+        }
+        StatusIconState::Loading => {
+            img.set_css_classes(&["dim-label"]);
+            img.set_icon_name(Some("content-loading-symbolic"));
+        }
+        StatusIconState::Partial => {
+            img.set_css_classes(&["warning"]);
+            img.set_icon_name(Some("enabled-feature-symbolic"));
+        }
+        StatusIconState::Full => {
+            img.set_css_classes(&["success"]);
+            img.set_icon_name(Some("enabled-feature-symbolic"));
+        }
+    }
+}
 
 mod imp {
     use super::*;
@@ -37,9 +88,19 @@ mod imp {
         #[template_child]
         pub mpd_password: TemplateChild<adw::PasswordEntryRow>,
         #[template_child]
-        pub mpd_status: TemplateChild<adw::ActionRow>,
+        pub mpd_status: TemplateChild<adw::ExpanderRow>,
         #[template_child]
-        pub reconnect: TemplateChild<gtk::Button>,
+        pub mpd_status_icon: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub playlists_status: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub playlists_status_icon: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub stickers_status: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub stickers_status_icon: TemplateChild<gtk::Image>,
+        #[template_child]
+        pub reconnect: TemplateChild<adw::ButtonRow>,
         #[template_child]
         pub mpd_download_album_art: TemplateChild<adw::SwitchRow>,
 
@@ -180,34 +241,46 @@ impl ClientPreferences {
         match cs.get_connection_state() {
             ConnectionState::NotConnected => {
                 self.imp().mpd_status.set_subtitle("Failed to connect");
+                self.imp().mpd_status.set_enable_expansion(false);
+                set_status_icon(&self.imp().mpd_status_icon.get(), StatusIconState::Disabled);
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
             }
             ConnectionState::Connecting => {
                 self.imp().mpd_status.set_subtitle("Connecting...");
+                self.imp().mpd_status.set_enable_expansion(false);
+                set_status_icon(&self.imp().mpd_status_icon.get(), StatusIconState::Loading);
                 self.imp().reconnect.set_sensitive(false);
             }
             ConnectionState::Unauthenticated => {
                 self.imp().mpd_status.set_subtitle("Authentication failed");
+                self.imp().mpd_status.set_enable_expansion(false);
+                set_status_icon(&self.imp().mpd_status_icon.get(), StatusIconState::Disabled);
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
             }
             ConnectionState::CredentialStoreError => {
                 self.imp().mpd_status.set_subtitle("Credential store error");
+                self.imp().mpd_status.set_enable_expansion(false);
+                set_status_icon(&self.imp().mpd_status_icon.get(), StatusIconState::Disabled);
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
             }
             ConnectionState::WrongPassword => {
                 self.imp().mpd_status.set_subtitle("Incorrect password");
+                self.imp().mpd_status.set_enable_expansion(false);
+                set_status_icon(&self.imp().mpd_status_icon.get(), StatusIconState::Disabled);
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
             }
             ConnectionState::Connected => {
                 self.imp().mpd_status.set_subtitle("Connected");
+                self.imp().mpd_status.set_enable_expansion(true);
+                set_status_icon(&self.imp().mpd_status_icon.get(), StatusIconState::Full);
                 if !self.imp().mpd_port.has_css_class("error") {
                     self.imp().reconnect.set_sensitive(true);
                 }
@@ -217,6 +290,32 @@ impl ClientPreferences {
 
     fn on_fifo_changed(&self, state: FftStatus) {
         self.imp().fifo_status.set_subtitle(state.get_description());
+    }
+
+    fn on_playlists_status_changed(&self, cs: &ClientState) {
+        // TODO: translatable
+        let row = self.imp().playlists_status.get();
+        let icon = self.imp().playlists_status_icon.get();
+        if cs.supports_playlists() {
+            set_status_icon(&icon, StatusIconState::Full);
+            row.set_title("Playlists support: enabled");
+            row.set_subtitle("Playlist-related features are enabled.");
+        }
+        else {
+            set_status_icon(&icon, StatusIconState::Disabled);
+            row.set_title("Playlists support: disabled");
+            row.set_subtitle("Enable playlists DB in your mpd.conf first.");
+        }
+    }
+
+    fn on_stickers_status_changed(&self, cs: &ClientState) {
+        let row = self.imp().stickers_status.get();
+        let icon = self.imp().stickers_status_icon.get();
+
+        let (icon_state, title, subtitle) = cs.get_stickers_support_level().get_ui_elements();
+        set_status_icon(&icon, icon_state);
+        row.set_title(&title);
+        row.set_subtitle(&subtitle);
     }
 
     pub fn setup(&self, client: Rc<MpdWrapper>, player: &Player) {
@@ -277,7 +376,31 @@ impl ClientPreferences {
             ),
         );
 
-        imp.reconnect.connect_clicked(clone!(
+        self.on_playlists_status_changed(&client_state);
+        client_state.connect_notify_local(
+            Some("supports-playlists"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |cs, _| {
+                    this.on_playlists_status_changed(&cs);
+                }
+            ),
+        );
+
+        self.on_stickers_status_changed(&client_state);
+        client_state.connect_notify_local(
+            Some("stickers-support-level"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |cs, _| {
+                    this.on_stickers_status_changed(&cs);
+                }
+            ),
+        );
+
+        imp.reconnect.connect_activated(clone!(
             #[weak(rename_to = this)]
             self,
             #[strong]
