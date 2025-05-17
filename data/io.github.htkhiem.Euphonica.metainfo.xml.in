@@ -26,7 +26,8 @@
     <ul>
       <li>Responsive GTK4 LibAdwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration</li>
       <li>Built-in, customisable spectrum visualiser, reading from MPD FIFO or system PipeWire.</li>
-      <li>Audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums &amp; detailed format printout</li>
+      <li>Rate albums (requires MPD 0.24+)</li>
+      <li>Live bitrate readout + audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums &amp; detailed format printout</li>
       <li>Browse your library by album, artist and folders with multiselection support. Browsing by genre and other criteria are planned.</li>
       <li>Playlist browser and editor</li>
       <li>Sort albums by name, AlbumArtist or release date (provided you have the tags)</li>
@@ -53,14 +54,35 @@
   <launchable type="desktop-id">io.github.htkhiem.Euphonica.desktop</launchable>
   <screenshots>
     <screenshot type="default">
-      <image>https://i.ibb.co/ksWxmgCR/album-view-light.png</image>
+      <image>https://i.ibb.co/VcYYDhSx/Screenshot-From-2025-04-12-10-59-44.png</image>
     </screenshot>
     <screenshot>
-      <image>https://i.ibb.co/zTFHm0kg/queue-view-dark.png</image>
+      <image>https://i.ibb.co/XZgkbHbB/Screenshot-From-2025-04-12-10-44-28.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://i.ibb.co/KjSgKP4Q/Screenshot-From-2025-04-12-10-48-37.png</image>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="0.90.3-alpha" date="2025-02-16">
+      <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.90.3-alpha</url>
+      <description>
+        <p>From this version onwards we are targeting a v1.0 release, hence the version bump.</p>
+        <p>This version introduces support for matching app accent colour to currently-playing song's album art, and a big revamp of the offline cache mechanism.</p>
+        <ul>
+          <li>New: Customisable spectrum equaliser!</li>
+          <li>New: album rating system using myMPD-compatible tag schema (requires MPD 0.24+).</li>
+          <li>New: Optional capabilities UI with instructions on how to enable them for your MPD instance.</li>
+          <li>New: UI with album-art-matching accent colour support, wider seekbar, and live bitrate readout.</li>
+          <li>New: Setting custom images as album arts and artist avatars are now supported.</li>
+          <li>Refactor: Replaced PoloDB with plain ol' SQLite - easier to inspect, composite indices are supported, etc. Actual metadata docs are still BSON blobs, but since they're only BSON when stored, BSON is now much less prevalent in our cache code. Also, I took this chance to significantly cut down on string clones.</li>
+          <li>Refactor: Replaced murmur2 hashing of URIs with simple base64url encoding. This also does what we need (avoiding special chars) but never collides and is completely reversible.</li>
+          <li>Refactor: Added loading spinners to artist bio, artist discography/songs subviews, album wiki and album content.</li>
+          <li>Fix: Fixed spectrum equaliser "lifting off" from the window's bottom edge when smooth curves drawing (default) is enabled.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.12.0-alpha" date="2025-02-16">
       <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.12.0-alpha</url>
       <description>
