@@ -141,7 +141,6 @@ Euphonica is developed with Beets tagging in mind and can take advantage of its 
 Most libraries, especially those that ran well with other MPD clients like [Cantata](https://github.com/CDrummond/cantata), should require no reorganisation.
 
 ## TODO
-- Local storage management UI (to allow re-fetching metadata, clearing album art cache and the like)
 - Support more stickers-based features:
   - Recently played
   - Per-song ratings
