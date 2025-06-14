@@ -17,11 +17,8 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-use adw::subclass::prelude::*;
-use gtk::prelude::*;
-use gtk::{gio, glib};
-use std::{fs::create_dir_all, path::PathBuf, rc::Rc};
 
+use adw::prelude::*;
 use crate::{
     cache::Cache,
     client::{BackgroundTask, MpdWrapper},
@@ -29,22 +26,70 @@ use crate::{
     library::Library,
     player::Player,
     preferences::Preferences,
-    EuphonicaWindow,
+    utils, EuphonicaWindow
+};
+use adw::subclass::prelude::*;
+use gtk::{gio, glib};
+use std::{
+    cell::{Cell, OnceCell, RefCell},
+    fs::create_dir_all,
+    path::PathBuf,
+    rc::Rc,
 };
 
-use adw::prelude::*;
+use ashpd::desktop::background::Background;
+
+pub fn update_xdg_background_request() {
+    let settings = utils::settings_manager().child("state");
+    let run_in_background = settings.boolean("run-in-background");
+    let autostart = settings.boolean("autostart");
+    let start_minimized = settings.boolean("start-minimized");
+
+    utils::tokio_runtime().spawn(async move {
+        let mut request = Background::request()
+            .reason("Run Euphonica in the background")
+            .dbus_activatable(false);
+
+        if autostart {
+            request = request
+                .auto_start(true);
+            if start_minimized {
+                request = request.command(&["euphonica", "--minimized"])
+            }
+        }
+
+        let response = request
+            .send()
+            .await
+            .expect("ashpd background await failure")
+            .response();
+
+        if let Ok(response) = response {
+            let state_settings = utils::settings_manager().child("state");
+
+            // Might have to turn them off if system replies negatively
+            let _ = state_settings.set_boolean("autostart", response.auto_start());
+            // Since we call the above regardless of whether we wish to run in background
+            // or not (to update autostart) we need to do an AND here.
+            let _ = state_settings.set_boolean("run-in-background", run_in_background && response.run_in_background());
+        }
+    });
+}
 
 mod imp {
     use super::*;
 
     #[derive(Debug)]
     pub struct EuphonicaApplication {
-        pub player: Player,
-        pub library: Library,
-        pub cache: Rc<Cache>,
+        pub initialized: Cell<bool>,
+        pub start_minimized: Cell<bool>,
+        pub player: OnceCell<Player>,
+        pub library: OnceCell<Library>,
+        pub cache: OnceCell<Rc<Cache>>,
         // pub library: Rc<LibraryController>, // TODO
-        pub client: Rc<MpdWrapper>,
+        pub client: OnceCell<Rc<MpdWrapper>>,
         pub cache_path: PathBuf, // Just clone this to construct more detailed paths
+        pub hold_guard: RefCell<Option<gio::ApplicationHoldGuard>>,
     }
 
     #[glib::object_subclass]
@@ -60,25 +105,15 @@ mod imp {
             // println!("Cache path: {}", cache_path.to_str().unwrap());
             create_dir_all(&cache_path).expect("Could not create temporary directories!");
 
-            // Create cache controller
-            let cache = Cache::new(&cache_path);
-            let meta_sender = cache.get_sender();
-
-            // Create client instance (not connected yet)
-            let client = MpdWrapper::new(meta_sender.clone());
-
-            // Create controllers
-            // These two are GObjects (already refcounted by GLib)
-            let player = Player::default();
-            let library = Library::default();
-            cache.set_mpd_client(client.clone());
-
             Self {
-                player,
-                library,
-                client,
-                cache,
+                initialized: Cell::new(false),
+                start_minimized: Cell::new(false),
+                player: OnceCell::new(),
+                library: OnceCell::new(),
+                client: OnceCell::new(),
+                cache: OnceCell::new(),
                 cache_path,
+                hold_guard: RefCell::new(None),
             }
         }
     }
@@ -86,15 +121,6 @@ mod imp {
     impl ObjectImpl for EuphonicaApplication {
         fn constructed(&self) {
             self.parent_constructed();
-            let obj = self.obj();
-            obj.setup_gactions();
-            obj.set_accels_for_action("app.quit", &["<primary>q"]);
-            obj.set_accels_for_action("app.fullscreen", &["F11"]);
-            obj.set_accels_for_action("app.refresh", &["F5"]);
-
-            self.library.setup(self.client.clone(), self.cache.clone());
-            self.player
-                .setup(self.obj().clone(), self.client.clone(), self.cache.clone());
         }
     }
 
@@ -105,21 +131,63 @@ mod imp {
         // to do that, we'll just present any existing window.
         fn activate(&self) {
             let application = self.obj();
-            // Get the current window or create one if necessary
-            let window = if let Some(window) = application.active_window() {
-                window
-            } else {
-                let window = EuphonicaWindow::new(&*application);
-                window.upcast()
-            };
 
-            // Ask the window manager/compositor to present the window
-            window.present();
+            if !self.initialized.get() {
+                println!("Creating a new Euphonica instance...");
+                // Put init logic here to ensure they're only called on the primary instance.
+                // This is to both avoid unneeded processing and creation of bogus child threads
+                // that stick around (only a problem now that Euphonica can be left running in
+                // the background, and the the easiest way to call it back to foreground is to
+                // click on the desktop icon again, spawning another instance which should
+                // only live briefly to pass args to the primary one).
+                // Create cache controller
+                let cache = Cache::new(&self.cache_path);
+                let meta_sender = cache.get_sender();
 
-            // Piggyback on the refresh method to trigger a connect attempt.
-            // Start attempting to connect to the daemon once the window has been displayed.
-            // This avoids delaying the presentation until the connection process concludes.
-            application.refresh();
+                // Create client instance (not connected yet)
+                let client = MpdWrapper::new(meta_sender.clone());
+
+                // Create controllers
+                // These two are GObjects (already refcounted by GLib)
+                let player = Player::default();
+                let library = Library::default();
+                cache.set_mpd_client(client.clone());
+
+                let _ = self.cache.set(cache);
+                let _ = self.client.set(client);
+                let _ = self.library.set(library);
+                let _ = self.player.set(player);
+
+                let obj = self.obj();
+                obj.setup_gactions();
+                obj.set_accels_for_action("app.quit", &["<primary>q"]);
+                obj.set_accels_for_action("app.fullscreen", &["F11"]);
+                obj.set_accels_for_action("app.refresh", &["F5"]);
+
+                self.library.get().unwrap().setup(
+                    self.client.get().unwrap().clone(),
+                    self.cache.get().unwrap().clone(),
+                );
+                self.player.get().unwrap().setup(
+                    self.obj().clone(),
+                    self.client.get().unwrap().clone(),
+                    self.cache.get().unwrap().clone(),
+                );
+
+                application.refresh();
+
+                self.initialized.set(true);
+
+                // If this is the main instance, respect the minimized flag
+                if !self.start_minimized.get() {
+                    self.obj().raise_window();
+                }
+            }
+            else {
+                // Not the main instance -> not starting a new one -> always open a window regardless
+                // of whether the main instance was started with the --minimized flag or not.
+                self.obj().raise_window();
+            }
         }
     }
 
@@ -130,33 +198,45 @@ mod imp {
 glib::wrapper! {
     pub struct EuphonicaApplication(ObjectSubclass<imp::EuphonicaApplication>)
         @extends gio::Application, gtk::Application, adw::Application,
-        @implements gio::ActionGroup, gio::ActionMap;
+    @implements gio::ActionGroup, gio::ActionMap;
 }
 
 impl EuphonicaApplication {
     pub fn new(application_id: &str, flags: &gio::ApplicationFlags) -> Self {
         // TODO: Find a better place to put these
         musicbrainz_rs::config::set_user_agent(APPLICATION_USER_AGENT);
-        glib::Object::builder()
+        let app: EuphonicaApplication = glib::Object::builder()
             .property("application-id", application_id)
             .property("flags", flags)
-            .build()
+            .build();
+
+        app.connect_handle_local_options(|this: &Self, vd: &glib::VariantDict| {
+            if vd.lookup_value("minimized", None).is_some() {
+                this.imp().start_minimized.set(true);
+            }
+            -1  // let execution continue
+        });
+
+        // Background mode
+        update_xdg_background_request();
+
+        app
     }
 
     pub fn get_player(&self) -> Player {
-        self.imp().player.clone()
+        self.imp().player.get().unwrap().clone()
     }
 
     pub fn get_library(&self) -> Library {
-        self.imp().library.clone()
+        self.imp().library.get().unwrap().clone()
     }
 
     pub fn get_cache(&self) -> Rc<Cache> {
-        self.imp().cache.clone()
+        self.imp().cache.get().unwrap().clone()
     }
 
     pub fn get_client(&self) -> Rc<MpdWrapper> {
-        self.imp().client.clone()
+        self.imp().client.get().unwrap().clone()
     }
 
     fn setup_gactions(&self) {
@@ -169,8 +249,9 @@ impl EuphonicaApplication {
         let update_db_action = gio::ActionEntry::builder("update-db")
             .activate(move |app: &Self, _, _| app.update_db())
             .build();
+        // Overrides background mode and ends instance
         let quit_action = gio::ActionEntry::builder("quit")
-            .activate(move |app: &Self, _, _| app.quit())
+            .activate(move |app: &Self, _, _| app.quit_app())
             .build();
         let about_action = gio::ActionEntry::builder("about")
             .activate(move |app: &Self, _, _| app.show_about())
@@ -184,7 +265,7 @@ impl EuphonicaApplication {
             update_db_action,
             quit_action,
             about_action,
-            preferences_action,
+            preferences_action
         ]);
     }
 
@@ -194,7 +275,12 @@ impl EuphonicaApplication {
     }
 
     pub fn is_fullscreen(&self) -> bool {
-        self.active_window().unwrap().is_fullscreen()
+        if let Some(window) = self.active_window() {
+            window.is_fullscreen()
+        }
+        else {
+            false
+        }
     }
 
     pub fn set_fullscreen(&self, state: bool) {
@@ -212,18 +298,35 @@ impl EuphonicaApplication {
     }
 
     pub fn raise_window(&self) {
-        let window = self.active_window().unwrap();
+        let window = if let Some(window) = self.active_window() {
+            window
+        } else {
+            let window = EuphonicaWindow::new(&*self);
+            window.upcast()
+        };
+        self.imp().player.get().unwrap().set_is_foreground(true);
         window.present();
     }
 
+    pub fn on_window_closed(&self) {
+        let settings = utils::settings_manager().child("state");
+        if settings.boolean("run-in-background") {
+            self.imp().player.get().unwrap().set_is_foreground(false);
+            if let Some(_) = self.imp().hold_guard.replace(Some(self.hold())) {
+                println!("Created a new hold guard");
+            }
+        } else {
+            println!("Dropping hold guard");
+            self.imp().hold_guard.take();
+        }
+    }
+
     fn refresh(&self) {
-        self.imp().client.clone().queue_connect();
+        self.get_client().queue_connect();
     }
 
     fn update_db(&self) {
-        self.imp()
-            .client
-            .clone()
+        self.get_client()
             .queue_background(BackgroundTask::Update, true);
     }
 
@@ -248,12 +351,14 @@ impl EuphonicaApplication {
 
     pub fn show_preferences(&self) {
         let window = self.active_window().unwrap();
-        let prefs = Preferences::new(
-            self.imp().client.clone(),
-            self.imp().cache.clone(),
-            &self.imp().player,
-        );
+        let prefs = Preferences::new(self.get_client(), self.get_cache(), &self.get_player());
         prefs.present(Some(&window));
         prefs.update();
+    }
+
+    /// Quit Euphonica. Useful for when run-in-background is true. Otherwise just close the window.
+    pub fn quit_app(&self) {
+        self.imp().hold_guard.take();
+        self.quit();
     }
 }

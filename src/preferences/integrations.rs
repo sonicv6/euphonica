@@ -4,7 +4,7 @@ use gtk::{glib, CompositeTemplate};
 use std::cell::OnceCell;
 use std::rc::Rc;
 
-use crate::{cache::Cache, utils};
+use crate::{application::update_xdg_background_request, cache::Cache, utils};
 
 use super::ProviderRow;
 
@@ -17,6 +17,12 @@ mod imp {
     pub struct IntegrationsPreferences {
         #[template_child]
         pub enable_mpris: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub run_in_background: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub autostart: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub start_minimized: TemplateChild<adw::SwitchRow>,
 
         #[template_child]
         pub lastfm_key: TemplateChild<adw::EntryRow>,
@@ -57,7 +63,7 @@ mod imp {
 glib::wrapper! {
     pub struct IntegrationsPreferences(ObjectSubclass<imp::IntegrationsPreferences>)
         @extends adw::PreferencesPage,
-        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Widget;
+    @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Widget;
 }
 
 impl Default for IntegrationsPreferences {
@@ -74,10 +80,42 @@ impl IntegrationsPreferences {
         let settings = utils::settings_manager();
 
         let player_settings = settings.child("player");
-        let enable_mpris = self.imp().enable_mpris.get();
+        let state_settings = settings.child("state");
+        let enable_mpris = imp.enable_mpris.get();
         player_settings
             .bind("enable-mpris", &enable_mpris, "active")
             .build();
+        let run_in_background = imp.run_in_background.get();
+        let autostart = imp.autostart.get();
+        let start_minimized = imp.start_minimized.get();
+
+        // Init background & autostart toggle states
+        // Do NOT bind the widgets directly to the settings to avoid an infinite loo
+        // when we update the settings from code (system might refuse our background
+        // and autostart requests).
+        run_in_background.set_active(state_settings.boolean("run-in-background"));
+        autostart.set_active(state_settings.boolean("autostart"));
+        start_minimized.set_active(state_settings.boolean("start-minimized"));
+        autostart
+            .bind_property("active", &start_minimized, "sensitive")
+            .sync_create()
+            .build();
+
+        run_in_background.connect_notify_local(Some("active"), |sw, _| {
+            let settings = utils::settings_manager().child("state");
+            let _ = settings.set_boolean("run-in-background", sw.is_active());
+            update_xdg_background_request();
+        });
+        autostart.connect_notify_local(Some("active"), |sw, _| {
+            let settings = utils::settings_manager().child("state");
+            let _ = settings.set_boolean("autostart", sw.is_active());
+            update_xdg_background_request();
+        });
+        start_minimized.connect_notify_local(Some("active"), |sw, _| {
+            let settings = utils::settings_manager().child("state");
+            let _ = settings.set_boolean("start-minimized", sw.is_active());
+            update_xdg_background_request();
+        });
 
         // Set up Last.fm settings
         let lastfm_settings = utils::meta_provider_settings("lastfm");

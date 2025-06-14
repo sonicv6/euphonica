@@ -25,6 +25,7 @@
     </p>
     <ul>
       <li>Responsive GTK4 LibAdwaita UI for most MPD features, from basic things like playback controls, queue reordering and ReplayGain to things like output control, crossfade and MixRamp configuration</li>
+      <li>Integrated MPRIS client with background running supported (via the XDG Background protocol).</li>
       <li>Built-in, customisable spectrum visualiser, reading from MPD FIFO or system PipeWire.</li>
       <li>Rate albums (requires MPD 0.24+)</li>
       <li>Live bitrate readout + audio quality indicators (lossy, lossless, hi-res, DSD) for individual songs as well as albums &amp; detailed format printout</li>
@@ -39,7 +40,6 @@
       <li>Album wikis &amp; artist bios are supported too</li>
       <li>All externally-acquired metadata are cached locally &amp; persisted on disk to avoid needless API calls</li>
       <li>Volume knob with dBFS readout support ('cuz why not?)</li>
-      <li>MPRIS support (can be disabled if you're running `mpdris2` instead)</li>
       <li>User-friendly configuration UI &amp; GSettings backend</li>
       <li>MPD passwords are securely stored in your user's login keyring</li>
       <li>Commands are bundled into lists for efficient MPD-side processing where possible.</li>
@@ -65,6 +65,15 @@
   </screenshots>
 
   <releases>
+    <release version="0.92.0-alpha" date="2025-06-14">
+      <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.92.0-alpha</url>
+      <description>
+        <p>New: Background mode. Euphonica can now run in the background, allowing it to serve as your MPRIS daemon. Visualisation backends and album art blur thread will be shut down upon entering background mode, reducing CPU usage to pretty much zero. Polling will still be performed to support shell applets with seekbars (GNOME does with an extension).</p>
+        <p>New: Command-line argument to start Euphonica minimised (--minimized). This allows setting up autostart scripts.</p>
+        <p>Fix: Playback controls are now properly centered instead of being forced to the right by long titles (which will scroll like a marquee instead).</p>
+        <p>Fix: Album info and artist bio spinners not going away in case no metadata could be found.</p>
+      </description>
+    </release>
     <release version="0.91.0-alpha" date="2025-05-24">
       <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.91.0-alpha</url>
       <description>
