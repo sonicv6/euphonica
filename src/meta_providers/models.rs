@@ -237,3 +237,120 @@ impl HasImage for ArtistMeta {
         &self.image
     }
 }
+
+pub struct Lyrics {
+    pub lines: Vec<(f32, String)>, // timestamp (in seconds) and corresponding line. If not synced, set timestamp to 0.
+    pub synced: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum LyricsParseError {
+    TimestampNotFoundError,
+    TimestampFormatError
+}
+
+pub type LyricsResult = Result<Lyrics, LyricsParseError>;
+
+impl Lyrics {
+    pub fn try_from_plain_lrclib_str(lrclib: &str) -> LyricsResult {
+        let lines: Vec<(f32, String)> = lrclib
+            .split("\n")
+            .map(|line| (0.0, line.to_owned()))
+            .collect();
+        Ok(Self {
+            lines,
+            synced: false,
+        })
+    }
+
+    pub fn try_from_synced_lrclib_str(lrclib: &str) -> LyricsResult {
+        let raw_lines: Vec<&str> = lrclib.split('\n').collect();
+        let mut lines: Vec<(f32, String)> = Vec::with_capacity(raw_lines.len());
+        for line in raw_lines.iter() {
+            // Extract timestamp
+            let ts_end_pos: usize = line
+                .find(']')
+                .ok_or(LyricsParseError::TimestampNotFoundError)?;
+            let ts_str: &str = &line[1..ts_end_pos];
+            let ts_parts: Vec<&str> = ts_str.split(':').collect();
+            if ts_parts.len() != 2 {
+                Err(LyricsParseError::TimestampFormatError)?;
+            }
+            let ts: f32 = ts_parts[0]
+                .parse::<f32>()
+                .map_err(|_| LyricsParseError::TimestampFormatError)? * 60.0
+                + ts_parts[1]
+                    .parse::<f32>()
+                    .map_err(|_| LyricsParseError::TimestampFormatError)?;
+            if line.len() <= ts_end_pos + 1 {
+                lines.push((ts, "".to_owned()));
+            } else {
+                lines.push((ts, line[ts_end_pos + 1..].to_owned()));
+            }
+        }
+
+        Ok(Self {
+            lines,
+            synced: true,
+        })
+    }
+
+    pub fn to_string(&self) -> String {
+        if self.synced {
+            self.lines.iter().map(|line| {
+            let total_seconds = line.0.max(0.0);
+            let content = &line.1;
+
+            let minutes = (total_seconds / 60.0).floor() as u32;
+            let remaining_seconds = total_seconds % 60.0;
+            // Extract the integer part of the seconds
+            let seconds_integer = remaining_seconds.floor() as u32;
+
+            // Extract the fractional part (hundredths of a second)
+            // Multiply by 100, round to the nearest integer, and then cast to u32.
+            // Using `round()` to handle potential floating-point inaccuracies
+            // and ensure correct rounding for the hundredths.
+            let hundredths = (remaining_seconds.fract() * 100.0).round() as u32;
+
+            // Format the components into the desired string
+            format!("[{:02}:{:02}.{:02}] {}", minutes, seconds_integer, hundredths, content)
+        }).collect::<Vec<String>>().join("\n")
+        }
+        else {
+            self.lines.iter().map(|line| line.1.as_str()).collect::<Vec<&str>>().join("\n")
+        }
+    }
+
+    pub fn to_plain_string(&self) -> String {
+        self.lines.iter().map(|line| line.1.as_ref()).collect::<Vec<&str>>().join("\n")
+    }
+
+    pub fn to_plain_lines(&self) -> Vec<&str> {
+        self.lines.iter().map(|line| line.1.as_ref()).collect()
+    }
+
+    pub fn get_line_at_timestamp(&self, ts: f32) -> usize {
+        if !self.synced {
+            return 0;
+        }
+        match self.lines.binary_search_by(|line| {
+            line.0.partial_cmp(&ts).unwrap()
+        }) {
+            Ok(index) => index, // Oh lucky
+            Err(index) => {
+                // Most of the time we'll hit this case because we're not looking
+                // for an exact timestamp match
+                if index > 0 {
+                    index - 1
+                }
+                else {
+                    0
+                }
+            }
+        }
+    }
+
+    pub fn n_lines(&self) -> usize {
+        self.lines.len()
+    }
+}

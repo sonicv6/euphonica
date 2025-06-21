@@ -1,11 +1,6 @@
 extern crate mpd;
 use crate::{
-    application::EuphonicaApplication,
-    cache::{Cache, CacheState},
-    client::{ClientState, ConnectionState, MpdWrapper},
-    common::{AlbumInfo, QualityGrade, Song},
-    player::fft_backends::fifo::FifoFftBackend,
-    utils::{prettify_audio_format, settings_manager},
+    application::EuphonicaApplication, cache::{Cache, CacheState}, client::{ClientState, ConnectionState, MpdWrapper}, common::{AlbumInfo, QualityGrade, Song}, meta_providers::models::Lyrics, player::fft_backends::fifo::FifoFftBackend, utils::{prettify_audio_format, settings_manager}
 };
 use async_lock::OnceCell as AsyncOnceCell;
 use mpris_server::{
@@ -176,7 +171,7 @@ fn get_fft_backend() -> Rc<dyn FftBackend> {
 
 mod imp {
     use super::*;
-    use crate::application::EuphonicaApplication;
+    use crate::{application::EuphonicaApplication, meta_providers::models::Lyrics};
     use glib::{
         ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecInt, ParamSpecObject, ParamSpecString, ParamSpecUInt, ParamSpecUInt64
     };
@@ -187,7 +182,10 @@ mod imp {
         pub state: Cell<PlaybackState>,
         pub position: Cell<f64>,
         pub queue: gio::ListStore,
+        pub lyric_lines: gtk::StringList,  // Line by line for display. May be empty.
+        pub lyrics: RefCell<Option<Lyrics>>,
         pub current_song: RefCell<Option<Song>>,
+        pub current_lyric_line: Cell<u32>,
         pub format: RefCell<Option<AudioFormat>>,
         pub bitrate: Cell<u32>,
         pub flow: Cell<PlaybackFlow>,
@@ -236,6 +234,8 @@ mod imp {
             Self {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
+                lyric_lines: gtk::StringList::new(&[]),
+                lyrics: RefCell::new(None),
                 random: Cell::new(false),
                 consume: Cell::new(false),
                 supports_playlists: Cell::new(false),
@@ -245,6 +245,7 @@ mod imp {
                 mixramp_delay: Cell::new(0.0),
                 queue: gio::ListStore::new::<Song>(),
                 current_song: RefCell::new(None),
+                current_lyric_line: Cell::default(),
                 format: RefCell::new(None),
                 bitrate: Cell::default(),
                 flow: Cell::default(),
@@ -338,6 +339,7 @@ mod imp {
                     ParamSpecBoolean::builder("supports-playlists").build(),
                     ParamSpecBoolean::builder("use-visualizer").build(),
                     ParamSpecDouble::builder("position").build(),
+                    ParamSpecUInt::builder("current-lyric-line").read_only().build(),
                     ParamSpecString::builder("title").read_only().build(),
                     ParamSpecString::builder("artist").read_only().build(),
                     ParamSpecString::builder("album").read_only().build(),
@@ -376,6 +378,7 @@ mod imp {
                 "mixramp-delay" => self.mixramp_delay.get().to_value(),
                 "replaygain" => get_replaygain_icon_name(self.replaygain.get()).to_value(),
                 "position" => obj.position().to_value(),
+                "current-lyric-line" => self.current_lyric_line.get().to_value(),
                 // These are proxies for Song properties
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
@@ -477,7 +480,7 @@ mod imp {
                     // emit this).
                     Signal::builder("volume-changed")
                         .param_types([i8::static_type()])
-                        .build(),
+                        .build()
                 ]
             })
         }
@@ -604,6 +607,21 @@ impl Player {
                             if album.uri.as_str() == folder_uri.as_str() {
                                 this.notify("album-art");
                             }
+                        }
+                    }
+                }
+            ),
+        );
+        cache.get_cache_state().connect_closure(
+            "song-lyrics-downloaded",
+            false,
+            closure_local!(
+                #[weak(rename_to = this)]
+                self,
+                move |_: CacheState, uri: String| {
+                    if let Some(song) = this.imp().current_song.borrow().as_ref() {
+                        if song.get_uri() == uri.as_str() {
+                            this.update_lyrics(this.imp().cache.get().unwrap().load_cached_lyrics(song.get_info()).unwrap());
                         }
                     }
                 }
@@ -856,16 +874,6 @@ impl Player {
             self.notify("crossfade");
         }
 
-        if let Some(new_position_dur) = status.elapsed {
-            let new = new_position_dur.as_secs_f64();
-            let old = self.set_position(new);
-            if new != old && self.imp().mpris_enabled.get() {
-                self.seek_mpris(new);
-            }
-        } else {
-            self.set_position(0.0);
-        }
-
         // Handle volume changes (might be external)
         // TODO: Find a way to somewhat responsively update volume to external
         // changes at all times rather than relying on the seekbar poller.
@@ -880,6 +888,7 @@ impl Player {
 
         // Update playing status of songs in the queue
         if let Some(new_queue_place) = status.song {
+            let mut needs_new_lyrics = true;
             // There is now a playing song.
             // Check if there was one and whether it is different from the one playing now.
             // let new_id: u32 = new_queue_place.id.0;
@@ -918,6 +927,10 @@ impl Player {
                         ));
                     }
                 }
+                else {
+                    // Same old song
+                    needs_new_lyrics = false;
+                }
             } else {
                 // There was nothing playing previously. Update the following now:
                 self.notify("title");
@@ -928,10 +941,20 @@ impl Player {
                 self.notify("album");
                 self.notify("album-art");
             }
-            // else if let Some(song) = self.imp().current_song.borrow().as_ref() {
-            //     // Just update pos. It's cheap so no need to check.
-            //     song.set_queue_pos(new_pos);
-            // }
+            if needs_new_lyrics {
+                // Get new lyrics
+                // First remove all current lines
+                self.imp().lyric_lines.splice(0, self.imp().lyric_lines.n_items(), &[]);
+                let _ = self.imp().lyrics.take();
+                // Fetch new lyrics
+                if let Some(lyrics) = self.imp().cache.get().unwrap().load_cached_lyrics(new_song.get_info()) {
+                    self.update_lyrics(lyrics);
+                }
+                else {
+                    // Schedule downloading
+                    self.imp().cache.get().unwrap().ensure_cached_lyrics(new_song.get_info());
+                }
+            }
         } else {
             // No song is playing. Update state accordingly.
             let was_playing = self.imp().current_song.borrow().as_ref().is_some(); // end borrow
@@ -951,6 +974,23 @@ impl Player {
             }
         }
 
+        if let Some(new_position_dur) = status.elapsed {
+            let new = new_position_dur.as_secs_f64();
+            let old = self.set_position(new);
+            if new != old && self.imp().mpris_enabled.get() {
+                self.seek_mpris(new);
+            }
+        } else {
+            self.set_position(0.0);
+        }
+        if let Some(lyrics) = self.imp().lyrics.borrow().as_ref() {
+            let new_idx = lyrics.get_line_at_timestamp(self.imp().position.get() as f32) as u32;
+            let old_idx = self.imp().current_lyric_line.replace(new_idx);
+            if new_idx != old_idx {
+                self.notify("current-lyric-line");
+            }
+        }
+
         // If new queue is shorter, truncate current queue.
         // This is because update_queue would be called before update_status, which means
         // the new length was not available to update_queue.
@@ -963,6 +1003,31 @@ impl Player {
         }
 
         self.update_mpris_properties(mpris_changes);
+    }
+
+    pub fn update_lyrics(&self, lyrics: Lyrics) {
+        self.imp().current_lyric_line.set(0);
+        self.imp().lyric_lines.splice(0, 0, &lyrics.to_plain_lines());
+        self.imp().lyrics.replace(Some(lyrics));
+        self.notify("current-lyric-line");
+    }
+
+    /// Returns true if we have lyrics for the current song and it is synced; false otherwise.
+    pub fn lyrics_are_synced(&self) -> bool {
+        if let Some(lyrics) = self.imp().lyrics.borrow().as_ref() {
+            lyrics.synced
+        }
+        else {
+            false
+        }
+    }
+
+    pub fn current_lyric_line(&self) -> u32 {
+        self.imp().current_lyric_line.get()
+    }
+
+    pub fn n_lyric_lines(&self) -> u32 {
+        self.imp().lyric_lines.n_items()
     }
 
     /// Update the queue, optionally with diffs or an entirely new queue.
@@ -1173,6 +1238,10 @@ impl Player {
         0
     }
 
+    pub fn mpd_volume(&self) -> i8 {
+        self.imp().volume.get()
+    }
+
     pub fn queue_id(&self) -> u32 {
         if let Some(song) = &*self.imp().current_song.borrow() {
             return song.get_queue_id();
@@ -1199,10 +1268,15 @@ impl Player {
     /// Seek to current position. Called when the seekbar is released.
     pub fn send_seek(&self) {
         self.client().seek_current_song(self.position());
+
     }
 
     pub fn queue(&self) -> gio::ListStore {
         self.imp().queue.clone()
+    }
+
+    pub fn lyrics(&self) -> gtk::StringList {
+        self.imp().lyric_lines.clone()
     }
 
     fn send_play(&self) {

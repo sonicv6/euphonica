@@ -28,7 +28,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::meta_providers::{get_provider_with_priority, models::ArtistMeta};
+use crate::{common::SongInfo, meta_providers::{get_provider_with_priority, models::{ArtistMeta, Lyrics}}};
 use crate::{
     client::{BackgroundTask, MpdWrapper},
     common::{AlbumInfo, ArtistInfo},
@@ -291,9 +291,27 @@ impl Cache {
                                     }
                                 }
                             )).await;
-                            // let thumbnail_path = this.get_path_for(folder_uri, Metadata::AlbumArt(true));
-                            // let path = this.get_path_for(folder_uri, Metadata::AlbumArt(false));
                         },
+                        ProviderMessage::Lyrics(key) => {
+                            let _ = gio::spawn_blocking(clone!(
+                                #[strong]
+                                fg_sender,
+                                #[strong]
+                                doc_cache,
+                                #[strong]
+                                providers,
+                                move || {
+                                    // Guaranteed to have this field so just unwrap it
+                                    let res = providers.read().unwrap().get_lyrics(&key);
+                                    if let Some(lyrics) = res {
+                                        doc_cache.write_lyrics(&key, &lyrics)
+                                                 .expect("Unable to write downloaded lyrics");
+                                        let _ = fg_sender.send_blocking(ProviderMessage::LyricsAvailable(key.uri));
+                                    }
+                                    sleep_after_request();
+                                }
+                            )).await;
+                        }
                         _ => {}
                     };
                 }
@@ -345,6 +363,9 @@ impl Cache {
                     ProviderMessage::ClearArtistAvatar(name) => {
                         this.on_artist_avatar_cleared(&name)
                     }
+                    ProviderMessage::LyricsAvailable(key) => {
+                        this.on_lyrics_downloaded(&key)
+                    }
                     _ => {}
                 }
             }
@@ -376,6 +397,10 @@ impl Cache {
 
     fn on_artist_avatar_cleared(&self, name: &str) {
         self.state.emit_with_param("artist-avatar-cleared", name);
+    }
+
+    fn on_lyrics_downloaded(&self, uri: &str) {
+        self.state.emit_with_param("song-lyrics-downloaded", uri);
     }
 
     pub fn get_cache_state(&self) -> CacheState {
@@ -729,5 +754,33 @@ impl Cache {
             }
         });
         None
+    }
+
+    pub fn load_cached_lyrics(&self, song: &SongInfo) -> Option<Lyrics> {
+        let result = self.doc_cache.find_lyrics(song);
+        if let Ok(res) = result {
+            if let Some(info) = res {
+                println!("Lyrics cache hit!");
+                return Some(info);
+            }
+            println!("Lyrics cache miss");
+            return None;
+        }
+        println!("{:?}", result.err());
+        return None;
+    }
+
+    pub fn ensure_cached_lyrics(&self, song: &SongInfo) {
+        // Check whether we have this artist cached
+        let result = self.doc_cache.find_lyrics(song);
+        if let Ok(response) = result {
+            if response.is_none() {
+                let _ = self.bg_sender.send_blocking(ProviderMessage::Lyrics(
+                    song.clone()
+                ));
+            }
+        } else {
+            println!("{:?}", result.err());
+        }
     }
 }

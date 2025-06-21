@@ -1,6 +1,6 @@
-use crate::common::{AlbumInfo, ArtistInfo};
+use crate::common::{AlbumInfo, ArtistInfo, SongInfo};
 
-use super::{lastfm::LastfmWrapper, models, musicbrainz::MusicBrainzWrapper, MetadataProvider};
+use super::{lastfm::LastfmWrapper, lrclib::LrcLibWrapper, models, musicbrainz::MusicBrainzWrapper, MetadataProvider};
 
 /// A meta-MetadataProvider that works by daisy-chaining actual MetadataProviders.
 /// Think composite pattern.
@@ -67,6 +67,18 @@ impl MetadataProvider for MetadataChain {
         }
         existing
     }
+
+    fn get_lyrics(
+        &self,
+        key: &SongInfo
+    ) -> Option<models::Lyrics> {
+        for provider in self.providers.iter() {
+            if let Some(lyrics) = provider.get_lyrics(key) {
+                return Some(lyrics)
+            }
+        }
+        None
+    }
 }
 
 /// Convenience method to construct a metadata provider instance by key with the given priority.
@@ -75,6 +87,7 @@ pub fn get_provider_with_priority(key: &str, prio: u32) -> Box<dyn MetadataProvi
     match key {
         "musicbrainz" => Box::new(MusicBrainzWrapper::new(prio)),
         "lastfm" => Box::new(LastfmWrapper::new(prio)),
+        "lrclib" => Box::new(LrcLibWrapper::new(prio)),
         _ => unimplemented!(),
     }
 }
