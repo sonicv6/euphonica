@@ -41,11 +41,15 @@ The below were captured with a mix of dark and light modes.
   ![album-view](https://github.com/user-attachments/assets/26f9f3bb-3032-4ae5-ba46-15e4ece680ef)
 
 - UI at different sizes (v0.12+)[^1]
-  ![mini-layouts-v2](https://github.com/user-attachments/assets/1caace0d-751e-41c6-be9c-5aa54ac67f91)
+  ![mini-layouts-v2](https://github.com/user-attachments/assets/b41f5b50-013f-4c3e-952c-4e858f4cc1fa)
 
 - Queue View[^1]
-  ![queue-view](https://github.com/user-attachments/assets/020faf32-33f3-4711-a86c-4934d058f3a1)
+  ![queue-view](https://github.com/user-attachments/assets/b4d213db-13c0-4a33-85b6-cdf227c93d61)
 
+- Visualiser & synced lyrics in action
+
+  ![lyrics-animation](https://github.com/user-attachments/assets/1de89a90-90bd-4aa2-9775-5c1845d4dcf4)
+  
 - Artist bio as fetched from Last.fm[^1][^2][^3]
   ![artist-content-view](https://github.com/user-attachments/assets/54161399-1f16-490f-91b9-89b581b28839)
 
@@ -55,8 +59,10 @@ The below were captured with a mix of dark and light modes.
 - Playlist Content View[^1]
   ![playlist-content-view](https://github.com/user-attachments/assets/be9913e7-2378-4374-9a8a-d08512fc1e09)
   
-- Some of the available UI customisations[^1]
-  ![visualiser-customisation](https://github.com/user-attachments/assets/e21d0a36-6dba-4fea-84a2-0fdb0810bff5)
+- Settings GUI for pretty much everything[^1]
+  ![visualiser-customisation](https://github.com/user-attachments/assets/baed1ece-be17-4f39-81b3-df17e1460417)
+  ![image](https://github.com/user-attachments/assets/f1277d5c-d0c4-40c0-81e2-201c581d4e44)
+
 
 [^1]: Actual album arts have been replaced with random pictures from [Pexels](https://www.pexels.com/). All credits go to the original authors.
 [^2]: Artist bios and album wikis are user-contributed and licensed by Last.fm under CC-BY-SA.
@@ -85,6 +91,7 @@ distribution, and does not require root privileges.
   ``` bash
   flatpak run io.github.htkhiem.Euphonica
   ```
+
 
 A desktop should also have been installed for you, although it might take a reboot to show up.
 
