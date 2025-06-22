@@ -355,7 +355,7 @@ impl Song {
                 "/io/github/htkhiem/Euphonica/{}",
                 self.get_queue_id()
             )))
-            .length(Time::from_millis(self.get_duration() as i64))
+            .length(Time::from_secs(self.get_duration() as i64))
             .build();
         if let Some(album) = self.get_album() {
             meta.set_album(Some(&album.title));

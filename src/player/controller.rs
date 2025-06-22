@@ -1,5 +1,6 @@
 extern crate mpd;
 use crate::{
+    config::APPLICATION_ID,
     application::EuphonicaApplication, cache::{Cache, CacheState}, client::{ClientState, ConnectionState, MpdWrapper}, common::{AlbumInfo, QualityGrade, Song}, meta_providers::models::Lyrics, player::fft_backends::fifo::FifoFftBackend, utils::{prettify_audio_format, settings_manager}
 };
 use async_lock::OnceCell as AsyncOnceCell;
@@ -1436,11 +1437,11 @@ impl LocalRootInterface for Player {
     }
 
     async fn identity(&self) -> fdo::Result<String> {
-        Ok("io.github.htkhiem.Euphonica".to_string())
+        Ok(APPLICATION_ID.to_string())
     }
 
     async fn desktop_entry(&self) -> fdo::Result<String> {
-        Ok("io.github.htkhiem.Euphonica".to_string())
+        Ok(APPLICATION_ID.to_string())
     }
 
     async fn supported_uri_schemes(&self) -> fdo::Result<Vec<String>> {
