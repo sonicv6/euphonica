@@ -93,7 +93,7 @@ distribution, and does not require root privileges.
   ```
 
 
-A desktop should also have been installed for you, although it might take a reboot to show up.
+A desktop icon entry should also have been installed for you, although it might take a reboot to show up.
 
 ### Using Meson 
 
