@@ -84,8 +84,8 @@ distribution, and does not require root privileges.
   ```bash
   flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
   ```
-3. Download the [latest Flatpak manifest](https://github.com/htkhiem/euphonica/releases/download/v0.12.0-alpha/io.github.htkhiem.Euphonica.json) to an empty folder somewhere.
-4. Run `flatpak-builder` as follows:
+2. Download the [latest Flatpak manifest](https://github.com/htkhiem/euphonica/releases/download/v0.12.0-alpha/io.github.htkhiem.Euphonica.json) to an empty folder somewhere.
+3. Run `flatpak-builder` as follows:
   ```bash
   cd /path/to/flatpak/manifest
   flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica.json
