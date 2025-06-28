@@ -107,10 +107,11 @@ It is the most lightweight option, but has only been tested on Arch Linux.
 1. Make sure you have these dependencies installed beforehand:
   - `gtk4` >= 4.16
   - `libadwaita` >= 1.6
-  - `rustup` >= 1.27
+  - `cargo` >= 1.27
   - `meson` >= 1.5
   - `gettext` >= 0.23
   - `mpd` >= 0.24 (Euphonica relies on the new filter syntax and expanded tagging)
+  - `sqlite` (metadata store dependency)
   
     If you are on Arch Linux, `gettext` should have been installed as part of the `base-devel` metapackage, which also includes `git` (to clone this repo :) ).
 
