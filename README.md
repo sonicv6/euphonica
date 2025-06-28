@@ -72,9 +72,13 @@ The below were captured with a mix of dark and light modes.
 
 Euphonica is still in very early development, and so far has only been tested on Arch Linux (btw).
 
-I'm gearing up for AUR & Flathub releases, but before that happens, Euphonica must be built from source.
+### Arch Linux
+
+An (admittedly experimental) AUR package is [now available](https://aur.archlinux.org/packages/euphonica-git).
 
 ### Using `flatpak-builder`
+
+I'm gearing up for a Flathub release, but before that happens, Euphonica must be built from source.
 
 This builds and installs Euphonica as a sandboxed Flatpak app on your system, complete with an entry in 
 Flatpak-aware app stores (like GNOME Software, KDE Discover, etc). It should also work on virtually any 
