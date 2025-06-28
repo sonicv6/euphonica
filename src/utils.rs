@@ -161,7 +161,8 @@ pub fn strip_filename_linux(path: &str) -> &str {
     if let Some(last_slash) = path.rfind('/') {
         return &path[..last_slash + 1];
     }
-    path
+    // For tracks located at the root, just return empty string
+    ""
 }
 
 pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {

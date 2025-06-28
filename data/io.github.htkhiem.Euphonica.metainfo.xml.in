@@ -63,6 +63,12 @@
   </screenshots>
 
   <releases>
+    <release version="0.94.1-alpha" date="2025-06-28">
+      <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.94.1-alpha</url>
+      <description>
+        <p>Fix: metadata cache thread panicking on invalid album tag information.</p>
+      </description>
+    </release>
     <release version="0.94.0-alpha" date="2025-06-28">
       <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.94.0-alpha</url>
       <description>

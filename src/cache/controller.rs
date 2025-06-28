@@ -195,23 +195,25 @@ impl Cache {
                                 providers,
                                 move || {
                                     // Check whether there is one already
-                                    let folder_uri = key.uri.to_owned();
-                                    let existing = doc_cache
-                                        .find_album_meta(&key);
-                                    if let Ok(None) = existing {
-                                        let res = providers.read().unwrap().get_album_meta(&mut key, None);
-                                        if let Some(album) = res {
-                                            doc_cache.write_album_meta(&key, &album)
-                                                .expect("Unable to store downloaded album meta");
+                                    if key.mbid.is_some() || key.artist_tag.is_some() {
+                                        let folder_uri = key.uri.to_owned();
+                                        let existing = doc_cache
+                                            .find_album_meta(&key);
+                                        if let Ok(None) = existing {
+                                            let res = providers.read().unwrap().get_album_meta(&mut key, None);
+                                            if let Some(album) = res {
+                                                doc_cache.write_album_meta(&key, &album)
+                                                         .expect("Unable to store downloaded album meta");
+                                            }
+                                            else {
+                                                // Push an empty AlbumMeta to block further calls for this album.
+                                                println!("No album meta could be found for {}. Pushing empty document...", &folder_uri);
+                                                doc_cache.write_album_meta(&key, &models::AlbumMeta::from_key(&key))
+                                                         .expect("Unable to store placeholder album meta");
+                                            }
+                                            let _ = fg_sender.send_blocking(ProviderMessage::AlbumMetaAvailable(folder_uri));
+                                            sleep_after_request();
                                         }
-                                        else {
-                                            // Push an empty AlbumMeta to block further calls for this album.
-                                            println!("No album meta could be found for {}. Pushing empty document...", &folder_uri);
-                                            doc_cache.write_album_meta(&key, &models::AlbumMeta::from_key(&key))
-                                                .expect("Unable to store placeholder album meta");
-                                        }
-                                        let _ = fg_sender.send_blocking(ProviderMessage::AlbumMetaAvailable(folder_uri));
-                                        sleep_after_request();
                                     }
                                 }
                             )).await;
@@ -270,8 +272,7 @@ impl Cache {
                                 #[strong]
                                 doc_cache,
                                 move || {
-                                    if let Ok(Some(meta)) = doc_cache.find_album_meta(&key)
-                                    {
+                                    if let Ok(Some(meta)) = doc_cache.find_album_meta(&key) {
                                         let res = get_best_image(&meta.image);
                                             if res.is_ok() {
                                                 let (hires, thumbnail) = resize_convert_image(res.unwrap());
