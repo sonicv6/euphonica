@@ -13,6 +13,8 @@ use crate::common::{Album, Artist};
 pub enum ConnectionState {
     #[default]
     NotConnected,
+    ConnectionRefused,
+    SocketNotFound,
     Connecting,
     Unauthenticated, // Either no password is provided or the one provided is insufficiently privileged
     CredentialStoreError, // Cannot access underlying credential store to fetch or save password
@@ -96,6 +98,11 @@ mod imp {
                     Signal::builder("idle")
                         .param_types([
                             BoxedAnyObject::static_type(), // mpd::Subsystem::to_str
+                        ])
+                        .build(),
+                    Signal::builder("queue-changed")
+                        .param_types([
+                            BoxedAnyObject::static_type(), // Vec<Song> (diff only)
                         ])
                         .build(),
                     Signal::builder("album-art-downloaded")

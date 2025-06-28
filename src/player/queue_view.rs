@@ -36,6 +36,8 @@ mod imp {
         #[template_child]
         pub content_stack: TemplateChild<gtk::Stack>,
         #[template_child]
+        pub scrolled_window: TemplateChild<gtk::ScrolledWindow>,
+        #[template_child]
         pub queue: TemplateChild<gtk::ListView>,
         #[template_child]
         pub queue_title: TemplateChild<adw::WindowTitle>,
@@ -61,6 +63,18 @@ mod imp {
         pub collapsed: Cell<bool>,
         #[property(get, set)]
         pub show_content: Cell<bool>,
+
+        // FIXME: ScrolledWindow resets scroll position upon item removal.
+        // This is especially annoying in that the scroll position might be
+        // reset to zero many times, negating our first restores.
+        // Our current workaround is to:
+        // - Only restore when the value hits zero.
+        // - Stop trying to do so once the value has changed twice without
+        // either being zero (indicating user scrolling).
+        // Disgusting I know but it works for now without being too
+        // noticeable.
+        pub last_scroll_pos: Cell<f64>,
+        pub restore_last_pos: Cell<u8>
     }
 
     #[glib::object_subclass]
@@ -149,7 +163,7 @@ impl Default for QueueView {
 fn format_song_count(count: u32) -> Option<String> {
     // TODO: translatable
     if count == 0 {
-        None
+        Some(String::from("Empty"))
     } else {
         if count == 1 {
             Some(String::from("1 song"))
@@ -242,6 +256,17 @@ impl QueueView {
             }
         ));
 
+        factory.connect_teardown(clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_, _| {
+                // The above scroll bug only manifests after this, so now is the best time to set
+                // the corresponding values.
+                this.imp().last_scroll_pos.set(this.imp().scrolled_window.vadjustment().value());
+                this.imp().restore_last_pos.set(2);
+            }
+        ));
+
         // Set the factory of the list view
         self.imp().queue.set_factory(Some(&factory));
 
@@ -307,6 +332,28 @@ impl QueueView {
             .bind_property("supports-playlists", &save, "visible")
             .sync_create()
             .build();
+
+        // Disgusting workaround until I can pinpoint whenever this is a GTK problem.
+        self.imp().scrolled_window.vadjustment().connect_notify_local(
+            Some("value"),
+            clone!(
+                #[weak(rename_to = this)]
+                self,
+                move |adj, _| {
+                    let checks_left = this.imp().restore_last_pos.get();
+                    if checks_left > 0 {
+                        let old_pos = this.imp().last_scroll_pos.get();
+                        if adj.value() == 0.0 {
+                            adj.set_value(old_pos);
+                        }
+                        else {
+                            this.imp().restore_last_pos.set(checks_left - 1);
+                            // this.imp().restore_last_pos.set(false);
+                        }
+                    }
+                }
+            )
+        );
 
         save_name.connect_closure(
             "changed",
