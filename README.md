@@ -72,67 +72,103 @@ The below were captured with a mix of dark and light modes.
 
 Euphonica is still in very early development, and so far has only been tested on Arch Linux (btw).
 
-### Arch Linux
-
-An (admittedly experimental) AUR package is [now available](https://aur.archlinux.org/packages/euphonica-git).
-
-### Using `flatpak-builder`
-
-I'm gearing up for a Flathub release, but before that happens, Euphonica must be built from source.
-
-This builds and installs Euphonica as a sandboxed Flatpak app on your system, complete with an entry in 
-Flatpak-aware app stores (like GNOME Software, KDE Discover, etc). It should also work on virtually any 
-distribution, and does not require root privileges.
-
-1. Add the Flathub repo in case you haven't already:
-  ```bash
-  flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-  ```
-2. Download the latest Flatpak manifest from the [releases section](https://github.com/htkhiem/euphonica/releases) to an empty folder somewhere.
-3. Run `flatpak-builder` as follows:
-  ```bash
-  cd /path/to/flatpak/manifest
-  flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica.json
-  ```
-4. Once the above has completed, you can run Euphonica using:
-
-  ``` bash
-  flatpak run io.github.htkhiem.Euphonica
-  ```
-
-
-A desktop icon entry should also have been installed for you, although it might take a reboot to show up.
-
-### Using Meson 
-
-This builds Euphonica against system library packages, then installs it directly into `/usr/local/bin`.
-It is the most lightweight option, but has only been tested on Arch Linux.
-
-1. Make sure you have these dependencies installed beforehand:
-  - `gtk4` >= 4.16
-  - `libadwaita` >= 1.6
-  - `cargo` >= 1.27
-  - `meson` >= 1.5
-  - `gettext` >= 0.23
-  - `mpd` >= 0.24 (Euphonica relies on the new filter syntax and expanded tagging)
-  - `sqlite` (metadata store dependency)
+<details>
+  <summary><h3>Arch Linux</h3></summary>
   
-    If you are on Arch Linux, `gettext` should have been installed as part of the `base-devel` metapackage, which also includes `git` (to clone this repo :) ).
+  An (admittedly experimental) AUR package is [now available](https://aur.archlinux.org/packages/euphonica-git).
 
-2. Init build folder
   ```bash
-  cd /path/to/where/to/clone/euphonica
-  git clone https://github.com/htkhiem/euphonica.git
-  cd euphonica
-  git submodule update --init
-  meson setup build --buildtype=release
+  # Use your favourite AUR helper here
+  paru -S euphonica-git
   ```
+  
+</details>
 
-3. Compile & install (will require root privileges)
+<details>
+  <summary><h3>Nixpkgs</h3></summary>
+
+  The Nix package is kindly maintained by [@paperdigits](https://github.com/paperdigits) [here](https://search.nixos.org/packages?channel=unstable&show=euphonica&from=0&size=50&sort=relevance&type=packages).
+
   ```bash
-  cd build
-  meson install
+  # NixOS configuration
+  environment.systemPackages = [
+    pkgs.euphonica
+  ];
+  
+  # For standalone Nix, without flakes:
+  nix-env -iA nixpkgs.euphonica
+  # With flakes:
+  nix profile install nixpkgs#euphonica
   ```
+</details>
+
+## Build
+
+<details>
+  <summary><h3>Flatpak</h3></summary>
+
+  I'm gearing up for a Flathub release, but before that happens, Euphonica must be built from source using `flatpak-builder`.
+  
+  This builds and installs Euphonica as a sandboxed Flatpak app on your system, complete with an entry in 
+  Flatpak-aware app stores (like GNOME Software, KDE Discover, etc). It should also work on virtually any 
+  distribution, and does not require root privileges.
+  
+  1. Add the Flathub repo in case you haven't already:
+     
+    ```bash
+    flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    ```
+  2. Download the latest Flatpak manifest from the [releases section](https://github.com/htkhiem/euphonica/releases) to an empty folder somewhere.
+  3. Run `flatpak-builder` as follows:
+     
+    ```bash
+    cd /path/to/flatpak/manifest
+    flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica.json
+    ```
+  4. Once the above has completed, you can run Euphonica using:
+  
+    ``` bash
+    flatpak run io.github.htkhiem.Euphonica
+    ```
+  
+  
+  A desktop icon entry should also have been installed for you, although it might take a reboot to show up.
+</details>
+
+<details>
+  <summary><h3>Meson</h3></summary>
+
+  This builds Euphonica against system library packages, then installs it directly into `/usr/local/bin`.
+  It is the most lightweight option, but has only been tested on Arch Linux.
+  
+  1. Make sure you have these dependencies installed beforehand:
+    - `gtk4` >= 4.16
+    - `libadwaita` >= 1.6
+    - `cargo` >= 1.27
+    - `meson` >= 1.5
+    - `gettext` >= 0.23
+    - `mpd` >= 0.24 (Euphonica relies on the new filter syntax and expanded tagging)
+    - `sqlite` (metadata store dependency)
+    
+      If you are on Arch Linux, `gettext` should have been installed as part of the `base-devel` metapackage, which also includes `git` (to clone this repo :) ).
+  
+  2. Init build folder
+     
+    ```bash
+    cd /path/to/where/to/clone/euphonica
+    git clone https://github.com/htkhiem/euphonica.git
+    cd euphonica
+    git submodule update --init
+    meson setup build --buildtype=release
+    ```
+  
+  3. Compile & install (will require root privileges)
+     
+    ```bash
+    cd build
+    meson install
+    ```
+</details>
 
 ## Setting up Euphonica with your MPD instance
 
