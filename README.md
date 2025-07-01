@@ -115,21 +115,21 @@ Euphonica is still in very early development, and so far has only been tested on
   
   1. Add the Flathub repo in case you haven't already:
      
-    ```bash
-    flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-    ```
+  ```bash
+  flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+  ```
   2. Download the latest Flatpak manifest from the [releases section](https://github.com/htkhiem/euphonica/releases) to an empty folder somewhere.
   3. Run `flatpak-builder` as follows:
      
-    ```bash
-    cd /path/to/flatpak/manifest
-    flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica.json
-    ```
+  ```bash
+  cd /path/to/flatpak/manifest
+  flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica.json
+  ```
   4. Once the above has completed, you can run Euphonica using:
   
-    ``` bash
-    flatpak run io.github.htkhiem.Euphonica
-    ```
+  ```bash
+  flatpak run io.github.htkhiem.Euphonica
+  ```
   
   
   A desktop icon entry should also have been installed for you, although it might take a reboot to show up.
@@ -153,21 +153,21 @@ Euphonica is still in very early development, and so far has only been tested on
       If you are on Arch Linux, `gettext` should have been installed as part of the `base-devel` metapackage, which also includes `git` (to clone this repo :) ).
   
   2. Init build folder
-     
-    ```bash
-    cd /path/to/where/to/clone/euphonica
-    git clone https://github.com/htkhiem/euphonica.git
-    cd euphonica
-    git submodule update --init
-    meson setup build --buildtype=release
-    ```
-  
+   
+  ```bash
+  cd /path/to/where/to/clone/euphonica
+  git clone https://github.com/htkhiem/euphonica.git
+  cd euphonica
+  git submodule update --init
+  meson setup build --buildtype=release
+  ```
+
   3. Compile & install (will require root privileges)
      
-    ```bash
-    cd build
-    meson install
-    ```
+  ```bash
+  cd build
+  meson install
+  ```
 </details>
 
 ## Setting up Euphonica with your MPD instance
