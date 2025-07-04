@@ -472,7 +472,7 @@ impl AlbumContentView {
                     this.get_library()
                 ) {
                     if this.imp().selecting_all.get() {
-                        library.queue_album(album.clone(), true, true);
+                        library.queue_album(album.clone(), true, true, None);
                     } else {
                         let store = &this.imp().song_list;
                         // Get list of selected songs
@@ -498,7 +498,7 @@ impl AlbumContentView {
                     this.get_library()
                 ) { 
                     if this.imp().selecting_all.get() {
-                        library.queue_album(album.clone(), false, false);
+                        library.queue_album(album.clone(), false, false, None);
                     } else {
                         let store = &this.imp().song_list;
                         // Get list of selected songs
@@ -588,6 +588,20 @@ impl AlbumContentView {
 
         // Set the factory of the list view
         self.imp().content.set_factory(Some(&factory));
+
+        // Setup click action
+        self.imp().content.connect_activate(clone!(
+            #[strong(rename_to = this)]
+            self,
+            move |_, position| {
+                if let (Some(album), Some(library)) = (
+                    this.imp().album.borrow().as_ref(),
+                    this.get_library()
+                ) {
+                    library.queue_album(album.clone(), true, true, Some(position as u32));
+                }
+            }
+        ));
     }
 
     /// Returns true if an album art was successfully retrieved.
