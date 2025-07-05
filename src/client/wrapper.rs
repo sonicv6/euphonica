@@ -157,10 +157,43 @@ mod background {
                     }
                 }
             } else {
-                // Fetch from local sources instead.
-                sender_to_cache
-                    .send_blocking(ProviderMessage::AlbumArtNotAvailable(key))
-                    .expect("Album art not available from MPD, but cannot notify cache of this.");
+                let mut success = false;
+                // Try to find a song in the album to extract its URI for readpicture
+
+                // MPD doesn't expect the final / at the end of a URI
+                let mut trimmed_uri = uri.clone();
+                trimmed_uri.pop();
+
+                // Query MPD for a song under this URI
+                let songs= client
+                    .find(
+                        Query::new().and_with_op(
+                            Term::Base,
+                            QueryOperation::Contains,
+                            trimmed_uri.clone()
+                        ),
+                        Window::from((0, 1)));
+                if let Ok(songs) = songs {
+                    if let Some(song) = songs.first() {
+                        if let Ok(bytes) = client.readpicture(&song.file) {
+                            if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
+                                let (hires, thumb) = utils::resize_convert_image(dyn_img);
+                                
+                                if let (Ok(_), Ok(_)) = (hires.save(path), thumb.save(thumbnail_path)) {
+                                    sender_to_cache
+                                        .send_blocking(ProviderMessage::AlbumArtAvailable(uri))
+                                        .expect("Cannot notify main cache of album art download result.");
+                                        success = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                if !success {
+                    sender_to_cache
+                        .send_blocking(ProviderMessage::AlbumArtNotAvailable(key))
+                        .expect("Album art not available from MPD, but cannot notify cache of this.");
+                }
             }
         } else {
             // println!("Skipped downloading album art for {:?}", &uri);
