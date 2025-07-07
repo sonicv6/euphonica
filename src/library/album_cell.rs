@@ -1,4 +1,4 @@
-use glib::{closure_local, signal::SignalHandlerId, Object};
+use glib::{clone, closure_local, signal::SignalHandlerId, Object};
 use gtk::{glib, gio, prelude::*, subclass::prelude::*, CompositeTemplate, Image, Label};
 use std::{
     cell::{OnceCell, RefCell},
@@ -315,7 +315,7 @@ impl AlbumCell {
         // Add hover controller for marquee scrolling
         let hover_ctl = gtk::EventControllerMotion::new();
         hover_ctl.set_propagation_phase(gtk::PropagationPhase::Capture);
-        hover_ctl.connect_enter(glib::clone!(
+        hover_ctl.connect_enter(clone!(
             #[weak(rename_to = this)]
             self,
             move |_, _, _| {
@@ -325,7 +325,7 @@ impl AlbumCell {
                 }
             }
         ));
-        hover_ctl.connect_leave(glib::clone!(
+        hover_ctl.connect_leave(clone!(
             #[weak(rename_to = this)]
             self,
             move |_| {
