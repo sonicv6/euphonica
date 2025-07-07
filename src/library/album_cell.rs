@@ -1,5 +1,5 @@
 use glib::{closure_local, signal::SignalHandlerId, Object};
-use gtk::{glib, prelude::*, subclass::prelude::*, CompositeTemplate, Image, Label};
+use gtk::{glib, gio, prelude::*, subclass::prelude::*, CompositeTemplate, Image, Label};
 use std::{
     cell::{OnceCell, RefCell},
     rc::Rc,
@@ -7,7 +7,8 @@ use std::{
 
 use crate::{
     cache::{placeholders::ALBUMART_PLACEHOLDER, Cache, CacheState},
-    common::{Album, AlbumInfo},
+    common::{Album, AlbumInfo, Marquee, TextDisplayMode},
+    utils,
 };
 
 mod imp {
@@ -25,7 +26,13 @@ mod imp {
         #[template_child]
         pub cover: TemplateChild<gtk::Picture>, // Use high-resolution version
         #[template_child]
-        pub title: TemplateChild<Label>,
+        pub title_stack: TemplateChild<gtk::Stack>,
+        #[template_child]
+        pub title_ellipsis: TemplateChild<Label>,
+        #[template_child]
+        pub title_wrap: TemplateChild<Label>,
+        #[template_child]
+        pub title_marquee: TemplateChild<Marquee>,
         #[template_child]
         pub artist: TemplateChild<Label>,
         #[template_child]
@@ -71,6 +78,18 @@ mod imp {
                 .transform_to(|_, r: i8| {Some(r >= 0)})
                 .sync_create()
                 .build();
+
+            // Connect to settings to watch for text display mode changes
+            let settings = utils::settings_manager().child("ui");
+            let obj_weak = self.obj().downgrade();
+            settings.connect_changed(Some("album-cell-text-display"), move |settings, _| {
+                if let Some(obj) = obj_weak.upgrade() {
+                    obj.update_text_display_mode(settings);
+                }
+            });
+            
+            // Set initial text display mode
+            self.obj().update_text_display_mode(&settings);
         }
 
         fn properties() -> &'static [ParamSpec] {
@@ -87,7 +106,16 @@ mod imp {
 
         fn property(&self, _id: usize, pspec: &ParamSpec) -> glib::Value {
             match pspec.name() {
-                "title" => self.title.label().to_value(),
+                "title" => {
+                    // Return the text from whichever title widget is currently active
+                    let stack = &self.title_stack;
+                    match stack.visible_child_name().as_deref() {
+                        Some("ellipsis") => self.title_ellipsis.label().to_value(),
+                        Some("wrap") => self.title_wrap.label().to_value(),
+                        Some("marquee") => self.title_marquee.label().label().to_value(),
+                        _ => self.title_ellipsis.label().to_value(),
+                    }
+                }
                 "artist" => self.artist.label().to_value(),
                 "quality-grade" => self.quality_grade.icon_name().to_value(),
                 "rating" => self.rating_val.get().to_value(),
@@ -100,7 +128,10 @@ mod imp {
             match pspec.name() {
                 "title" => {
                     if let Ok(title) = value.get::<&str>() {
-                        self.title.set_label(title);
+                        // Set the title on all label widgets
+                        self.title_ellipsis.set_label(title);
+                        self.title_wrap.set_label(title);
+                        self.title_marquee.label().set_label(title);
                         obj.notify("title");
                     }
                 }
@@ -153,6 +184,10 @@ impl AlbumCell {
            .set(cache)
            .expect("AlbumCell cannot bind to cache");
         res.setup(item);
+        
+        // Add hover controller for marquee
+        res.setup_marquee_hover();
+        
         let cache_state = res.imp()
                .cache
                .get()
@@ -251,5 +286,52 @@ impl AlbumCell {
             cache_state.disconnect(update_id);
             cache_state.disconnect(clear_id);
         }
+    }
+
+    pub fn update_text_display_mode(&self, settings: &gio::Settings) {
+        let mode_str = settings.string("album-cell-text-display");
+        let mode = match mode_str.as_str() {
+            "ellipsis" => TextDisplayMode::Ellipsis,
+            "wrap" => TextDisplayMode::Wrap,
+            "marquee" => TextDisplayMode::Marquee,
+            _ => TextDisplayMode::Ellipsis,
+        };
+
+        let stack = &self.imp().title_stack;
+        match mode {
+            TextDisplayMode::Ellipsis => {
+                stack.set_visible_child_name("ellipsis");
+            }
+            TextDisplayMode::Wrap => {
+                stack.set_visible_child_name("wrap");
+            }
+            TextDisplayMode::Marquee => {
+                stack.set_visible_child_name("marquee");
+            }
+        }
+    }
+
+    fn setup_marquee_hover(&self) {
+        // Add hover controller for marquee scrolling
+        let hover_ctl = gtk::EventControllerMotion::new();
+        hover_ctl.set_propagation_phase(gtk::PropagationPhase::Capture);
+        hover_ctl.connect_enter(glib::clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_, _, _| {
+                let stack = &this.imp().title_stack;
+                if stack.visible_child_name().as_deref() == Some("marquee") {
+                    this.imp().title_marquee.set_should_run_and_check(true);
+                }
+            }
+        ));
+        hover_ctl.connect_leave(glib::clone!(
+            #[weak(rename_to = this)]
+            self,
+            move |_| {
+                this.imp().title_marquee.set_should_run_and_check(false);
+            }
+        ));
+        self.add_controller(hover_ctl);
     }
 }

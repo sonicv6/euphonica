@@ -14,6 +14,21 @@
           </object>
         </child>
         <child>
+          <object class="AdwComboRow" id="album_cell_text_display">
+            <property name="title" translatable="true">Album title display</property>
+            <property name="subtitle" translatable="true">How album titles are displayed when too long for the album grid cell.</property>
+            <property name="model">
+              <object class="GtkStringList">
+                <items>
+                  <item>Ellipsis (...)</item>
+                  <item>Wrap text</item>
+                  <item>Marquee scroll</item>
+                </items>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
           <object class="AdwSpinRow" id="recent_playlists_count">
             <property name="title" translatable="true">Number of recent playlists to show</property>
             <property name="subtitle" translatable="true">Sorted by last-modified time, latest first.</property>

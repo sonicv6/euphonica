@@ -17,6 +17,8 @@ mod imp {
         pub recent_playlists_count: TemplateChild<adw::SpinRow>,
         #[template_child]
         pub auto_accent: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub album_cell_text_display: TemplateChild<adw::ComboRow>,
 
         #[template_child]
         pub use_album_art_as_bg: TemplateChild<adw::ExpanderRow>,
@@ -103,6 +105,23 @@ impl UIPreferences {
         let auto_accent = imp.auto_accent.get();
         ui_settings
             .bind("auto-accent", &auto_accent, "active")
+            .build();
+        
+        let album_cell_text_display = imp.album_cell_text_display.get();
+        ui_settings
+            .bind("album-cell-text-display", &album_cell_text_display, "selected")
+            .mapping(|v: &Variant, _| match v.get::<String>().unwrap().as_str() {
+                "ellipsis" => Some(0.to_value()),
+                "wrap" => Some(1.to_value()),
+                "marquee" => Some(2.to_value()),
+                _ => unreachable!(),
+            })
+            .set_mapping(|v: &Value, _| match v.get::<u32>().ok() {
+                Some(0) => Some("ellipsis".to_variant()),
+                Some(1) => Some("wrap".to_variant()),
+                Some(2) => Some("marquee".to_variant()),
+                _ => unreachable!(),
+            })
             .build();
         let use_album_art_as_bg = imp.use_album_art_as_bg.get();
         let bg_blur_radius = imp.bg_blur_radius.get();
