@@ -1,7 +1,13 @@
 extern crate mpd;
 use crate::{
+    application::EuphonicaApplication,
+    cache::{get_image_cache_path, sqlite, Cache, CacheState},
+    client::{ClientState, ConnectionState, MpdWrapper},
+    common::{CoverSource, QualityGrade, Song, SongInfo},
     config::APPLICATION_ID,
-    application::EuphonicaApplication, cache::{Cache, CacheState}, client::{ClientState, ConnectionState, MpdWrapper}, common::{AlbumInfo, QualityGrade, Song}, meta_providers::models::Lyrics, player::fft_backends::fifo::FifoFftBackend, utils::{prettify_audio_format, settings_manager}
+    meta_providers::models::Lyrics,
+    player::fft_backends::fifo::FifoFftBackend,
+    utils::{prettify_audio_format, settings_manager, strip_filename_linux}
 };
 use async_lock::OnceCell as AsyncOnceCell;
 use mpris_server::{
@@ -172,7 +178,7 @@ fn get_fft_backend() -> Rc<dyn FftBackend> {
 
 mod imp {
     use super::*;
-    use crate::{application::EuphonicaApplication, meta_providers::models::Lyrics};
+    use crate::{application::EuphonicaApplication, common::CoverSource, meta_providers::models::Lyrics};
     use glib::{
         ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecInt, ParamSpecObject, ParamSpecString, ParamSpecUInt, ParamSpecUInt64
     };
@@ -221,6 +227,10 @@ mod imp {
         pub use_visualizer: Cell<bool>,
         pub fft_backend_idx: Cell<i32>,
         pub outputs: gio::ListStore,
+        // Player controller doesn't actually keep a reference to the texture itself.
+        // This enum is merely to help decide whether we should fire a notify signal
+        // to the bar & pane.
+        pub cover_source: Cell<CoverSource>,
     }
 
     #[glib::object_subclass]
@@ -276,6 +286,7 @@ mod imp {
                 use_visualizer: Cell::new(false),
                 fft_backend_idx: Cell::new(0),
                 outputs: gio::ListStore::new::<BoxedAnyObject>(),
+                cover_source: Cell::default()
             }
         }
     }
@@ -384,7 +395,7 @@ mod imp {
                 "title" => obj.title().to_value(),
                 "artist" => obj.artist().to_value(),
                 "album" => obj.album().to_value(),
-                "album-art" => obj.current_song_album_art(false).to_value(), // High-res version
+                "album-art" => obj.current_song_cover(false).to_value(), // High-res version
                 "duration" => obj.duration().to_value(),
                 "queue-id" => obj.queue_id().to_value(),
                 "quality-grade" => obj.quality_grade().to_value(),
@@ -584,10 +595,18 @@ impl Player {
             closure_local!(
                 #[weak(rename_to = this)]
                 self,
-                move |_: CacheState, folder_uri: String| {
+                move |_: CacheState, uri: String| {
+                    // Update logic:
+                    // - Match by full URI first, then
+                    // - Match by folder URI only if there is no current cover.
                     if let Some(song) = this.imp().current_song.borrow().as_ref() {
-                        if let Some(album) = song.get_album() {
-                            if album.uri.as_str() == folder_uri.as_str() {
+                        if song.get_uri() == &uri {
+                            // Always do this to force upgrade to embedded cover from folder cover
+                            this.imp().cover_source.set(CoverSource::Embedded);
+                            this.notify("album-art");
+                        } else if this.imp().cover_source.get() != CoverSource::Embedded {
+                            if strip_filename_linux(song.get_uri()) == &uri {
+                                this.imp().cover_source.set(CoverSource::Folder);
                                 this.notify("album-art");
                             }
                         }
@@ -602,12 +621,22 @@ impl Player {
             closure_local!(
                 #[weak(rename_to = this)]
                 self,
-                move |_: CacheState, folder_uri: String| {
+                move |_: CacheState, uri: String| {
                     if let Some(song) = this.imp().current_song.borrow().as_ref() {
-                        if let Some(album) = song.get_album() {
-                            if album.uri.as_str() == folder_uri.as_str() {
-                                this.notify("album-art");
+                        match this.imp().cover_source.get() {
+                            CoverSource::Embedded => {
+                                if song.get_uri() == &uri {
+                                    this.imp().cover_source.set(CoverSource::None);
+                                    this.notify("album-art");
+                                }
                             }
+                            CoverSource::Folder => {
+                                if strip_filename_linux(song.get_uri()) == &uri {
+                                    this.imp().cover_source.set(CoverSource::None);
+                                    this.notify("album-art");
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -774,6 +803,22 @@ impl Player {
     // Signals will be sent for properties whose values have changed, even though
     // we will be receiving updates for many properties at once.
 
+    fn update_cover(&self, song: &SongInfo) {
+        if let Some((_, is_embedded)) = self.imp().cache.get().unwrap().load_cached_embedded_cover(
+            song,
+            true,
+            true,
+            true
+        ) {
+            self.imp().cover_source.set(
+                if is_embedded {CoverSource::Embedded} else {CoverSource::Folder}
+            );
+        } else {
+            // Unknown for now. Wait till cache responds via signal.
+            self.imp().cover_source.set(CoverSource::Unknown);
+        }
+    }
+
     /// Main update function. MPD's protocol has a single "status" commands
     /// that returns everything at once. This update function will take what's
     /// relevant and update the GObject properties accordingly.
@@ -900,7 +945,7 @@ impl Player {
 
         // Update playing status of songs in the queue
         if let Some(new_queue_place) = status.song {
-            let mut needs_new_lyrics = true;
+            let mut needs_refresh = true;
             // There is now a playing song.
             // Check if there was one and whether it is different from the one playing now.
             // let new_id: u32 = new_queue_place.id.0;
@@ -921,30 +966,13 @@ impl Player {
             if let Some(old_song) = maybe_old_song {
                 if old_song.get_queue_id() != new_song.get_queue_id() {
                     old_song.set_is_playing(false);
-                    // There was nothing playing previously. Update the following now:
-                    self.notify("title");
-                    self.notify("artist");
-                    self.notify("duration");
-                    self.notify("quality-grade");
-                    self.notify("format-desc");
-                    // Avoid needlessly changing album art as background blur updates are expensive.
-                    if new_song.get_album_title() != old_song.get_album_title() {
-                        self.notify("album");
-                        self.notify("album-art");
-                    }
-                    // Update MPRIS side
-                    if self.imp().mpris_enabled.get() {
-                        mpris_changes.push(Property::Metadata(
-                            new_song.get_mpris_metadata(self.imp().cache.get().unwrap().clone()),
-                        ));
-                    }
                 }
                 else {
                     // Same old song
-                    needs_new_lyrics = false;
+                    needs_refresh = false;
                 }
-            } else {
-                // There was nothing playing previously. Update the following now:
+            }
+            if needs_refresh {
                 self.notify("title");
                 self.notify("artist");
                 self.notify("duration");
@@ -952,8 +980,8 @@ impl Player {
                 self.notify("format-desc");
                 self.notify("album");
                 self.notify("album-art");
-            }
-            if needs_new_lyrics {
+                // Queue cover fetch task
+                self.update_cover(new_song.get_info());
                 // Get new lyrics
                 // First remove all current lines
                 self.imp().lyric_lines.splice(0, self.imp().lyric_lines.n_items(), &[]);
@@ -965,6 +993,12 @@ impl Player {
                 else {
                     // Schedule downloading
                     self.imp().cache.get().unwrap().ensure_cached_lyrics(new_song.get_info());
+                }
+                // Update MPRIS side
+                if self.imp().mpris_enabled.get() {
+                    mpris_changes.push(Property::Metadata(
+                        new_song.get_mpris_metadata(),
+                    ));
                 }
             }
         } else {
@@ -1054,8 +1088,7 @@ impl Player {
     /// new queue length. The update_status() function will instead truncate the queue to the new
     /// length for us once called.
     /// If an MPRIS server is running, it will also emit property change signals.
-    pub fn update_queue(&self, songs: &[Song], replace: bool) { 
-        println!("RUNNING UPDATE_QUEUE");
+    pub fn update_queue(&self, songs: &[Song], replace: bool) {
         let queue = &self.imp().queue;
         if replace {
             if songs.len() == 0 {
@@ -1104,17 +1137,6 @@ impl Player {
                     queue.extend_from_slice(&songs[new_pos..]);
                 }
             }
-        }
-
-        if let Some(cache) = self.imp().cache.get() {
-            let infos: Vec<&AlbumInfo> = songs
-                .into_iter()
-                .map(|song| song.get_album())
-                .filter(|ao| ao.is_some())
-                .map(|info| info.unwrap())
-                .collect();
-            // Might queue downloads, depending on user settings
-            cache.ensure_cached_album_arts(&infos);
         }
     }
 
@@ -1191,33 +1213,26 @@ impl Player {
         None
     }
 
-    pub fn current_song_album_art(&self, thumbnail: bool) -> Option<Texture> {
-        if let Some(song) = self.imp().current_song.borrow().as_ref() {
-            if let Some(cache) = self.imp().cache.get() {
-                if let Some(album) = song.get_album() {
-                    // Should have been scheduled by queue updates.
-                    return cache.load_cached_album_art(album, thumbnail, false);
-                }
+    pub fn current_song_cover(&self, thumbnail: bool) -> Option<Texture> {
+        if let Some(cache) = self.imp().cache.get() {
+            if let Some(song) = self.imp().current_song.borrow().as_ref() {
+                // Do not schedule again (already done once in update_status)
+                return cache.load_cached_embedded_cover(song.get_info(), thumbnail, false, true).map(|pair| pair.0);
             }
             return None;
         }
         None
     }
 
-    pub fn current_song_album_art_path(&self, thumbnail: bool) -> Option<PathBuf> {
-        if let (Some(song), Some(cache)) = (
-            self.imp().current_song.borrow().as_ref(),
-            self.imp().cache.get(),
-        ) {
-            if let Some(album) = song.get_album() {
-                // Always read from disk
-                Some(
-                    cache.get_path_for(&crate::meta_providers::MetadataType::AlbumArt(
-                        &album.uri,
-                        thumbnail,
-                    )),
-                )
-            } else {
+    pub fn current_song_cover_path(&self, thumbnail: bool) -> Option<PathBuf> {
+        if let Some(song) = self.imp().current_song.borrow().as_ref() {
+            let mut path = get_image_cache_path();
+            if let Some(filename) = sqlite::find_cover_by_uri(&song.get_uri(), thumbnail).unwrap() {
+                // Will fall back to folder level cover if there is no embedded art
+                path.push(filename);
+                Some(path)
+            }
+            else {
                 None
             }
         } else {
@@ -1585,7 +1600,7 @@ impl LocalPlayerInterface for Player {
 
     async fn metadata(&self) -> fdo::Result<MprisMetadata> {
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
-            Ok(song.get_mpris_metadata(self.imp().cache.get().unwrap().clone()))
+            Ok(song.get_mpris_metadata())
         } else {
             Ok(MprisMetadata::builder().trackid(TrackId::NO_TRACK).build())
         }

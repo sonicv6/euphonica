@@ -7,12 +7,11 @@ use mpris_server::{zbus::zvariant::ObjectPath, Time};
 use std::{
     cell::{Cell, OnceCell},
     ffi::OsStr,
-    path::Path,
-    rc::Rc,
+    path::Path
 };
 use time::{Date, Month};
 
-use crate::{cache::Cache, meta_providers::MetadataType, utils::strip_filename_linux};
+use crate::cache::{get_image_cache_path, sqlite};
 
 use super::{artists_to_string, parse_mb_artist_tag, AlbumInfo, ArtistInfo};
 
@@ -348,7 +347,7 @@ impl Song {
         self.get_info().mbid.as_deref()
     }
 
-    pub fn get_mpris_metadata(&self, cache: Rc<Cache>) -> mpris_server::Metadata {
+    pub fn get_mpris_metadata(&self) -> mpris_server::Metadata {
         let mut meta = mpris_server::Metadata::builder()
             .title(self.get_name())
             .trackid(ObjectPath::from_string_unchecked(format!(
@@ -380,15 +379,16 @@ impl Song {
         }
 
         // Album art, if available
-        let thumbnail_path = cache.get_path_for(&MetadataType::AlbumArt(
-            strip_filename_linux(self.get_uri()),
-            true,
-        ));
-        if thumbnail_path.exists() {
-            let path_string =
-                "file://".to_owned() + &thumbnail_path.into_os_string().into_string().unwrap();
-            meta.set_art_url(Some(path_string));
+        if let Some(thumbnail_name) = sqlite::find_cover_by_uri(self.get_uri(), true).expect("Sqlite DB error") {
+            let mut thumbnail_path = get_image_cache_path();
+            thumbnail_path.push(thumbnail_name);
+            if thumbnail_path.exists() {
+                let path_string =
+                    "file://".to_owned() + &thumbnail_path.into_os_string().into_string().unwrap();
+                meta.set_art_url(Some(path_string));
+            }
         }
+
         // TODO: disc & track num
         meta
     }
@@ -456,7 +456,7 @@ impl From<mpd::song::Song> for SongInfo {
             }
         }
         let mut artist_mbids: Vec<String> = Vec::new();
-        let mut album_artist_str: Option<String> = None;
+        let mut album_artist_strs: Vec<String> = Vec::new();
         let mut album_artist_mbids: Vec<String> = Vec::new();
         let mut album_mbid: Option<String> = None;
         for (tag, val) in song.tags.into_iter() {
@@ -464,7 +464,7 @@ impl From<mpd::song::Song> for SongInfo {
                 "album" => {
                     if res.album.is_none() {
                         let _ = res.album.replace(AlbumInfo::new(
-                            strip_filename_linux(&res.uri),
+                            &res.uri,
                             &val,
                             None,
                             Vec::with_capacity(0),
@@ -475,11 +475,7 @@ impl From<mpd::song::Song> for SongInfo {
                     }
                 }
                 "albumartist" => {
-                    if album_artist_str.is_none() {
-                        let _ = album_artist_str.replace(val);
-                    } else {
-                        panic!("Multiple AlbumArtist tags found. Only one per song is supported (use MusicBrainz syntax to specify multiple artists).");
-                    }
+                    album_artist_strs.push(val);
                 }
                 // "date" => res.imp().release_date.replace(Some(val.clone())),
                 "format" => {
@@ -549,12 +545,12 @@ impl From<mpd::song::Song> for SongInfo {
             album.mbid = album_mbid;
             album.release_date = res.release_date.clone();
             // Assume the albumartist IDs are given in the same order as the albumartist tags
-            if let Some(s) = album_artist_str.as_mut() {
-                album.set_artists_from_string(s);
-                for (idx, id) in album_artist_mbids.drain(..).enumerate() {
-                    if idx < album.artists.len() {
-                        let _ = album.artists[idx].mbid.replace(id);
-                    }
+            for album_artist_str in album_artist_strs.iter() {
+                album.add_artists_from_string(album_artist_str);
+            }
+            for (idx, id) in album_artist_mbids.drain(..).enumerate() {
+                if idx < album.artists.len() {
+                    let _ = album.artists[idx].mbid.replace(id);
                 }
             }
         }

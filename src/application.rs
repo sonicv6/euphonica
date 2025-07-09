@@ -141,7 +141,7 @@ mod imp {
                 // click on the desktop icon again, spawning another instance which should
                 // only live briefly to pass args to the primary one).
                 // Create cache controller
-                let cache = Cache::new(&self.cache_path);
+                let cache = Cache::new();
                 let meta_sender = cache.get_sender();
 
                 // Create client instance (not connected yet)
@@ -337,9 +337,9 @@ impl EuphonicaApplication {
             .application_icon("io.github.htkhiem.Euphonica")
             .developer_name("htkhiem2000")
             .version(VERSION)
-            .developers(vec!["htkhiem2000"])
+            .developers(vec!["htkhiem2000", "sonicv6"])
             .license_type(gtk::License::Gpl30)
-            .copyright("© 2024 htkhiem2000")
+            .copyright("© 2025 htkhiem2000")
             .build();
 
         about.add_credit_section(

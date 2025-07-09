@@ -1,6 +1,6 @@
 extern crate bson;
 use gtk::prelude::*;
-use std::{path::PathBuf, thread, time::Duration};
+use std::{thread, time::Duration};
 
 use crate::{common::{AlbumInfo, ArtistInfo, SongInfo}, utils::settings_manager};
 
@@ -16,36 +16,26 @@ pub fn sleep_after_request() {
 /// Enum for communication with provider threads from the cache controller living on the main thread.
 /// Can be used for both request and response.
 pub enum ProviderMessage {
-    ClearAlbumArt(String), // Only need folder URI
-    AlbumArt(AlbumInfo, PathBuf, PathBuf),
-    AlbumArtAvailable(String), // Only return folder URI
-    /// Negative response (currently only used by MpdWrapper)
-    AlbumArtNotAvailable(AlbumInfo),
-    /// Both request and positive response
+    ClearFolderCover(String),
+    // EmbeddedCover(SongInfo),
+    FolderCover(AlbumInfo, bool), // Pass through the fallback parameter
+    CoverAvailable(String), // URI can be track or folder
+    /// Negative responses (currently only used by MpdWrapper)
+    CoverNotAvailable(String), // URI can be track or folder
+    FallbackToFolderCover(AlbumInfo),
+    FallbackToEmbeddedCover(AlbumInfo),
+    FetchFolderCoverExternally(AlbumInfo, bool), // Pass through the fallback parameter
     AlbumMeta(AlbumInfo),
-    AlbumMetaAvailable(String), // Only return folder URI
+    AlbumMetaAvailable(String), // Only return URI
     ClearArtistAvatar(String), // Only need name
     /// Both request and positive response
-    ArtistAvatar(ArtistInfo, PathBuf, PathBuf),
-    ArtistAvatarAvailable(String), // Only return name
+    ArtistAvatar(ArtistInfo), // With cache basepath
+    ArtistAvatarAvailable(String), // Name
     /// Both request and positive response. Includes downloading artist avatar.
-    ArtistMeta(ArtistInfo, PathBuf, PathBuf),
+    ArtistMeta(ArtistInfo), // With cache basepath (for passthrough to artist avatar)
     ArtistMetaAvailable(String), // Only return name
     Lyrics(SongInfo),
     LyricsAvailable(String) // Only return full URI
-}
-
-pub enum MetadataType<'a> {
-    // folder-level URI, true for thumbnail
-    AlbumArt(&'a str, bool),
-    // folder-level URI
-    AlbumMeta(&'a str),
-    // Tag, true for thumbnail
-    ArtistAvatar(&'a str, bool),
-    // Tag
-    ArtistMeta(&'a str),
-    // Song URI
-    Lyrics(&'a str)
 }
 
 /// Common provider-agnostic utilities.

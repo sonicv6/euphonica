@@ -23,7 +23,6 @@ use std::sync::Arc;
 use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
-    path::PathBuf,
     rc::Rc
 };
 use uuid::Uuid;
@@ -32,6 +31,7 @@ use crate::common::Stickers;
 use crate::{
     common::{Album, AlbumInfo, Artist, ArtistInfo, INode, Song, SongInfo},
     meta_providers::ProviderMessage,
+    cache::get_new_image_paths,
     player::PlaybackFlow,
     utils,
 };
@@ -48,7 +48,7 @@ enum AsyncClientMessage {
     Connect, // Host and port are always read from gsettings
     Busy(bool), // A true will be sent when the work queue starts having tasks, and a false when it is empty again.
     Idle(Vec<Subsystem>), // Will only be sent from the child thread
-    AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model.
+    AlbumBasicInfoDownloaded(AlbumInfo), // Return new album to be added to the list model (as SongInfo of a random song in it).
     AlbumSongInfoDownloaded(String, Vec<SongInfo>), // Return songs in the album with the given tag (batched)
     ArtistBasicInfoDownloaded(ArtistInfo), // Return new artist to be added to the list model.
     ArtistSongInfoDownloaded(String, Vec<SongInfo>), // Return songs of an artist (or had their participation)
@@ -59,11 +59,14 @@ enum AsyncClientMessage {
 }
 
 // Work requests for sending to the child thread.
-// Completed results will be reported back via MpdMessage.
+// Completed results will be reported back via AsyncClientMessage.
 #[derive(Debug)]
 pub enum BackgroundTask {
     Update,
-    DownloadAlbumArt(AlbumInfo, PathBuf, PathBuf), // folder-level URI
+    DownloadFolderCover(AlbumInfo, bool), // album info, cache basepath, optionally allow fallback to embedded track art
+    DownloadFolderCoverForSong(SongInfo), // album info, cache basepath, does not allow fallback
+    DownloadEmbeddedCover(SongInfo), // song info, cache basepath, does not allow fallback
+    DownloadEmbeddedCoverForAlbum(AlbumInfo, bool), // song info, cache basepath, optionally allow fallback to folder art
     FetchFolderContents(String), // Gradually get all inodes in folder at path
     FetchAlbums,                 // Gradually get all albums
     FetchAlbumSongs(String),     // Get songs of album with given tag
@@ -126,6 +129,8 @@ pub enum BackgroundTask {
 mod background {
     use std::ops::Range;
 
+    use crate::{cache::sqlite, utils::strip_filename_linux};
+
     use super::*;
     pub fn update_mpd_database(client: &mut mpd::Client<StreamWrapper>,
         sender_to_fg: &Sender<AsyncClientMessage>,
@@ -135,68 +140,122 @@ mod background {
         }
     }
 
-    pub fn download_album_art(
+    pub fn download_embedded_cover(
         client: &mut mpd::Client<StreamWrapper>,
         sender_to_cache: &Sender<ProviderMessage>,
-        key: AlbumInfo,
-        path: PathBuf,
-        thumbnail_path: PathBuf,
+        key: SongInfo
     ) {
-        let uri = key.uri.to_owned();
-        if !path.exists() || !thumbnail_path.exists() {
-            // println!("Downloading album art for {:?}", &uri);
-            if let Ok(bytes) = client.albumart(&uri) {
-                // println!("Downloaded album art for {:?}", &uri);
+        // Re-check in case previous iterations have already downloaded these
+        if sqlite::find_image_by_key(&key.uri, false).expect("Sqlite DB error").is_none() {
+            if let Ok(bytes) = client.readpicture(&key.uri) {
                 if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
                     let (hires, thumb) = utils::resize_convert_image(dyn_img);
-
-                    if let (Ok(_), Ok(_)) = (hires.save(path), thumb.save(thumbnail_path)) {
+                    let (path, thumbnail_path) = get_new_image_paths();
+                    if let (Ok(_), Ok(_)) = (hires.save(&path), thumb.save(&thumbnail_path)) {
+                        let _ = sqlite::register_image_key(&key.uri, Some(path.file_name().unwrap().to_str().unwrap()), false);
+                        let _ = sqlite::register_image_key(&key.uri, Some(thumbnail_path.file_name().unwrap().to_str().unwrap()), true);
                         sender_to_cache
-                            .send_blocking(ProviderMessage::AlbumArtAvailable(uri))
-                            .expect("Cannot notify main cache of album art download result.");
+                            .send_blocking(ProviderMessage::CoverAvailable(key.uri))
+                            .expect("Cannot notify main cache of embedded cover download result.");
                     }
                 }
             } else {
-                let mut success = false;
-                // Try to find a song in the album to extract its URI for readpicture
+                sender_to_cache
+                    .send_blocking(ProviderMessage::CoverNotAvailable(key.uri))
+                    .expect("Cannot notify main cache of embedded cover download result.");
+            }
+        }
+    }
 
-                // MPD doesn't expect the final / at the end of a URI
-                let mut trimmed_uri = uri.clone();
-                trimmed_uri.pop();
-
-                // Query MPD for a song under this URI
-                let songs= client
-                    .find(
-                        Query::new().and_with_op(
-                            Term::Base,
-                            QueryOperation::Contains,
-                            trimmed_uri.clone()
-                        ),
-                        Window::from((0, 1)));
-                if let Ok(songs) = songs {
-                    if let Some(song) = songs.first() {
-                        if let Ok(bytes) = client.readpicture(&song.file) {
-                            if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
-                                let (hires, thumb) = utils::resize_convert_image(dyn_img);
-                                
-                                if let (Ok(_), Ok(_)) = (hires.save(path), thumb.save(thumbnail_path)) {
-                                    sender_to_cache
-                                        .send_blocking(ProviderMessage::AlbumArtAvailable(uri))
-                                        .expect("Cannot notify main cache of album art download result.");
-                                        success = true;
-                                }
-                            }
-                        }
+    pub fn download_embedded_cover_for_album(
+        client: &mut mpd::Client<StreamWrapper>,
+        sender_to_cache: &Sender<ProviderMessage>,
+        key: AlbumInfo,
+        fallback: bool
+    ) {
+        // Re-check in case previous iterations have already downloaded these
+        if sqlite::find_image_by_key(&key.example_uri, false).expect("Sqlite DB error").is_none() {
+            if let Ok(bytes) = client.readpicture(&key.example_uri) {
+                if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
+                    let (hires, thumb) = utils::resize_convert_image(dyn_img);
+                    let (path, thumbnail_path) = get_new_image_paths();
+                    if let (Ok(_), Ok(_)) = (hires.save(&path), thumb.save(&thumbnail_path)) {
+                        let _ = sqlite::register_image_key(&key.example_uri, Some(path.file_name().unwrap().to_str().unwrap()), false);
+                        let _ = sqlite::register_image_key(&key.example_uri, Some(thumbnail_path.file_name().unwrap().to_str().unwrap()), true);
+                        sender_to_cache
+                            .send_blocking(ProviderMessage::CoverAvailable(key.example_uri))
+                            .expect("Cannot notify main cache of embedded cover download result.");
                     }
                 }
-                if !success {
-                    sender_to_cache
-                        .send_blocking(ProviderMessage::AlbumArtNotAvailable(key))
-                        .expect("Album art not available from MPD, but cannot notify cache of this.");
+            } else if fallback {
+                sender_to_cache
+                    .send_blocking(ProviderMessage::FallbackToFolderCover(key))
+                    .expect("Cannot signal main cache to run fallback folder cover logic.");
+            } else {
+                sender_to_cache
+                    .send_blocking(ProviderMessage::CoverNotAvailable(key.example_uri))
+                    .expect("Cannot notify main cache of embedded cover download result.");
+            }
+        }
+    }
+
+    pub fn download_folder_cover(
+        client: &mut mpd::Client<StreamWrapper>,
+        sender_to_cache: &Sender<ProviderMessage>,
+        key: AlbumInfo,
+        fallback: bool
+    ) {
+        // Re-check in case previous iterations have already downloaded these
+        if sqlite::find_image_by_key(&key.folder_uri, false).expect("Sqlite DB error").is_none() {
+            if let Ok(bytes) = client.albumart(&key.folder_uri) {
+                if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
+                    let (hires, thumb) = utils::resize_convert_image(dyn_img);
+                    let (path, thumbnail_path) = get_new_image_paths();
+                    if let (Ok(_), Ok(_)) = (hires.save(&path), thumb.save(&thumbnail_path)) {
+                        sqlite::register_image_key(&key.folder_uri, Some(path.file_name().unwrap().to_str().unwrap()), false);
+                        sqlite::register_image_key(&key.folder_uri, Some(thumbnail_path.file_name().unwrap().to_str().unwrap()), true);
+                        sender_to_cache
+                            .send_blocking(ProviderMessage::CoverAvailable(key.folder_uri))
+                            .expect("Cannot notify main cache of folder cover download result.");
+                    }
+                }
+            } else {
+                // Unlike with embedded covers, we need to return control to the cache thread
+                // to run metadata providers.
+                // For this reason the fallback handling is not done here.
+                sender_to_cache
+                    .send_blocking(ProviderMessage::FetchFolderCoverExternally(key, fallback))
+                    .expect("Cannot signal main cache to fetch cover externally.");
+            }
+        }
+    }
+
+    pub fn download_folder_cover_for_song(
+        client: &mut mpd::Client<StreamWrapper>,
+        sender_to_cache: &Sender<ProviderMessage>,
+        key: SongInfo
+    ) {
+        // Re-check in case previous iterations have already downloaded these
+        let uri = strip_filename_linux(&key.uri).to_owned();
+        if sqlite::find_image_by_key(&uri, false).expect("Sqlite DB error").is_none() {
+            if let Ok(bytes) = client.albumart(&uri) {
+                if let Some(dyn_img) = utils::read_image_from_bytes(bytes) {
+                    let (hires, thumb) = utils::resize_convert_image(dyn_img);
+                    let (path, thumbnail_path) = get_new_image_paths();
+                    if let (Ok(_), Ok(_)) = (hires.save(&path), thumb.save(&thumbnail_path)) {
+                        let _ = sqlite::register_image_key(&uri, Some(path.file_name().unwrap().to_str().unwrap()), false);
+                        let _ = sqlite::register_image_key(&uri, Some(thumbnail_path.file_name().unwrap().to_str().unwrap()), true);
+                        sender_to_cache
+                            .send_blocking(ProviderMessage::CoverAvailable(uri))
+                            .expect("Cannot notify main cache of folder cover download result.");
+                    }
                 }
             }
-        } else {
-            // println!("Skipped downloading album art for {:?}", &uri);
+            else {
+                sender_to_cache
+                    .send_blocking(ProviderMessage::CoverNotAvailable(uri))
+                    .expect("Cannot notify main cache of embedded cover download result.");
+            }
         }
     }
 
@@ -546,13 +605,34 @@ impl MpdWrapper {
                         BackgroundTask::Update => {
                             background::update_mpd_database(&mut client, &sender_to_fg)
                         }
-                        BackgroundTask::DownloadAlbumArt(key, path, thumbnail_path) => {
-                            background::download_album_art(
+                        BackgroundTask::DownloadFolderCover(key, fallback) => {
+                            background::download_folder_cover(
                                 &mut client,
                                 &meta_sender,
                                 key,
-                                path,
-                                thumbnail_path,
+                                fallback
+                            )
+                        }
+                        BackgroundTask::DownloadFolderCoverForSong(key) => {
+                            background::download_folder_cover_for_song(
+                                &mut client,
+                                &meta_sender,
+                                key
+                           )
+                        }
+                        BackgroundTask::DownloadEmbeddedCover(key) => {
+                            background::download_embedded_cover(
+                                &mut client,
+                                &meta_sender,
+                                key
+                            )
+                        }
+                        BackgroundTask::DownloadEmbeddedCoverForAlbum(key, fallback) => {
+                            background::download_embedded_cover_for_album(
+                                &mut client,
+                                &meta_sender,
+                                key,
+                                fallback
                             )
                         }
                         BackgroundTask::FetchAlbums => {
@@ -680,11 +760,11 @@ impl MpdWrapper {
             AsyncClientMessage::ArtistSongInfoDownloaded(name, songs) => {
                 self.on_songs_downloaded("artist-songs-downloaded", name, songs)
             }
-            AsyncClientMessage::ArtistAlbumBasicInfoDownloaded(artist_name, album_info) => self
+            AsyncClientMessage::ArtistAlbumBasicInfoDownloaded(artist_name, song_info) => self
                 .on_album_downloaded(
                     "artist-album-basic-info-downloaded",
                     Some(&artist_name),
-                    album_info,
+                    song_info,
                 ),
             AsyncClientMessage::FolderContentsDownloaded(uri, contents) => {
                 self.on_folder_contents_downloaded(uri, contents)
@@ -802,11 +882,10 @@ impl MpdWrapper {
                     self.state.set_stickers_support_level(StickersSupportLevel::All);
                 }
                 // If there is a password configured, use it to authenticate.
-                let password_access_failed: bool;
+                let mut password_access_failed = false;
                 let client_password: Option<String>;
                 match Entry::new("euphonica", "mpd-password") {
                     Ok(entry) => {
-                        password_access_failed = false;
                         match entry.get_password() {
                             Ok(password) => {
                                 let password_res = client.login(&password);
@@ -824,18 +903,15 @@ impl MpdWrapper {
                                 }
                             }
                             Err(e) => {
-                                client_password = None;
+                                println!("{:?}", &e);
                                 match e {
                                     KeyringError::NoEntry => {}
                                     _ => {
                                         println!("{:?}", e);
-                                        let _ = client.close();
-                                        self.state.set_connection_state(
-                                            ConnectionState::CredentialStoreError,
-                                        );
-                                        return;
+                                        password_access_failed = true;
                                     }
                                 }
+                                client_password = None;
                             }
                         }
                     }
@@ -856,11 +932,13 @@ impl MpdWrapper {
                 // Doubles as a litmus test to see if we are authenticated.
                 if let Err(MpdError::Server(se)) = client.subscribe(self.bg_channel.clone()) {
                     if se.code == MpdErrorCode::Permission {
-                        self.state.set_connection_state(if password_access_failed {
-                            ConnectionState::CredentialStoreError
-                        } else {
-                            ConnectionState::Unauthenticated
-                        });
+                        self.state.set_connection_state(
+                            if password_access_failed {
+                                ConnectionState::CredentialStoreError
+                            } else {
+                                ConnectionState::Unauthenticated
+                            }
+                        );
                     }
                 } else {
                     self.main_client.replace(Some(client));

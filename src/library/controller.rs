@@ -436,12 +436,12 @@ impl Library {
             .queue_background(BackgroundTask::FetchArtists(use_albumartists), false);
     }
 
-    pub fn set_album_art(&self, folder_uri: &str, path: &str) {
-        self.cache().set_album_art(folder_uri, path);
+    pub fn set_cover(&self, folder_uri: &str, path: &str) {
+        self.cache().set_cover(folder_uri, path);
     }
 
-    pub fn clear_album_art(&self, folder_uri: &str) {
-        self.cache().clear_album_art(folder_uri);
+    pub fn clear_cover(&self, folder_uri: &str) {
+        self.cache().clear_cover(folder_uri);
     }
 
     pub fn set_artist_avatar(&self, tag: &str, path: &str) {
