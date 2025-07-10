@@ -179,8 +179,6 @@ password back for reconnection.
 Optionally, your MPD instance should be configured with a playlist folder. If not configured, MPD will be unable to create and edit playlists.
 Euphonica's playlist management features won't be available in this case.
 
-It currently only supports connecting to MPD via a TCP socket. Local socket support might be added later when the planned features require it.
-
 ## Using Euphonica with your music library
 
 Euphonica tries to make minimal and sensible assumptions about your library's folder structure. 
