@@ -471,7 +471,7 @@ impl From<mpd::song::Song> for SongInfo {
                             res.quality_grade.clone(),
                         ));
                     } else {
-                        panic!("Multiple Album tags found. Only one per song is supported.");
+                        println!("[WARNING] Multiple Album tags found. Only keeping the first one.");
                     }
                 }
                 "albumartist" => {
@@ -517,7 +517,7 @@ impl From<mpd::song::Song> for SongInfo {
                     if album_mbid.is_none() {
                         let _ = album_mbid.replace(val);
                     } else {
-                        panic!("Multiple musicbrainz_albumid tags found. Only one per song is supported.");
+                        println!("[WARNING] Multiple musicbrainz_albumid tags found. Only keeping the first one.");
                     }
                 }
                 "musicbrainz_artistid" => {
