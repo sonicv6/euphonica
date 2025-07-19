@@ -1447,18 +1447,6 @@ impl MpdWrapper {
         return None;
     }
 
-    pub fn get_current_song(&self) -> Option<Song> {
-        if let Some(client) = self.main_client.borrow_mut().as_mut() {
-            if let Ok(song) = client.currentsong() {
-                if let Some(song) = song {
-                    return Some(Song::from(song));
-                }
-            }
-            return None;
-        }
-        return None;
-    }
-
     fn on_songs_downloaded(&self, signal_name: &str, tag: String, songs: Vec<SongInfo>) {
         if !songs.is_empty() {
             // Append to listener lists
