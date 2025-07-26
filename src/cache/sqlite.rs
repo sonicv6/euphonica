@@ -97,6 +97,18 @@ create table if not exists `albums_history` (
 );
 create index if not exists `albums_history_last` on `albums_history` (`title`, `timestamp` desc);
 
+create table if not exists `images` (
+    `key` VARCHAR not null,
+    `is_thumbnail` INTEGER not null,
+    `filename` VARCHAR not null,
+    `last_modified` DATETIME not null,
+    primary key (`key`, `is_thumbnail`)
+);
+create unique index if not exists `image_key` on `images` (
+    `key`,
+    `is_thumbnail`
+);
+
 pragma user_version = 1;
 end;").expect("Unable to migrate DB version 0 to 1");
                     }
