@@ -95,7 +95,7 @@ create table if not exists `albums_history` (
     `timestamp` DATETIME not null,
     primary key(`id`)
 );
-create index if not exists `albums_history_last` on `artists_history` (`title`, `timestamp` desc);
+create index if not exists `albums_history_last` on `albums_history` (`title`, `timestamp` desc);
 
 pragma user_version = 1;
 end;").expect("Unable to migrate DB version 0 to 1");
@@ -162,7 +162,7 @@ create table if not exists `albums_history` (
     `timestamp` DATETIME not null,
     primary key(`id`)
 );
-create index if not exists `albums_history_last` on `artists_history` (`title`, `timestamp` desc);
+create index if not exists `albums_history_last` on `albums_history` (`title`, `timestamp` desc);
 
 create table if not exists `images` (
     `key` VARCHAR not null,
