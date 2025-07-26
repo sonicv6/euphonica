@@ -1,5 +1,5 @@
 use adw::prelude::*;
-use gtk::{gio, glib, graphene, subclass::prelude::*};
+use gtk::{glib, graphene, subclass::prelude::*};
 use std::cell::Cell;
 
 
@@ -257,7 +257,7 @@ mod imp {
 glib::wrapper! {
     pub struct Marquee(ObjectSubclass<imp::Marquee>)
         @extends gtk::Widget,
-        @implements gio::ActionGroup, gio::ActionMap;
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
 /// Label but with a marquee effect when allocated less than its natural width.

@@ -10,7 +10,8 @@ use time::OffsetDateTime;
 
 use crate::{
     common::{AlbumInfo, ArtistInfo, SongInfo},
-    meta_providers::models::{AlbumMeta, ArtistMeta, Lyrics, LyricsParseError}, utils::strip_filename_linux,
+    meta_providers::models::{AlbumMeta, ArtistMeta, Lyrics, LyricsParseError},
+    utils::strip_filename_linux,
 };
 
 use super::controller::get_doc_cache_path;
@@ -18,27 +19,104 @@ use super::controller::get_doc_cache_path;
 static SQLITE_POOL: Lazy<r2d2::Pool<SqliteConnectionManager>> = Lazy::new(|| {
     let manager = SqliteConnectionManager::file(get_doc_cache_path());
     let pool = r2d2::Pool::new(manager).unwrap();
-    // let conn = Connection::open(path)?;
+    let conn = pool.get().unwrap();
     // Init schema & indices
-    pool.get()
-        .unwrap()
-        .execute_batch(
-            "begin;
+    // Migrations
+    loop {
+        let user_version = conn
+            .prepare("pragma user_version")
+            .unwrap()
+            .query_row([], |r| Ok(r.get::<usize, i32>(0)))
+            .unwrap().unwrap();
+
+        println!("Local metadata DB version: {user_version}");
+        match user_version {
+            1 => {break;},
+            0 => {
+                // Check if we're starting from nothing
+                match conn.query_row(
+                    "select name from sqlite_master where type='table' and name='albums'",
+                    [], |row| row.get::<usize, String>(0)
+                ) {
+                    Ok(_) => {
+                        println!("Upgrading local metadata DB to version 1...");
+                        // Migrate album table schema: album table now accepts non-unique folder URIs
+                        conn.execute_batch("begin;
+-- SQLite doesn't allow dropping a constraint so, so we'll have to recreate the table
+alter table albums rename to old_albums;
+-- Note: the 'folder_uri' no longer has the primary key or unique constraint here.
 create table if not exists `albums` (
-    `folder_uri` VARCHAR not null unique,
+    `folder_uri` varchar not null,
+    `mbid` varchar null unique,
+    `title` varchar not null,
+    `artist` varchar null,
+    `last_modified` datetime not null,
+    `data` blob not null
+);
+
+-- Copy
+insert into albums (folder_uri, mbid, title, artist, last_modified, data)
+select folder_uri, mbid, title, artist, last_modified, data
+from old_albums;
+
+-- Drop old table and both indices
+drop table old_albums;
+drop index if exists album_mbid;
+drop index if exists album_name;
+
+-- Reindex
+create unique index if not exists `album_mbid` on `albums` (
+    `mbid`
+);
+create unique index if not exists `album_name` on `albums` (
+    `title`, `artist`
+);
+
+-- Create new tables
+create table if not exists `songs_history` (
+    `id` INTEGER not null,
+    `uri` VARCHAR not null,
+    `timestamp` DATETIME not null,
+    primary key(`id`)
+);
+create index if not exists `song_history_last` on `songs_history` (`uri`, `timestamp` desc);
+
+create table if not exists `artists_history` (
+    `id` INTEGER not null,
+    `name` VARCHAR not null,
+    `timestamp` DATETIME not null,
+    primary key(`id`)
+);
+create index if not exists `artists_history_last` on `artists_history` (`name`, `timestamp` desc);
+
+create table if not exists `albums_history` (
+    `id` INTEGER not null,
+    `title` VARCHAR not null,
+    `timestamp` DATETIME not null,
+    primary key(`id`)
+);
+create index if not exists `albums_history_last` on `artists_history` (`title`, `timestamp` desc);
+
+pragma user_version = 1;
+end;").expect("Unable to migrate DB version 0 to 1");
+                    }
+                    Err(SqliteError::QueryReturnedNoRows) => {
+                        // Starting from scratch
+                        println!("Initialising local metadata DB...");
+                        conn.execute_batch("begin;
+create table if not exists `albums` (
+    `folder_uri` VARCHAR not null,
     `mbid` VARCHAR null unique,
     `title` VARCHAR not null,
     `artist` VARCHAR null,
     `last_modified` DATETIME not null,
-    `data` BLOB not null,
-    primary key (`folder_uri`)
+    `data` BLOB not null
 );
 create unique index if not exists `album_mbid` on `albums` (
     `mbid`
 );
 create unique index if not exists `album_name` on `albums` (
-    `folder_uri`,
-    `title`
+    `title`, `artist`
 );
 
 create table if not exists `artists` (
@@ -48,6 +126,10 @@ create table if not exists `artists` (
     `data` BLOB not null,
     primary key (`name`)
 );
+create unique index if not exists `artist_mbid` on `artists` (
+    `mbid`
+);
+create unique index if not exists `artist_name` on `artists` (`name`);
 
 create table if not exists `songs` (
     `uri` VARCHAR not null unique,
@@ -56,13 +138,31 @@ create table if not exists `songs` (
     `last_modified` DATETIME not null,
     primary key(`uri`)
 );
-
-create unique index if not exists `artist_mbid` on `artists` (
-    `mbid`
-);
-create unique index if not exists `artist_name` on `artists` (`name`);
 create unique index if not exists `song_uri` on `songs` (`uri`);
-end;
+
+create table if not exists `songs_history` (
+    `id` INTEGER not null,
+    `uri` VARCHAR not null,
+    `timestamp` DATETIME not null,
+    primary key(`id`)
+);
+create index if not exists `song_history_last` on `songs_history` (`uri`, `timestamp` desc);
+
+create table if not exists `artists_history` (
+    `id` INTEGER not null,
+    `name` VARCHAR not null,
+    `timestamp` DATETIME not null,
+    primary key(`id`)
+);
+create index if not exists `artists_history_last` on `artists_history` (`name`, `timestamp` desc);
+
+create table if not exists `albums_history` (
+    `id` INTEGER not null,
+    `title` VARCHAR not null,
+    `timestamp` DATETIME not null,
+    primary key(`id`)
+);
+create index if not exists `albums_history_last` on `artists_history` (`title`, `timestamp` desc);
 
 create table if not exists `images` (
     `key` VARCHAR not null,
@@ -75,9 +175,18 @@ create unique index if not exists `image_key` on `images` (
     `key`,
     `is_thumbnail`
 );
-",
-        )
-        .expect("Unable to init metadata SQLite DB");
+
+pragma user_version = 1;
+end;
+").expect("Unable to init metadata SQLite DB");
+                    }
+                    e => {panic!("SQLite database error: {e:?}");}
+                }
+            }
+            _ => {}
+        }
+    }
+
     pool
 });
 
@@ -385,7 +494,9 @@ pub fn find_image_by_key(key: &str, is_thumbnail: bool) -> Result<Option<String>
     query = conn
         .prepare("select filename from images where key = ?1 and is_thumbnail = ?2")
         .unwrap()
-        .query_row(params![key, is_thumbnail as i32], |r| Ok(r.get::<usize, String>(0)?));
+        .query_row(params![key, is_thumbnail as i32], |r| {
+            Ok(r.get::<usize, String>(0)?)
+        });
     match query {
         Ok(filename) => {
             return Ok(Some(filename));
@@ -403,30 +514,39 @@ pub fn find_image_by_key(key: &str, is_thumbnail: bool) -> Result<Option<String>
 pub fn find_cover_by_uri(track_uri: &str, is_thumbnail: bool) -> Result<Option<String>, Error> {
     if let Some(filename) = find_image_by_key(track_uri, is_thumbnail)? {
         Ok(Some(filename))
-    }
-    else {
+    } else {
         let folder_uri = strip_filename_linux(track_uri);
         if let Some(filename) = find_image_by_key(folder_uri, is_thumbnail)? {
             Ok(Some(filename))
-        }
-        else {
+        } else {
             Ok(None)
         }
     }
 }
 
-pub fn register_image_key(key: &str, filename: Option<&str>, is_thumbnail: bool) -> Result<(), Error> {
+pub fn register_image_key(
+    key: &str,
+    filename: Option<&str>,
+    is_thumbnail: bool,
+) -> Result<(), Error> {
     let mut conn = SQLITE_POOL.get().unwrap();
     let tx = conn.transaction().map_err(|e| Error::DbError(e))?;
-    tx.execute("delete from images where key = ?1 and is_thumbnail = ?2", params![key, is_thumbnail as i32])
-        .map_err(|e| Error::DbError(e))?;
+    tx.execute(
+        "delete from images where key = ?1 and is_thumbnail = ?2",
+        params![key, is_thumbnail as i32],
+    )
+    .map_err(|e| Error::DbError(e))?;
     tx.execute(
         "insert into images (key, is_thumbnail, filename, last_modified) values (?1,?2,?3,?4)",
         params![
             key,
             is_thumbnail as i32,
             // Callers should interpret empty names as "tried but didn't find anything, don't try again"
-            if let Some(filename) = filename {filename} else {""},
+            if let Some(filename) = filename {
+                filename
+            } else {
+                ""
+            },
             OffsetDateTime::now_utc()
         ],
     )
@@ -438,7 +558,105 @@ pub fn register_image_key(key: &str, filename: Option<&str>, is_thumbnail: bool)
 pub fn unregister_image_key(key: &str, is_thumbnail: bool) -> Result<(), Error> {
     let mut conn = SQLITE_POOL.get().unwrap();
     let tx = conn.transaction().map_err(|e| Error::DbError(e))?;
-    tx.execute("delete from images where key = ?1 and is_thumbnail = ?2", params![key, is_thumbnail as i32])
+    tx.execute(
+        "delete from images where key = ?1 and is_thumbnail = ?2",
+        params![key, is_thumbnail as i32],
+    )
+    .map_err(|e| Error::DbError(e))?;
+    tx.commit().map_err(|e| Error::DbError(e))?;
+    Ok(())
+}
+
+pub fn add_to_history(song: &SongInfo) -> Result<(), Error> {
+    let mut conn = SQLITE_POOL.get().unwrap();
+    let tx = conn.transaction().map_err(|e| Error::DbError(e))?;
+    let ts = OffsetDateTime::now_utc();
+    tx.execute(
+        "insert into songs_history (uri, timestamp) values (?1, ?2)",
+        params![&song.uri, &ts],
+    )
+    .map_err(|e| Error::DbError(e))?;
+    if let Some(album) = song.album.as_ref() {
+        tx.execute(
+            "insert into albums_history (title, timestamp) values (?1, ?2)",
+            params![&album.title, &ts],
+        )
         .map_err(|e| Error::DbError(e))?;
+    }
+    for artist in song.artists.iter() {
+        tx.execute(
+            "insert into artists_history(name, timestamp) values (?1, ?2)",
+            params![&artist.name, &ts],
+        )
+        .map_err(|e| Error::DbError(e))?;
+    }
+    tx.commit().map_err(|e| Error::DbError(e))?;
+    Ok(())
+}
+
+/// Get URIs of up to N last listened to songs.
+pub fn get_last_n_songs(n: u32) -> Result<Vec<(String, OffsetDateTime)>, Error> {
+    let conn = SQLITE_POOL.get().unwrap();
+    let mut query = conn
+        .prepare(
+            "
+select uri, max(timestamp) as last_played
+from songs_history
+group by uri order by last_played desc limit ?1",
+        )
+        .unwrap();
+    let res = query
+        .query_map(params![n], |r| Ok((r.get::<usize, String>(0)?, r.get::<usize, OffsetDateTime>(1)?)))
+        .map_err(|e| Error::DbError(e))?
+        .map(|r| r.unwrap());
+
+    return Ok(res.collect());
+}
+
+/// Get titles of up to N last listened to albums.
+pub fn get_last_n_albums(n: u32) -> Result<Vec<String>, Error> {
+    let conn = SQLITE_POOL.get().unwrap();
+    let mut query = conn
+        .prepare(
+            "
+select title, max(timestamp) as last_played
+from albums_history
+group by title order by last_played desc limit ?1",
+        )
+        .unwrap();
+    let res = query
+        .query_map(params![n], |r| Ok(r.get::<usize, String>(0)?))
+        .map_err(|e| Error::DbError(e))?
+        .map(|r| r.unwrap());
+
+    return Ok(res.collect());
+}
+
+/// Get names of up to N last listened to artists.
+pub fn get_last_n_artists(n: u32) -> Result<Vec<String>, Error> {
+    let conn = SQLITE_POOL.get().unwrap();
+    let mut query = conn
+        .prepare(
+            "
+select name, max(timestamp) as last_played
+from artists_history
+group by name order by last_played desc limit ?1",
+        )
+        .unwrap();
+    let res = query
+        .query_map(params![n], |r| Ok(r.get::<usize, String>(0)?))
+        .map_err(|e| Error::DbError(e))?
+        .map(|r| r.unwrap());
+
+    return Ok(res.collect());
+}
+
+pub fn clear_history() -> Result<(), Error> {
+    let mut conn = SQLITE_POOL.get().unwrap();
+    let tx = conn.transaction().map_err(|e| Error::DbError(e))?;
+    tx.execute("delete from songs_history", []).map_err(|e| Error::DbError(e))?;
+    tx.execute("delete from albums_history", []).map_err(|e| Error::DbError(e))?;
+    tx.execute("delete from artists_history", []).map_err(|e| Error::DbError(e))?;
+    tx.commit().map_err(|e| Error::DbError(e))?;
     Ok(())
 }

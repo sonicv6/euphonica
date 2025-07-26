@@ -8,12 +8,12 @@ use std::{
 };
 use time::{format_description, Date};
 
-use super::{AlbumSongRow, Library};
+use super::{artist_tag::ArtistTag, AlbumSongRow, Library};
 use crate::{
     cache::{placeholders::ALBUMART_PLACEHOLDER, Cache, CacheState},
     client::ClientState,
-    common::{CoverSource, Album, AlbumInfo, Rating, Song},
-    utils::format_secs_as_duration,
+    common::{Album, AlbumInfo, Artist, CoverSource, Rating, Song},
+    utils::format_secs_as_duration, window::EuphonicaWindow,
 };
 
 mod imp {
@@ -21,6 +21,7 @@ mod imp {
 
     use ashpd::desktop::file_chooser::SelectedFiles;
     use async_channel::Sender;
+    use gio::ListStore;
 
     use crate::{common::Rating, library::add_to_playlist::AddToPlaylistButton, utils};
 
@@ -45,7 +46,7 @@ mod imp {
         #[template_child]
         pub title: TemplateChild<gtk::Label>,
         #[template_child]
-        pub artist: TemplateChild<gtk::Label>,
+        pub artists_box: TemplateChild<adw::WrapBox>,
         #[template_child]
         pub rating: TemplateChild<Rating>,
         #[template_child]
@@ -84,9 +85,11 @@ mod imp {
 
         pub song_list: gio::ListStore,
         pub sel_model: gtk::MultiSelection,
+        pub artist_tags: ListStore,
 
         pub library: OnceCell<Library>,
         pub album: RefCell<Option<Album>>,
+        pub window: OnceCell<EuphonicaWindow>,
         pub bindings: RefCell<Vec<Binding>>,
         pub cover_signal_id: RefCell<Option<SignalHandlerId>>,
         pub cache: OnceCell<Rc<Cache>>,
@@ -100,7 +103,7 @@ mod imp {
             Self {
                 cover: TemplateChild::default(),
                 title: TemplateChild::default(),
-                artist: TemplateChild::default(),
+                artists_box: TemplateChild::default(),
                 rating: TemplateChild::default(),
                 rating_readout: TemplateChild::default(),
                 release_date: TemplateChild::default(),
@@ -126,6 +129,8 @@ mod imp {
                 sel_none: TemplateChild::default(),
                 library: OnceCell::new(),
                 album: RefCell::new(None),
+                window: OnceCell::new(),
+                artist_tags: ListStore::new::<ArtistTag>(),
                 bindings: RefCell::new(Vec::new()),
                 cover_signal_id: RefCell::new(None),
                 cache: OnceCell::new(),
@@ -338,7 +343,7 @@ mod imp {
 glib::wrapper! {
     pub struct AlbumContentView(ObjectSubclass<imp::AlbumContentView>)
         @extends gtk::Widget,
-    @implements gio::ActionGroup, gio::ActionMap;
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
 impl Default for AlbumContentView {
@@ -391,12 +396,16 @@ impl AlbumContentView {
         }
     }
 
-    pub fn setup(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+    pub fn setup(&self, library: Library, client_state: ClientState, cache: Rc<Cache>, window: &EuphonicaWindow) {
         let cache_state = cache.get_cache_state();
         self.imp()
            .cache
            .set(cache)
            .expect("AlbumContentView cannot bind to cache");
+        self.imp()
+           .window
+           .set(window.clone())
+           .expect("AlbumContentView cannot bind to window");
         self.imp()
             .add_to_playlist
             .setup(library.clone(), self.imp().sel_model.clone());
@@ -412,11 +421,9 @@ impl AlbumContentView {
                         if album.get_folder_uri() == &uri {
                             // Force update since we might have been using an embedded cover
                             // temporarily
-                            this.imp().cover_source.set(CoverSource::Folder);
                             this.update_cover(album.get_info());
                         } else if this.imp().cover_source.get() != CoverSource::Folder {
                             if album.get_example_uri() == &uri {
-                                this.imp().cover_source.set(CoverSource::Embedded);
                                 this.update_cover(album.get_info());
                             }
                         }
@@ -435,14 +442,12 @@ impl AlbumContentView {
                         match this.imp().cover_source.get() {
                             CoverSource::Folder => {
                                 if album.get_folder_uri() == &uri {
-                                    this.imp().cover_source.set(CoverSource::None);
-                                    this.update_cover(album.get_info());
+                                    this.clear_cover();
                                 }
                             }
                             CoverSource::Embedded => {
                                 if album.get_example_uri() == &uri {
-                                    this.imp().cover_source.set(CoverSource::None);
-                                    this.update_cover(album.get_info());
+                                    this.clear_cover();
                                 }
                             }
                             _ => {}
@@ -667,60 +672,46 @@ impl AlbumContentView {
         ));
     }
 
+    fn clear_cover(&self) {
+        self.imp().cover_source.set(CoverSource::None);
+        self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
+    }
+
+    fn schedule_cover(&self, info: &AlbumInfo) {
+        self.imp().cover_source.set(CoverSource::Unknown);
+        self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
+        if let Some((tex, is_embedded)) = self
+            .imp()
+            .cache
+            .get()
+            .unwrap()
+            .load_cached_folder_cover(info, false, true) {
+                self.imp().cover.set_paintable(Some(&tex));
+                self.imp().cover_source.set(
+                    if is_embedded {CoverSource::Embedded} else {CoverSource::Folder}
+                );
+            }
+    }
+
     fn update_cover(&self, info: &AlbumInfo) {
-        let mut set: bool = false;
-        match self.imp().cover_source.get() {
-            // No scheduling (already called by the outside AlbumCell)
-            CoverSource::Unknown => {
-                // Schedule when in this mode
-                if let Some((tex, is_embedded)) = self
-                    .imp()
-                    .cache
-                    .get()
-                    .unwrap()
-                    .load_cached_folder_cover(info, false, true, true) {
-                        self.imp().cover.set_paintable(Some(&tex));
-                        self.imp().cover_source.set(
-                            if is_embedded {CoverSource::Embedded} else {CoverSource::Folder}
-                        );
-                        set = true;
-                    }
+        if let Some((tex, is_embedded)) = self
+            .imp()
+            .cache
+            .get()
+            .unwrap()
+            .load_cached_folder_cover(info, false, false) {
+                let curr_src = self.imp().cover_source.get();
+                // Only use embedded if we currently have nothing
+                if curr_src != CoverSource::Folder {
+                    self.imp().cover.set_paintable(Some(&tex));
+                    self.imp().cover_source.set(if is_embedded {CoverSource::Embedded} else {CoverSource::Folder});
+                }
             }
-            CoverSource::Folder => {
-                if let Some((tex, _)) = self
-                    .imp()
-                    .cache
-                    .get()
-                    .unwrap()
-                    .load_cached_folder_cover(info, false, false, false) {
-                        self.imp().cover.set_paintable(Some(&tex));
-                        set = true;
-                    }
-            }
-            CoverSource::Embedded => {
-                if let Some((tex, _)) = self
-                    .imp()
-                    .cache
-                    .get()
-                    .unwrap()
-                    .load_cached_embedded_cover_for_album(info, false, false, false) {
-                        self.imp().cover.set_paintable(Some(&tex));
-                        set = true;
-                    }
-            }
-            CoverSource::None => {
-                self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
-                set = true;
-            }
-        }
-        if !set {
-            self.imp().cover.set_paintable(Some(&*ALBUMART_PLACEHOLDER));
-        }
     }
 
     pub fn bind(&self, album: Album) {
         let title_label = self.imp().title.get();
-        let artist_label = self.imp().artist.get();
+        let artists_box = self.imp().artists_box.get();
         let rating = self.imp().rating.get();
         let release_date_label = self.imp().release_date.get();
         let mut bindings = self.imp().bindings.borrow_mut();
@@ -732,12 +723,18 @@ impl AlbumContentView {
         // Save binding
         bindings.push(title_binding);
 
-        let artist_binding = album
-            .bind_property("artist", &artist_label, "label")
-            .sync_create()
-            .build();
-        // Save binding
-        bindings.push(artist_binding);
+        // Populate artist tags
+        let artist_tags = album.get_artists().iter().map(
+            |info| ArtistTag::new(
+                Artist::from(info.clone()),
+                self.imp().cache.get().unwrap().clone(),
+                self.imp().window.get().unwrap()
+            )
+        ).collect::<Vec<ArtistTag>>();
+        self.imp().artist_tags.extend_from_slice(&artist_tags);
+        for tag in artist_tags {
+            artists_box.append(&tag);
+        }
 
         let rating_binding = album
             .bind_property("rating", &rating, "value")
@@ -777,8 +774,7 @@ impl AlbumContentView {
         bindings.push(release_date_viz_binding);
 
         let info = album.get_info();
-        self.imp().cover_source.set(CoverSource::Unknown);
-        self.update_cover(info);
+        self.schedule_cover(info);
         self.imp().album.borrow_mut().replace(album);
     }
 
@@ -786,14 +782,20 @@ impl AlbumContentView {
         for binding in self.imp().bindings.borrow_mut().drain(..) {
             binding.unbind();
         }
+
+        // Clear artists wrapbox. TODO: when adw 1.8 drops as stable please use remove_all() instead.
+        for tag in self.imp().artist_tags.iter::<gtk::Widget>() {
+            self.imp().artists_box.remove(&tag.unwrap());
+        }
+        self.imp().artist_tags.remove_all();
+
         if let Some(id) = self.imp().cover_signal_id.take() {
             if let Some(cache) = self.imp().cache.get() {
                 cache.get_cache_state().disconnect(id);
             }
         }
-        if let Some(album) = self.imp().album.take() {
-            self.imp().cover_source.set(CoverSource::None);
-            self.update_cover(album.get_info());
+        if let Some(_) = self.imp().album.take() {
+            self.clear_cover();
         }
 
         

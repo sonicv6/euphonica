@@ -1,4 +1,4 @@
-use glib::{clone, closure_local, Object, SignalHandlerId};
+use glib::{clone, closure_local, Object, SignalHandlerId, ParamSpec, ParamSpecString};
 use gtk::{glib, prelude::*, subclass::prelude::*, CompositeTemplate};
 use std::{
     cell::{OnceCell, RefCell},
@@ -19,7 +19,6 @@ mod imp {
     use crate::common::CoverSource;
 
     use super::*;
-    use glib::{ParamSpec, ParamSpecString};
     use once_cell::sync::Lazy;
 
     #[derive(Default, CompositeTemplate)]
@@ -192,11 +191,9 @@ impl ArtistSongRow {
                             if uri.as_str() == song.get_uri() {
                                 // Force update since we might have been using a folder cover
                                 // temporarily
-                                this.imp().thumbnail_source.set(CoverSource::Embedded);
                                 this.update_thumbnail(song.get_info());
                             } else if this.imp().thumbnail_source.get() != CoverSource::Embedded {
                                 if strip_filename_linux(song.get_uri()) == uri {
-                                    this.imp().thumbnail_source.set(CoverSource::Folder);
                                     this.update_thumbnail(song.get_info());
                                 }
                             }
@@ -215,14 +212,12 @@ impl ArtistSongRow {
                             match this.imp().thumbnail_source.get() {
                                 CoverSource::Folder => {
                                     if strip_filename_linux(song.get_uri()) == uri {
-                                        this.imp().thumbnail_source.set(CoverSource::None);
-                                        this.update_thumbnail(song.get_info());
+                                        this.clear_thumbnail();
                                     }
                                 }
                                 CoverSource::Embedded => {
                                     if song.get_uri() == &uri {
-                                        this.imp().thumbnail_source.set(CoverSource::None);
-                                        this.update_thumbnail(song.get_info());
+                                        this.clear_thumbnail();
                                     }
                                 }
                                 _ => {}
@@ -254,59 +249,52 @@ impl ArtistSongRow {
         ));
     }
 
+    fn clear_thumbnail(&self) {
+        self.imp().thumbnail_source.set(CoverSource::None);
+        self.imp().thumbnail.set_paintable(Some(&*ALBUMART_THUMBNAIL_PLACEHOLDER));
+    }
+
+    fn schedule_thumbnail(&self, info: &SongInfo) {
+        self.imp().thumbnail_source.set(CoverSource::Unknown);
+        self.imp().thumbnail.set_paintable(Some(&*ALBUMART_THUMBNAIL_PLACEHOLDER));
+        if let Some((tex, is_embedded)) = self
+            .imp()
+            .cache
+            .get()
+            .unwrap()
+            .load_cached_embedded_cover(info, true, true) {
+                self.imp().thumbnail.set_paintable(Some(&tex));
+                self.imp().thumbnail_source.set(
+                    if is_embedded {CoverSource::Embedded} else {CoverSource::Folder}
+                );
+            }
+    }
+
     fn update_thumbnail(&self, info: &SongInfo) {
-        match self.imp().thumbnail_source.get() {
-            CoverSource::Unknown => {
-                // Schedule when in this mode
-                if let Some((tex, is_embedded)) = self
-                    .imp()
-                    .cache
-                    .get()
-                    .unwrap()
-                    .load_cached_embedded_cover(info, true, true, true) {
-                        self.imp().thumbnail.set_paintable(Some(&tex));
-                        self.imp().thumbnail_source.set(
-                            if is_embedded {CoverSource::Embedded} else {CoverSource::Folder}
-                        );
-                    }
+        if let Some((tex, is_embedded)) = self
+            .imp()
+            .cache
+            .get()
+            .unwrap()
+            .load_cached_embedded_cover(info, true, false) {
+                let curr_src = self.imp().thumbnail_source.get();
+                // Only use embedded if we currently have nothing
+                if curr_src != CoverSource::Embedded {
+                    self.imp().thumbnail.set_paintable(Some(&tex));
+                    self.imp().thumbnail_source.set(if is_embedded {CoverSource::Embedded} else {CoverSource::Folder});
+                }
             }
-            CoverSource::Folder => {
-                if let Some((tex, _)) = self
-                    .imp()
-                    .cache
-                    .get()
-                    .unwrap()
-                    .load_cached_folder_cover_for_song(info, true, false, false) {
-                        self.imp().thumbnail.set_paintable(Some(&tex));
-                    }
-            }
-            CoverSource::Embedded => {
-                if let Some((tex, _)) = self
-                    .imp()
-                    .cache
-                    .get()
-                    .unwrap()
-                    .load_cached_embedded_cover(info, true, false, false) {
-                        self.imp().thumbnail.set_paintable(Some(&tex));
-                    }
-            }
-            CoverSource::None => {
-                self.imp().thumbnail.set_paintable(Some(&*ALBUMART_THUMBNAIL_PLACEHOLDER));
-            }
-        }
     }
 
     pub fn bind(&self, song: &Song) {
         // Bind album art listener. Set once first (like sync_create)
         self.imp().song.replace(Some(song.clone()));
-        self.imp().thumbnail_source.set(CoverSource::Unknown);
-        self.update_thumbnail(song.get_info());
+        self.schedule_thumbnail(song.get_info());
     }
 
     pub fn unbind(&self) {
-        if let Some(song) = self.imp().song.take() {
-            self.imp().thumbnail_source.set(CoverSource::None);
-            self.update_thumbnail(song.get_info());
+        if let Some(_) = self.imp().song.take() {
+            self.clear_thumbnail();
         }
     }
 }

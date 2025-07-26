@@ -324,7 +324,7 @@ mod imp {
 glib::wrapper! {
     pub struct ArtistContentView(ObjectSubclass<imp::ArtistContentView>)
         @extends gtk::Widget,
-        @implements gio::ActionGroup, gio::ActionMap;
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
 impl Default for ArtistContentView {
@@ -587,7 +587,7 @@ impl ArtistContentView {
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem");
                 // TODO: refactor album cells to use expressions too
-                let album_cell = AlbumCell::new(&item, cache);
+                let album_cell = AlbumCell::new(&item, cache, None);
                 item.set_child(Some(&album_cell));
             }
         ));

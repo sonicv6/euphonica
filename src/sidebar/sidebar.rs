@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use adw::subclass::prelude::*;
 use glib::{clone, Properties};
 use gtk::{glib, prelude::*, CompositeTemplate};
@@ -7,14 +8,14 @@ use crate::{application::EuphonicaApplication, common::INode, utils, window::Eup
 use super::SidebarButton;
 
 mod imp {
-    use std::cell::Cell;
-
     use super::*;
 
     #[derive(Debug, Properties, Default, CompositeTemplate)]
     #[properties(wrapper_type = super::Sidebar)]
     #[template(resource = "/io/github/htkhiem/Euphonica/gtk/sidebar.ui")]
     pub struct Sidebar {
+        #[template_child]
+        pub recent_btn: TemplateChild<SidebarButton>,
         #[template_child]
         pub albums_btn: TemplateChild<SidebarButton>,
         #[template_child]
@@ -103,17 +104,27 @@ impl Sidebar {
         let library = app.get_library();
         let client_state = app.get_client().get_client_state();
         // Set default view. TODO: remember last view
-        stack.set_visible_child_name("albums");
+        stack.set_visible_child_name("recent");
         stack
             .bind_property("visible-child-name", self, "showing-queue-view")
             .transform_to(|_, name: String| Some(name == "queue"))
             .sync_create()
             .build();
 
-        let albums_btn = self.imp().albums_btn.get();
-        albums_btn.set_active(true);
+        let recent_btn = self.imp().recent_btn.get();
+        recent_btn.set_active(true);
         // Hook each button to their respective views
-        albums_btn.connect_toggled(clone!(
+        recent_btn.connect_toggled(clone!(
+            #[weak]
+            stack,
+            move |btn| {
+                if btn.is_active() {
+                    stack.set_visible_child_name("recent");
+                }
+            }
+        ));
+
+        self.imp().albums_btn.connect_toggled(clone!(
             #[weak]
             stack,
             move |btn| {
@@ -176,13 +187,13 @@ impl Sidebar {
                 #[weak]
                 split_view,
                 #[weak]
-                albums_btn,
+                recent_btn,
                 #[upgrade_or]
                 SidebarButton::new("ERROR", "dot-symbolic").upcast::<gtk::Widget>(),
                 move |obj| {
                     let playlist = obj.downcast_ref::<INode>().unwrap();
                     let btn = SidebarButton::new(playlist.get_uri(), "dot-symbolic");
-                    btn.set_group(Some(&albums_btn));
+                    btn.set_group(Some(&recent_btn));
                     btn.connect_toggled(clone!(
                         #[weak]
                         stack,

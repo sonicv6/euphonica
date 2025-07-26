@@ -21,8 +21,8 @@
 use crate::{
     application::EuphonicaApplication,
     client::{ClientState, ConnectionState},
-    common::{blend_mode::*, paintables::FadePaintable, Album},
-    library::{AlbumView, ArtistContentView, ArtistView, FolderView, PlaylistView},
+    common::{blend_mode::*, paintables::FadePaintable, Album, Artist},
+    library::{AlbumView, ArtistContentView, ArtistView, FolderView, PlaylistView, RecentView},
     player::{Player, PlayerBar, QueueView},
     sidebar::Sidebar,
     utils::{self, settings_manager},
@@ -32,12 +32,21 @@ use glib::signal::SignalHandlerId;
 use gtk::{
     gdk, gio,
     glib::{self, clone, closure_local, BoxedAnyObject},
+    graphene, gsk, CssProvider
 };
 use image::{imageops::FilterType, DynamicImage};
 use libblur::{stack_blur, FastBlurChannels, ThreadingPolicy};
 use mpd::Subsystem;
 use std::{cell::RefCell, ops::Deref, path::PathBuf, thread, time::Duration};
 use auto_palette::{ImageData, Palette, Theme, color::RGB};
+use std::{
+    cell::{Cell, OnceCell},
+    sync::{Arc, Mutex},
+};
+
+use async_channel::Sender;
+use glib::Properties;
+use image::ImageReader as Reader;
 
 #[derive(Debug)]
 pub struct BlurConfig {
@@ -102,17 +111,6 @@ pub enum WindowMessage {
 // will not result in a rapidly-changing background - it will only change as quickly as it
 // can fade or the CPU can blur, whichever is slower.
 mod imp {
-    use std::{
-        cell::{Cell, OnceCell},
-        sync::{Arc, Mutex},
-    };
-
-    use async_channel::Sender;
-    use glib::Properties;
-    use gtk::{gdk, graphene, gsk, CssProvider};
-    use image::io::Reader;
-    use utils::settings_manager;
-
     use super::*;
 
     #[derive(Debug, Default, Properties, gtk::CompositeTemplate)]
@@ -127,6 +125,8 @@ mod imp {
         #[template_child]
         pub toast_overlay: TemplateChild<adw::ToastOverlay>,
         // Main views
+        #[template_child]
+        pub recent_view: TemplateChild<RecentView>,
         #[template_child]
         pub album_view: TemplateChild<AlbumView>,
         #[template_child]
@@ -179,8 +179,6 @@ mod imp {
         pub visualizer_top_opacity: Cell<f64>,
         #[property(get, set)]
         pub visualizer_bottom_opacity: Cell<f64>,
-        #[property(get, set)]
-        pub visualizer_gradient_height: Cell<f64>,
         #[property(get, set)]
         pub visualizer_scale: Cell<f64>,
         #[property(get, set)]
@@ -275,14 +273,6 @@ mod imp {
                 .build();
 
             settings
-                .bind(
-                    "visualizer-gradient-height",
-                    obj,
-                    "visualizer-gradient-height",
-                )
-                .build();
-
-            settings
                 .bind("visualizer-scale", obj, "visualizer-scale")
                 .build();
 
@@ -330,6 +320,7 @@ mod imp {
 
             let view = self.split_view.get();
             [
+                self.recent_view.upcast_ref::<gtk::Widget>(),
                 self.album_view.upcast_ref::<gtk::Widget>(),
                 self.artist_view.upcast_ref::<gtk::Widget>(),
                 self.folder_view.upcast_ref::<gtk::Widget>(),
@@ -641,6 +632,9 @@ mod imp {
             path_builder.move_to(0.0, height);
             path_builder.line_to(0.0, (height - data[0] * scale).max(0.0));
 
+            // y-axis is top-down so min-y is the highest point :)
+            let mut y_min = height;
+
             if self.visualizer_use_splines.get() {
                 // Spline mode. Since we can make 2 assumptions:
                 // - No two points share the same x-coordinate (duh), and
@@ -651,6 +645,7 @@ mod imp {
                 for i in 0..(data.len() - 1) {
                     let x = (i as f32 + 1.0) * band_width;
                     let y = (height - data[i] * scale * 1000000.0).max(0.0);
+                    y_min = y_min.min(y);
                     let x_next = x + band_width;
                     let y_next = (height - data[i + 1] * scale * 1000000.0).max(0.0);
                     // Midpoint
@@ -679,6 +674,8 @@ mod imp {
             } else {
                 // Straight segments mode
                 for (band_idx, level) in data[1..data.len()].iter().enumerate() {
+                    let y = (height - level * scale * 1000000.0).max(0.0);
+                    y_min = y_min.min(y);
                     path_builder.line_to(
                         (band_idx as f32 + 1.0) * band_width,
                         (height - level * scale * 1000000.0).max(0.0),
@@ -699,7 +696,7 @@ mod imp {
                 ),
             );
             let top_stop = gsk::ColorStop::new(
-                self.visualizer_gradient_height.get() as f32,
+                1.0,
                 gdk::RGBA::new(
                     color.red(),
                     color.green(),
@@ -708,9 +705,9 @@ mod imp {
                 ),
             );
             snapshot.append_linear_gradient(
-                &graphene::Rect::new(0.0, 0.0, width, height),
+                &graphene::Rect::new(0.0, y_min, width, height),
                 &graphene::Point::new(0.0, height),
-                &graphene::Point::new(0.0, 0.0),
+                &graphene::Point::new(0.0, y_min),
                 &[bottom_stop, top_stop],
             );
             // Fill node
@@ -794,7 +791,9 @@ glib::wrapper! {
     pub struct EuphonicaWindow(ObjectSubclass<imp::EuphonicaWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
     adw::ApplicationWindow,
-    @implements gio::ActionGroup, gio::ActionMap;
+    @implements gio::ActionGroup, gio::ActionMap, gtk::Accessible,
+    gtk::Buildable, gtk::ConstraintTarget, gtk::Native, gtk::Root,
+    gtk::ShortcutManager;
 }
 
 impl EuphonicaWindow {
@@ -857,10 +856,17 @@ impl EuphonicaWindow {
         win.imp()
             .queue_view
             .setup(app.get_player(), app.get_cache(), win.clone());
+        win.imp().recent_view.setup(
+            app.get_library(),
+            app.get_player(),
+            app.get_cache(),
+            &win
+        );
         win.imp().album_view.setup(
             app.get_library(),
             app.get_cache(),
             app.get_client().get_client_state(),
+            &win
         );
         win.imp().artist_view.setup(
             app.get_library(),
@@ -918,6 +924,10 @@ impl EuphonicaWindow {
 
     pub fn get_split_view(&self) -> adw::OverlaySplitView {
         self.imp().split_view.get()
+    }
+
+    pub fn get_recent_view(&self) -> RecentView {
+        self.imp().recent_view.get()
     }
 
     pub fn get_album_view(&self) -> AlbumView {
@@ -1063,25 +1073,32 @@ impl EuphonicaWindow {
         }
     }
 
+    pub fn goto_artist(&self, artist: &Artist) {
+        self.imp().artist_view.on_artist_clicked(artist);
+        // self.imp().stack.set_visible_child_name("artists");
+        self.imp().sidebar.set_view("artists");
+        if self.imp().split_view.shows_sidebar() {
+            self.imp().split_view.set_show_sidebar(!self.imp().split_view.is_collapsed());
+        }
+    }
+
     /// Set blurred background to a new image, if enabled. Use thumbnail version to
     /// minimise disk read time.
     fn queue_new_background(&self) {
         if let Some(player) = self.imp().player.get() {
             if let Some(sender) = self.imp().sender_to_bg.get() {
-                if let Some(path) = player.current_song_cover_path(true) {
-                    if path.exists() {
-                        let settings = settings_manager().child("ui");
-                        let config = BlurConfig {
-                            width: self.width() as u32,
-                            height: self.height() as u32,
-                            radius: settings.uint("bg-blur-radius"),
-                            fade: true, // new image, must fade
-                        };
-                        let _ = sender.send_blocking(WindowMessage::NewBackground(path, config));
-                    } else {
-                        let _ = sender.send_blocking(WindowMessage::ClearBackground);
-                        self.imp().push_tex(None, true);
-                    }
+                if let Some(path) = player
+                    .current_song_cover_path(true)
+                    .map_or(None, |path| if path.exists() {Some(path)} else {None})
+                {
+                    let settings = settings_manager().child("ui");
+                    let config = BlurConfig {
+                        width: self.width() as u32,
+                        height: self.height() as u32,
+                        radius: settings.uint("bg-blur-radius"),
+                        fade: true, // new image, must fade
+                    };
+                    let _ = sender.send_blocking(WindowMessage::NewBackground(path, config));
                 } else {
                     let _ = sender.send_blocking(WindowMessage::ClearBackground);
                     self.imp().push_tex(None, true);

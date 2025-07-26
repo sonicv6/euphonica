@@ -44,16 +44,14 @@ mod imp {
 
     impl ObjectImpl for Preferences {}
     impl WidgetImpl for Preferences {}
-    impl WindowImpl for Preferences {}
-    impl DialogImpl for Preferences {}
     impl AdwDialogImpl for Preferences {}
     impl PreferencesDialogImpl for Preferences {}
 }
 
 glib::wrapper! {
     pub struct Preferences(ObjectSubclass<imp::Preferences>)
-        @extends adw::PreferencesDialog,
-        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, adw::Dialog, gtk::Widget;
+        @extends adw::PreferencesDialog, adw::Dialog, gtk::Widget,
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::ShortcutManager;
 }
 
 impl Default for Preferences {
@@ -67,7 +65,7 @@ impl Preferences {
         let res = Self::default();
 
         res.imp().client_tab.get().setup(client, player);
-        res.imp().library_tab.get().setup(cache.clone());
+        res.imp().library_tab.get().setup();
         res.imp().ui_tab.get().setup(); 
         res.imp().integrations_tab.get().setup(cache);
         

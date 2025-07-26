@@ -1,7 +1,6 @@
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{
-    gio,
     glib,
     CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection,
 };
@@ -19,7 +18,7 @@ use crate::{
 
 mod imp {
 
-    use std::sync::OnceLock;
+    use std::{cell::OnceCell, sync::OnceLock};
 
     use glib::{subclass::Signal, Properties};
 
@@ -64,7 +63,9 @@ mod imp {
         // if they now match.
         pub last_search_len: Cell<usize>,
         #[property(get, set)]
-        pub collapsed: Cell<bool>
+        pub collapsed: Cell<bool>,
+
+        pub library: OnceCell<Library>
     }
 
     impl Default for ArtistView {
@@ -94,7 +95,9 @@ mod imp {
                 // If search term is now shorter, only check non-matching items to see
                 // if they now match.
                 last_search_len: Cell::new(0),
-                collapsed: Cell::new(false)
+                collapsed: Cell::new(false),
+
+                library: OnceCell::new()
             }
         }
     }
@@ -160,7 +163,7 @@ mod imp {
 glib::wrapper! {
     pub struct ArtistView(ObjectSubclass<imp::ArtistView>)
         @extends gtk::Widget,
-        @implements gio::ActionGroup, gio::ActionMap;
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
 impl Default for ArtistView {
@@ -176,12 +179,13 @@ impl ArtistView {
     }
 
     pub fn setup(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+        self.imp().library.set(library.clone()).expect("Unable to register library with Artist View");
         self.setup_sort();
         self.setup_search();
-        self.setup_gridview(library.clone(), client_state.clone(), cache.clone());
+        self.setup_gridview(client_state.clone(), cache.clone());
 
         let content_view = self.imp().content_view.get();
-        content_view.setup(library.clone(), cache, client_state);
+        content_view.setup(library, cache, client_state);
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
         });
@@ -324,7 +328,7 @@ impl ArtistView {
         ));
     }
 
-    fn on_artist_clicked(&self, artist: Artist, library: Library) {
+    pub fn on_artist_clicked(&self, artist: &Artist) {
         // - Upon receiving click signal, get the list item at the indicated activate index.
         // - Extract artist from that list item.
         // - Bind ArtistContentView to that album. This will cause the ArtistContentView to start listening
@@ -344,16 +348,17 @@ impl ArtistView {
         // once when adding this album to the ListStore for the GridView.
         //
         let content_view = self.imp().content_view.get();
+        content_view.unbind();
         content_view.bind(artist.clone());
         self.imp().nav_view.push_by_tag("content");
-        library.init_artist(artist);
+        self.imp().library.get().unwrap().init_artist(artist);
     }
 
-    fn setup_gridview(&self, library: Library, client_state: ClientState, cache: Rc<Cache>) {
+    fn setup_gridview(&self, client_state: ClientState, cache: Rc<Cache>) {
         // Refresh upon reconnection.
         // User-initiated refreshes will also trigger a reconnection, which will
         // in turn trigger this.
-        let artists = library.artists();
+        let artists = self.imp().library.get().unwrap().artists();
         
         // Setup search bar
         let search_bar = self.imp().search_bar.get();
@@ -439,8 +444,6 @@ impl ArtistView {
         self.imp().grid_view.connect_activate(clone!(
             #[weak(rename_to = this)]
             self,
-            #[weak]
-            library,
             move |grid_view, position| {
                 let model = grid_view.model().expect("The model has to exist.");
                 let artist = model
@@ -448,7 +451,7 @@ impl ArtistView {
                     .and_downcast::<Artist>()
                     .expect("The item has to be a `common::Artist`.");
                 println!("Clicked on {:?}", &artist);
-                this.on_artist_clicked(artist, library);
+                this.on_artist_clicked(&artist);
             }
         ));
     }

@@ -2,7 +2,7 @@ extern crate mpd;
 use crate::{
     application::EuphonicaApplication,
     cache::{get_image_cache_path, sqlite, Cache, CacheState},
-    client::{ClientState, ConnectionState, MpdWrapper},
+    client::{BackgroundTask, ClientState, ConnectionState, MpdWrapper},
     common::{CoverSource, QualityGrade, Song, SongInfo},
     config::APPLICATION_ID,
     meta_providers::models::Lyrics,
@@ -231,6 +231,7 @@ mod imp {
         // This enum is merely to help decide whether we should fire a notify signal
         // to the bar & pane.
         pub cover_source: Cell<CoverSource>,
+        pub saved_to_history: Cell<bool>
     }
 
     #[glib::object_subclass]
@@ -286,7 +287,8 @@ mod imp {
                 use_visualizer: Cell::new(false),
                 fft_backend_idx: Cell::new(0),
                 outputs: gio::ListStore::new::<BoxedAnyObject>(),
-                cover_source: Cell::default()
+                cover_source: Cell::default(),
+                saved_to_history: Cell::new(false)
             }
         }
     }
@@ -492,6 +494,8 @@ mod imp {
                     // emit this).
                     Signal::builder("volume-changed")
                         .param_types([i8::static_type()])
+                        .build(),
+                    Signal::builder("history-changed")
                         .build()
                 ]
             })
@@ -808,15 +812,23 @@ impl Player {
             song,
             true,
             true,
-            true
         ) {
-            self.imp().cover_source.set(
-                if is_embedded {CoverSource::Embedded} else {CoverSource::Folder}
-            );
+            if is_embedded {
+                self.imp().cover_source.set(CoverSource::Embedded);
+            }
+            else if self.imp().cover_source.get() != CoverSource::Embedded {
+                self.imp().cover_source.set(CoverSource::Folder);
+            }
         } else {
             // Unknown for now. Wait till cache responds via signal.
             self.imp().cover_source.set(CoverSource::Unknown);
         }
+    }
+
+    pub fn get_recent_songs(&self) {
+        let settings = settings_manager().child("library");
+        self.client()
+            .queue_background(BackgroundTask::FetchRecentSongs(settings.uint("n-recent-songs")), true);
     }
 
     /// Main update function. MPD's protocol has a single "status" commands
@@ -959,9 +971,9 @@ impl Player {
                 .expect("Queue has to contain common::Song objects");
             // Set playing status
             new_song.set_is_playing(true); // this whole thing would only run if playback state is not Stopped
-                                           // Always replace current song to ensure we're pointing at something on the queue.
-                                           // This is because a partial queue update may replace the current song with another instance of the
-                                           // same song (for example, when deleting a song before it from the queue).
+            // Always replace current song to ensure we're pointing at something on the queue.
+            // This is because a partial queue update may replace the current song with another instance of the
+            // same song (for example, when deleting a song before it from the queue).
             let maybe_old_song = self.imp().current_song.replace(Some(new_song.clone()));
             if let Some(old_song) = maybe_old_song {
                 if old_song.get_queue_id() != new_song.get_queue_id() {
@@ -970,9 +982,27 @@ impl Player {
                 else {
                     // Same old song
                     needs_refresh = false;
+                    // Record into playback history
+                    if !settings_manager().child("library").boolean("pause-recent") {
+                        let dur = new_song.get_duration() as f32;
+                        if dur >= 10.0 {
+                            if let Some(new_position_dur) = status.elapsed {
+                                if !self.imp().saved_to_history.get() && new_position_dur.as_secs_f32() / dur >= 0.5 {
+                                    if let Ok(()) = sqlite::add_to_history(new_song.get_info()) {
+                                        self.get_recent_songs();
+                                        self.emit_by_name::<()>("history-changed", &[]);
+                                    }
+                                    self.imp().saved_to_history.set(true);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             if needs_refresh {
+                // Queue cover fetch task before notifying widgets
+                self.update_cover(new_song.get_info());
+                self.imp().saved_to_history.set(false);
                 self.notify("title");
                 self.notify("artist");
                 self.notify("duration");
@@ -980,8 +1010,6 @@ impl Player {
                 self.notify("format-desc");
                 self.notify("album");
                 self.notify("album-art");
-                // Queue cover fetch task
-                self.update_cover(new_song.get_info());
                 // Get new lyrics
                 // First remove all current lines
                 self.imp().lyric_lines.splice(0, self.imp().lyric_lines.n_items(), &[]);
@@ -1005,6 +1033,7 @@ impl Player {
             // No song is playing. Update state accordingly.
             let was_playing = self.imp().current_song.borrow().as_ref().is_some(); // end borrow
             if was_playing {
+                self.imp().saved_to_history.set(false);
                 let _ = self.imp().current_song.take();
                 self.notify("title");
                 self.notify("artist");
@@ -1217,7 +1246,7 @@ impl Player {
         if let Some(cache) = self.imp().cache.get() {
             if let Some(song) = self.imp().current_song.borrow().as_ref() {
                 // Do not schedule again (already done once in update_status)
-                return cache.load_cached_embedded_cover(song.get_info(), thumbnail, false, true).map(|pair| pair.0);
+                return cache.load_cached_embedded_cover(song.get_info(), thumbnail, false).map(|pair| pair.0);
             }
             return None;
         }
@@ -1227,7 +1256,10 @@ impl Player {
     pub fn current_song_cover_path(&self, thumbnail: bool) -> Option<PathBuf> {
         if let Some(song) = self.imp().current_song.borrow().as_ref() {
             let mut path = get_image_cache_path();
-            if let Some(filename) = sqlite::find_cover_by_uri(&song.get_uri(), thumbnail).unwrap() {
+            if let Some(filename) = sqlite::find_cover_by_uri(&song.get_uri(), thumbnail)
+                .expect("Sqlite DB error")
+                .map_or(None, |name| if name.len() > 0 {Some(name)} else {None})
+            {
                 // Will fall back to folder level cover if there is no embedded art
                 path.push(filename);
                 Some(path)
@@ -1383,6 +1415,12 @@ impl Player {
         if let Some(pos) = self.pos_of_id(id) {
             self.client().register_local_queue_changes(1);
             self.imp().queue.remove(pos);
+            if let Some(current_song) = self.imp().current_song.borrow().as_ref() {
+                let curr_pos = current_song.get_queue_pos();
+                if curr_pos > pos {
+                    current_song.set_queue_pos(curr_pos - 1);
+                }
+            }
             self.client().delete_at(id, true);
         }
     }
@@ -1391,20 +1429,47 @@ impl Player {
         // Find position of given queue_id
         if let Some(pos) = self.pos_of_id(id) {
             self.client().register_local_queue_changes(1);
+            let current_song = self.imp().current_song.borrow();
             match direction {
                 SwapDirection::Up => {
                     if pos > 0 {
-                        let target = self.imp().queue.item(pos).unwrap();
-                        let upper = self.imp().queue.item(pos - 1).unwrap();
-                        self.imp().queue.splice(pos - 1, 2, &[target, upper]);
+                        let target = self.imp().queue.item(pos).unwrap().downcast::<Song>().unwrap();
+                        let upper = self.imp().queue.item(pos - 1).unwrap().downcast::<Song>().unwrap();
+                        // As of right now we only need to keep the current song's queue pos updated for the Queue Next function.
+                        // Other songs' queue positions are not used.
+                        if let Some(current_song) = current_song.as_ref() {
+                            if current_song.get_queue_id() == target.get_queue_id() {
+                                current_song.set_queue_pos(current_song.get_queue_pos() - 1);
+                            }
+                            else if current_song.get_queue_id() == upper.get_queue_id() {
+                                current_song.set_queue_pos(current_song.get_queue_pos() + 1);
+                            }
+                        }
+                        self.imp().queue.splice(pos - 1, 2, &[
+                            target.upcast::<glib::Object>(),
+                            upper.upcast::<glib::Object>()
+                        ]);
                         self.client().swap(pos, pos - 1, false);
                     }
                 }
                 SwapDirection::Down => {
                     if pos < self.imp().queue.n_items() - 1 {
-                        let target = self.imp().queue.item(pos).unwrap();
-                        let lower = self.imp().queue.item(pos + 1).unwrap();
-                        self.imp().queue.splice(pos, 2, &[lower, target]);
+                        let target = self.imp().queue.item(pos).unwrap().downcast::<Song>().unwrap();
+                        let lower = self.imp().queue.item(pos + 1).unwrap().downcast::<Song>().unwrap();
+                        // As of right now we only need to keep the current song's queue pos updated for the Queue Next function.
+                        // Other songs' queue positions are not used.
+                        if let Some(current_song) = current_song.as_ref() {
+                            if current_song.get_queue_id() == target.get_queue_id() {
+                                current_song.set_queue_pos(current_song.get_queue_pos() + 1);
+                            }
+                            else if current_song.get_queue_id() == lower.get_queue_id() {
+                                current_song.set_queue_pos(current_song.get_queue_pos() - 1);
+                            }
+                        }
+                        self.imp().queue.splice(pos, 2, &[
+                            lower.upcast::<glib::Object>(),
+                            target.upcast::<glib::Object>()
+                        ]);
                         self.client().swap(pos, pos + 1, false);
                     }
                 }

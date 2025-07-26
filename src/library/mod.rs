@@ -1,5 +1,9 @@
+mod recent_view;
+mod recent_song_row;
+
 mod album_cell;
 mod album_content_view;
+mod artist_tag;
 mod album_song_row;
 mod album_view;
 
@@ -20,6 +24,8 @@ mod generic_row;
 
 // The Library controller itself
 mod controller;
+
+pub use recent_view::RecentView;
 
 use album_cell::AlbumCell;
 pub use album_content_view::AlbumContentView;

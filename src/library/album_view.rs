@@ -1,7 +1,6 @@
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{
-    gio,
     glib::{self},
     CompositeTemplate, ListItem, SignalListItemFactory, SingleSelection,
 };
@@ -14,7 +13,7 @@ use crate::{
     cache::Cache,
     client::ClientState,
     common::Album,
-    utils::{g_cmp_options, g_cmp_str_options, g_search_substr, settings_manager},
+    utils::{g_cmp_options, g_cmp_str_options, g_search_substr, settings_manager}, window::EuphonicaWindow,
 };
 
 mod imp {
@@ -174,7 +173,7 @@ mod imp {
 glib::wrapper! {
     pub struct AlbumView(ObjectSubclass<imp::AlbumView>)
         @extends gtk::Widget,
-        @implements gio::ActionGroup, gio::ActionMap;
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
 impl Default for AlbumView {
@@ -190,7 +189,7 @@ impl AlbumView {
         res
     }
 
-    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState) {
+    pub fn setup(&self, library: Library, cache: Rc<Cache>, client_state: ClientState, window: &EuphonicaWindow) {
         self.setup_sort();
         self.setup_search();
         self.imp()
@@ -200,7 +199,7 @@ impl AlbumView {
         self.setup_gridview(cache.clone());
 
         let content_view = self.imp().content_view.get();
-        content_view.setup(library.clone(), client_state, cache);
+        content_view.setup(library.clone(), client_state, cache, window);
         self.imp().content_page.connect_hidden(move |_| {
             content_view.unbind();
         });
@@ -507,6 +506,7 @@ impl AlbumView {
         // NOTE: We do not ensure local album art again in the above steps, since we have already done so
         // once when adding this album to the ListStore for the GridView.
         let content_view = self.imp().content_view.get();
+        content_view.unbind();
         content_view.bind(album.clone());
         self.imp()
             .library
@@ -553,7 +553,7 @@ impl AlbumView {
                 let item = list_item
                     .downcast_ref::<ListItem>()
                     .expect("Needs to be ListItem");
-                let album_cell = AlbumCell::new(&item, cache);
+                let album_cell = AlbumCell::new(&item, cache, None);
                 item.set_child(Some(&album_cell));
             }
         ));
