@@ -53,7 +53,13 @@ pub fn try_open_pipe(
     // Bits per sample * 2 (stereo) * n_samples * 4 (safety factor)
     let buf_bytes = ((format.bits as usize * 8 * n_samples) as f64 / 8.0).ceil() as usize;
 
-    let pipe = BufReader::with_capacity(buf_bytes, open_named_pipe_readonly(path)?);
+    // Assume ashpd always return filesystem spec
+    let path = urlencoding::decode(if path.starts_with("file://") {
+        &path[7..]
+    } else {
+        path
+    }).expect("Path must be in UTF-8").into_owned();
+    let pipe = BufReader::with_capacity(buf_bytes, open_named_pipe_readonly(&path)?);
     Ok(pipe)
 }
 

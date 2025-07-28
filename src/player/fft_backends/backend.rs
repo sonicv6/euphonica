@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 pub enum FftStatus {
     #[default]
     Invalid,
+    Stopping,
     ValidNotReading, // due to visualiser not being run
     Reading,
 }

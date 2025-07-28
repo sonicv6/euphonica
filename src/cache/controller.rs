@@ -597,7 +597,7 @@ impl Cache {
             &path[7..]
         } else {
             path
-        }).expect("UTF-8").into_owned();
+        }).expect("Path must be in UTF-8").into_owned();
         gio::spawn_blocking(move || {
             let maybe_ptr = ImageReader::open(&filepath);
             if let Ok(ptr) = maybe_ptr {

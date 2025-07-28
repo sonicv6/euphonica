@@ -71,7 +71,8 @@ impl FftStatus {
         // TODO: translatable
         match self {
             Self::Invalid => "Invalid",
-            Self::ValidNotReading => "Valid (not reading)",
+            Self::ValidNotReading => "Sleeping",
+            Self::Stopping => "Stopping",
             Self::Reading => "Reading",
         }
     }
@@ -558,7 +559,16 @@ impl Player {
         if self.imp().use_visualizer.get() {
             let output = self.imp().fft_data.clone();
             if let Ok(()) = self.imp().fft_backend.borrow().start(output) {
-                self.notify("fft-status");
+                // Dirty hack: wait 1 second for status to stabilise
+                // This is because I'm too lazy to use proper signals
+                glib::spawn_future_local(clone!(
+                    #[strong(rename_to = this)]
+                    self,
+                    async move {
+                        glib::timeout_future_seconds(1).await;
+                        this.notify("fft-status");
+                    }
+                ));
             }
         }
     }
