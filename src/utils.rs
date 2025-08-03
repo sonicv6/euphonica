@@ -184,16 +184,24 @@ pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {
 pub fn resize_convert_image(dyn_img: DynamicImage) -> (RgbImage, RgbImage) {
     let settings = settings_manager().child("library");
     // Avoid resizing to larger than the original image.
+    let w = dyn_img.width();
+    let h = dyn_img.height();
     let hires_size = settings
         .uint("hires-image-size")
-        .min(dyn_img.width().max(dyn_img.height()));
-    let thumbnail_size = settings.uint("thumbnail-image-size");
+        .min(w.max(h));
+    let thumbnail_short_edge = settings.uint("thumbnail-image-size");
+    // For thumbnails, scale such that the short edge is equal to thumbnail_size.
+    let thumbnail_sizes = if w > h {
+        ((w as f32 * (thumbnail_short_edge as f32 / h as f32)).ceil() as u32, thumbnail_short_edge)
+    } else {
+        (thumbnail_short_edge, (h as f32 * (thumbnail_short_edge as f32 / w as f32)).ceil() as u32)
+    };
     (
         dyn_img
             .resize(hires_size, hires_size, FilterType::Triangle)
             .into_rgb8(),
         dyn_img
-            .thumbnail(thumbnail_size, thumbnail_size)
+            .thumbnail(thumbnail_sizes.0, thumbnail_sizes.1)
             .into_rgb8(),
     )
 }
