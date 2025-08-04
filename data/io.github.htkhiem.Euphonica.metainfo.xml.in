@@ -77,7 +77,7 @@
       <description>
         <p>Fix: Hangups and performance issues on larger libraries.</p>
         <p>Fix: Crash trying to queue inaccessible song files (will show a toast instead).</p>
-        <p>Fix: Artists and albums with the same names using each other's images. <b>NOTE:</b> existing artist avatars will have to be re-downloaded or set again after this update.</p>
+        <p>Fix: Artists and albums with the same names using each other's images. NOTE: existing artist avatars will have to be re-downloaded or set again after this update.</p>
       </description>
     </release>
     <release version="0.96.0-beta" date="2025-07-26">
