@@ -85,6 +85,14 @@
 			<default>'44100:16:2'</default>
 			<summary>Audio format of FIFO output for use by the visualiser (specified in the same form as in your mpd.conf).</summary>
 		</key>
+
+		<key name="pipewire-last-device" type="s">
+			<default>''</default>
+		</key>
+
+		<key name="pipewire-restart-between-songs" type="b">
+			<default>true</default>
+		</key>
 	</schema>
 
 	<schema id="io.github.htkhiem.Euphonica.library" path="/io/github/htkhiem/Euphonica/library/">

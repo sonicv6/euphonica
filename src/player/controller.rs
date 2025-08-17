@@ -6,7 +6,6 @@ use crate::{
     common::{CoverSource, QualityGrade, Song},
     config::APPLICATION_ID,
     meta_providers::models::Lyrics,
-    player::fft_backends::fifo::FifoFftBackend,
     utils::{prettify_audio_format, settings_manager, strip_filename_linux}
 };
 use async_lock::OnceCell as AsyncOnceCell;
@@ -32,7 +31,9 @@ use std::{
     rc::Rc, sync::{Arc, Mutex, OnceLock}, vec::Vec
 };
 
-use super::fft_backends::{backend::{FftBackend, FftStatus}, PipeWireFftBackend};
+use super::fft_backends::{
+    backend::{FftBackendExt, FftStatus}, FifoFftBackend, PipeWireFftBackend
+};
 
 #[derive(Clone, Copy, Debug, glib::Enum, PartialEq, Default)]
 #[enum_type(name = "EuphonicaPlaybackState")]
@@ -164,21 +165,12 @@ fn get_replaygain_icon_name(mode: ReplayGain) -> &'static str {
     }
 }
 
-fn get_fft_backend() -> Rc<dyn FftBackend> {
-    let client_settings = settings_manager().child("client");
-    match client_settings.enum_("mpd-visualizer-pcm-source") {
-        0 => Rc::new(FifoFftBackend::default()),
-        1 => Rc::new(PipeWireFftBackend::default()),
-        _ => unimplemented!(),
-    }
-
-}
-
 mod imp {
     use super::*;
     use crate::{application::EuphonicaApplication, common::CoverSource, meta_providers::models::Lyrics};
     use glib::{
-        ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecInt, ParamSpecString, ParamSpecUInt, ParamSpecUInt64
+        ParamSpec, ParamSpecBoolean, ParamSpecDouble, ParamSpecEnum, ParamSpecFloat, ParamSpecInt,
+        ParamSpecString, ParamSpecUInt, ParamSpecUInt64
     };
 
     use once_cell::sync::Lazy;
@@ -214,10 +206,12 @@ mod imp {
         pub poller_handle: RefCell<Option<glib::JoinHandle<()>>>,
         pub mpris_server: AsyncOnceCell<LocalServer<super::Player>>,
         pub mpris_enabled: Cell<bool>,
+        pub pipewire_restart_between_songs: Cell<bool>,
         pub app: OnceCell<EuphonicaApplication>,
         pub supports_playlists: Cell<bool>,
         // For receiving frequency levels from FFT thread
-        pub fft_backend: RefCell<Rc<dyn FftBackend>>,
+        pub fft_backend: RefCell<Option<Rc<dyn FftBackendExt>>>,
+        pub fft_status: Cell<FftStatus>,
         pub fft_data: Arc<Mutex<(Vec<f32>, Vec<f32>)>>, // Binned magnitudes, in stereo
         pub use_visualizer: Cell<bool>,
         pub fft_backend_idx: Cell<i32>,
@@ -237,8 +231,8 @@ mod imp {
         fn new() -> Self {
             // 0 = fifo
             // 1 = pipewire
-            let fft_backend: RefCell<Rc<dyn FftBackend>> = RefCell::new(get_fft_backend());
-            Self {
+
+            let res = Self {
                 state: Cell::new(PlaybackState::Stopped),
                 position: Cell::new(0.0),
                 lyric_lines: gtk::StringList::new(&[]),
@@ -262,8 +256,10 @@ mod imp {
                 poller_handle: RefCell::new(None),
                 mpris_server: AsyncOnceCell::new(),
                 mpris_enabled: Cell::new(false),
+                pipewire_restart_between_songs: Cell::new(false),
                 app: OnceCell::new(),
-                fft_backend,
+                fft_backend: RefCell::new(None),
+                fft_status: Cell::default(),
                 fft_data: Arc::new(Mutex::new((
                     vec![
                         0.0;
@@ -283,7 +279,8 @@ mod imp {
                 outputs: gio::ListStore::new::<BoxedAnyObject>(),
                 cover_source: Cell::default(),
                 saved_to_history: Cell::new(false)
-            }
+            };
+            res
         }
     }
 
@@ -296,7 +293,7 @@ mod imp {
     impl ObjectImpl for Player {
         fn constructed(&self) {
             self.parent_constructed();
-
+            self.fft_backend.replace(Some(self.obj().init_fft_backend()));
             let settings = settings_manager();
             settings
                 .child("client")
@@ -322,11 +319,17 @@ mod imp {
                 .get_only()
                 .build();
 
+            settings
+                .child("client")
+                .bind("pipewire-restart-between-songs", self.obj().as_ref(), "pipewire-restart-between-songs")
+                .get_only()
+                .build();
+
             self.obj().maybe_start_fft_thread();
         }
 
         fn dispose(&self) {
-            self.obj().maybe_stop_fft_thread();
+            self.obj().maybe_stop_fft_thread(true);
         }
 
         fn properties() -> &'static [ParamSpec] {
@@ -363,7 +366,8 @@ mod imp {
                         .read_only()
                         .build(),
                     ParamSpecString::builder("format-desc").read_only().build(),
-                    ParamSpecInt::builder("fft-backend-idx").build()
+                    ParamSpecInt::builder("fft-backend-idx").build(),
+                    ParamSpecBoolean::builder("pipewire-restart-between-songs").build()
                 ]
             });
             PROPERTIES.as_ref()
@@ -395,6 +399,7 @@ mod imp {
                 "fft-status" => obj.fft_status().to_value(),
                 "format-desc" => obj.format_desc().to_value(),
                 "fft-backend-idx" => self.fft_backend_idx.get().to_value(),
+                "pipewire-restart-between-songs" => self.pipewire_restart_between_songs.get().to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -453,7 +458,7 @@ mod imp {
                         } else {
                             // Visualiser turned off. FFT thread should
                             // have stopped by itself. Join & yeet handle.
-                            self.obj().maybe_stop_fft_thread();
+                            self.obj().maybe_stop_fft_thread(false);
                         }
                     }
                 }
@@ -463,10 +468,18 @@ mod imp {
 
                         if old != new {
                             println!("Switching FFT backend...");
-                            self.obj().maybe_stop_fft_thread();
-                            self.fft_backend.replace(get_fft_backend());
+                            self.obj().maybe_stop_fft_thread(true);
+                            self.fft_backend.replace(Some(self.obj().init_fft_backend()));
                             self.obj().maybe_start_fft_thread();
                             self.obj().notify("fft-backend-idx");
+                        }
+                    }
+                }
+                "pipewire-restart-between-songs" => {
+                    if let Ok(state) = value.get::<bool>() {
+                        let old = self.pipewire_restart_between_songs.replace(state);
+                        if old != state {
+                            self.obj().notify("pipewire-restart-between-songs");
                         }
                     }
                 }
@@ -490,6 +503,9 @@ mod imp {
                     // For simplicity we'll always use the hires version
                     Signal::builder("cover-changed")
                         .param_types([Option::<gdk::Texture>::static_type()])
+                        .build(),
+                    Signal::builder("fft-param-changed")
+                        .param_types([String::static_type(), String::static_type(), glib::Variant::static_type()])
                         .build()
                 ]
             })
@@ -508,6 +524,43 @@ impl Default for Player {
 }
 
 impl Player {
+    fn init_fft_backend(&self) -> Rc<dyn FftBackendExt> {
+        let client_settings = settings_manager().child("client");
+        match client_settings.enum_("mpd-visualizer-pcm-source") {
+            0 => Rc::new(FifoFftBackend::new(self.clone())),
+            1 => Rc::new(PipeWireFftBackend::new(self.clone())),
+            _ => unimplemented!(),
+        }
+    }
+
+    /// If a backend name is specified, will only get the parameter from that backend. If that
+    /// backend is not the currently-active one, returns None.
+    /// If no backend name is specified, will try to fetch the parameter from the currently-active backend.
+    /// This is useful for universal parameters shared by all backends, though there aren't any (yet).
+    pub fn get_fft_param(&self, backend_name: Option<&str>, key: &str) -> Option<glib::Variant> {
+        if let Some(backend) = self.imp().fft_backend.borrow().as_ref() {
+            if backend_name.is_some_and(|name| backend.name() == name) || backend_name.is_none() {
+                backend.get_param(key)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// If a backend name is specified, will only set the parameter for that backend. If that
+    /// backend is not the currently-active one, this is a noop.
+    /// If no backend name is specified, will try to set the parameter for the currently-active backend.
+    /// This is useful for universal parameters shared by all backends, though there aren't any (yet).
+    pub fn set_fft_param(&self, backend_name: Option<&str>, key: &str, val: glib::Variant) {
+        if let Some(backend) = self.imp().fft_backend.borrow().as_ref() {
+            if backend_name.is_some_and(|name| backend.name() == name) || backend_name.is_none() {
+                backend.set_param(key, val);
+            }
+        }
+    }
+
     /// Lazily get an MPRIS server. This will always be invoked near the start anyway
     /// by the initial call to update_status().
     async fn get_mpris(&self) -> zbus::Result<&LocalServer<Self>> {
@@ -534,7 +587,7 @@ impl Player {
             println!("Player controller: entering background mode");
             // self.block_polling();
             // self.stop_polling();
-            self.maybe_stop_fft_thread();
+            self.maybe_stop_fft_thread(true);
         }
     }
 
@@ -551,28 +604,20 @@ impl Player {
     fn maybe_start_fft_thread(&self) {
         if self.imp().use_visualizer.get() {
             let output = self.imp().fft_data.clone();
-            if let Ok(()) = self.imp().fft_backend.borrow().start(output) {
-                // Dirty hack: wait 1 second for status to stabilise
-                // This is because I'm too lazy to use proper signals
-                glib::spawn_future_local(clone!(
-                    #[strong(rename_to = this)]
-                    self,
-                    async move {
-                        glib::timeout_future_seconds(1).await;
-                        this.notify("fft-status");
-                    }
-                ));
+            if let Some(backend) = self.imp().fft_backend.borrow().as_ref() {
+                let _ = backend.clone().start(output);
             }
         }
     }
 
-    fn maybe_stop_fft_thread(&self) {
-        self.imp().fft_backend.borrow().stop();
-        self.notify("fft-status");
+    fn maybe_stop_fft_thread(&self, block: bool) {
+        if let Some(backend) = self.imp().fft_backend.borrow().as_ref() {
+            backend.stop(block);
+        }
     }
 
     pub fn restart_fft_thread(&self) {
-        self.maybe_stop_fft_thread();
+        self.maybe_stop_fft_thread(true);
         self.maybe_start_fft_thread();
     }
 
@@ -961,6 +1006,15 @@ impl Player {
             if let Some(old_song) = maybe_old_song {
                 if old_song.get_queue_id() != new_song.get_queue_id() {
                     old_song.set_is_playing(false);
+                    // If using PipeWire visualiser, might need to restart it
+                    if self.imp().pipewire_restart_between_songs.get()
+                        && self.imp().fft_backend.borrow().as_ref().is_some_and(
+                            |backend| backend.name() == "pipewire"
+                        )
+                    {
+                        println!("Starting PipeWire backend again after song change...");
+                        self.maybe_start_fft_thread();
+                    }
                 }
                 else {
                     // Same old song
@@ -1052,6 +1106,19 @@ impl Player {
             let old = self.set_position(new);
             if new != old && self.imp().mpris_enabled.get() {
                 self.seek_mpris(new);
+            }
+            // If using PipeWire visualiser and auto-restart is enabled, stop the thread
+            // just before song ends. As we poll once every second, we can't use a threshold
+            // shorter than 1s.
+            let secs_to_end = self.duration() as f64 - new;
+            if self.imp().pipewire_restart_between_songs.get()
+                && self.imp().fft_backend.borrow().as_ref().is_some_and(
+                    |backend| backend.name() == "pipewire" && backend.status() != FftStatus::ValidNotReading
+                )
+                && secs_to_end >= 0.0 && secs_to_end < 1.5
+            {
+                println!("Stopping PipeWire backend to allow samplerate change...");
+                self.maybe_stop_fft_thread(false); // FIXME: we can't block while runnin in an async loop
             }
         } else {
             self.set_position(0.0);
@@ -1278,7 +1345,14 @@ impl Player {
     }
 
     pub fn fft_status(&self) -> FftStatus {
-        self.imp().fft_backend.borrow().status()
+        self.imp().fft_status.get()
+    }
+
+    pub fn set_fft_status(&self, new: FftStatus) {
+        let old = self.imp().fft_status.replace(new);
+        if old != new {
+            self.notify("fft-status");
+        }
     }
 
     pub fn format_desc(&self) -> Option<String> {
@@ -1376,10 +1450,26 @@ impl Player {
     }
 
     pub fn prev_song(&self) {
+        if self.imp().pipewire_restart_between_songs.get()
+            && self.imp().fft_backend.borrow().as_ref().is_some_and(
+                |backend| backend.name() == "pipewire" && backend.status() != FftStatus::ValidNotReading
+            )
+        {
+            println!("Stopping PipeWire backend to allow samplerate change...");
+            self.maybe_stop_fft_thread(true);
+        }
         self.client().prev();
     }
 
     pub fn next_song(&self) {
+        if self.imp().pipewire_restart_between_songs.get()
+            && self.imp().fft_backend.borrow().as_ref().is_some_and(
+                |backend| backend.name() == "pipewire" && backend.status() != FftStatus::ValidNotReading
+            )
+        {
+            println!("Stopping PipeWire backend to allow samplerate change...");
+            self.maybe_stop_fft_thread(true);
+        }
         self.client().next();
     }
 
@@ -1395,6 +1485,14 @@ impl Player {
     }
 
     pub fn on_song_clicked(&self, song: Song) {
+        if self.imp().pipewire_restart_between_songs.get()
+            && self.imp().fft_backend.borrow().as_ref().is_some_and(
+                |backend| backend.name() == "pipewire" && backend.status() != FftStatus::ValidNotReading
+            )
+        {
+            println!("Stopping PipeWire backend to allow samplerate change...");
+            self.maybe_stop_fft_thread(true);
+        }
         self.client().play_at(song.get_queue_id(), true);
     }
 
