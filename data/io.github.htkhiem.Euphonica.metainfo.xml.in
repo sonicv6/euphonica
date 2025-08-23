@@ -72,6 +72,16 @@
   </screenshots>
 
   <releases>
+    <release version="0.96.3-beta" date="2025-08-23">
+      <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.96.3-beta</url>
+      <description>
+        <p>New: Lyrics import, export and clear features.</p>
+        <p>New: PipeWire visualiser backend can now select specific devices to capture audio from.</p>
+        <p>Fix: Seekbar occasionally not updating itself.</p>
+        <p>Fix: album arts not falling back to embedded art automatically in Album View.</p>
+        <p>Refactor: PipeWire visualiser backend's autoconnection should now be smarter.</p>
+      </description>
+    </release>
     <release version="0.96.2-beta" date="2025-08-03">
       <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.96.2-beta</url>
       <description>
