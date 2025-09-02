@@ -31,14 +31,6 @@ pub struct HistoryStep {
 }
 
 impl HistoryStep {
-    fn update_queue_pos(&self, list: &gio::ListStore, from: u32, to: u32) {
-        for i in from..=to {
-            list.item(i)
-                .and_downcast_ref::<Song>()
-                .unwrap()
-                .set_queue_pos(i);
-        }
-    }
     fn shift(&self, list: &gio::ListStore, old: u32, backward: bool) {
         // Use splice to only emit one update signal, reducing visual jitter
         let src = if backward { old - 1 } else { old };
@@ -46,7 +38,6 @@ impl HistoryStep {
         let src_song = list.item(src).unwrap();
         let des_song = list.item(des).unwrap();
         list.splice(src, 2, &[des_song, src_song]);
-        self.update_queue_pos(list, src, des);
     }
 
     pub fn forward(&self, list: &gio::ListStore) {
@@ -59,10 +50,6 @@ impl HistoryStep {
             }
             InternalEditAction::Remove(idx) => {
                 list.remove(idx);
-                let len = list.n_items();
-                if len > 0 && idx <= len - 1 {
-                    self.update_queue_pos(list, idx, len - 1);
-                }
             }
         }
     }
@@ -77,10 +64,6 @@ impl HistoryStep {
             }
             InternalEditAction::Remove(idx) => {
                 list.insert(idx, self.song.as_ref().unwrap());
-                let len = list.n_items();
-                if len > 0 && idx <= len - 1 {
-                    self.update_queue_pos(list, idx, len - 1);
-                }
             }
         }
     }
@@ -717,23 +700,18 @@ impl PlaylistContentView {
         [&factory, &editing_factory].iter().for_each(move |f| {
             f.connect_bind(|_, list_item| {
                 // Get `Song` from `ListItem` (that is, the data side)
-                let item: Song = list_item
+                let item: &ListItem = list_item
                     .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
-                    .item()
-                    .and_downcast::<Song>()
-                    .expect("The item has to be a common::Song.");
+                    .expect("Needs to be ListItem");
 
                 // Get `PlaylistSongRow` from `ListItem` (the UI widget)
-                let child: PlaylistSongRow = list_item
-                    .downcast_ref::<ListItem>()
-                    .expect("Needs to be ListItem")
+                let child: PlaylistSongRow = item
                     .child()
                     .and_downcast::<PlaylistSongRow>()
                     .expect("The child has to be an `PlaylistSongRow`.");
 
                 // Within this binding fn is where the cached album art texture gets used.
-                child.bind(&item);
+                child.bind(item);
             });
 
             // When row goes out of sight, unbind from item to allow reuse with another.
@@ -850,17 +828,7 @@ impl PlaylistContentView {
     fn add_songs(&self, songs: &[Song]) {
         // To facilitate editing, each song needs to keep its own position within the playlist.
         // TODO: find a less fragile algo for this
-        let curr_len = self.imp().song_list.n_items();
         self.imp().song_list.extend_from_slice(songs);
-        for i in curr_len..self.imp().song_list.n_items() {
-            self.imp()
-                .song_list
-                .item(i)
-                .unwrap()
-                .downcast_ref::<Song>()
-                .unwrap()
-                .set_queue_pos(curr_len + i);
-        }
         self.imp()
             .track_count
             .set_label(&self.imp().song_list.n_items().to_string());
