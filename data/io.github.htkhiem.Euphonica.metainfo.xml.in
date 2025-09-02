@@ -72,6 +72,18 @@
   </screenshots>
 
   <releases>
+    <release version="0.96.4-beta" date="2025-09-02">
+      <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.96.4-beta</url>
+      <description>
+        <p>New: Clicking on a (synced) lyric line will seek to its timestamp.</p>
+        <p>Refactor: Many performance improvements to queue operations.</p>
+        <p>Refactor: MPRIS play command now starts playing again from the last-played track in the queue while in the stopped state.</p>
+        <p>Fix: Crash when newlines are included as artist tag delimiters and there are UTF-8 characters.</p>
+        <p>Fix: Crash caused by the PipeWire visualiser backend when changing tracks via MPRIS (including playerctl).</p>
+        <p>Fix: Volume knob not reflecting remote changes.</p>
+        <p>Fix: Empty album and artist tags are now properly included in the Album and Artist views.</p>
+      </description>
+    </release>
     <release version="0.96.3-beta" date="2025-08-23">
       <url type="details">https://github.com/htkhiem/euphonica/releases/tag/v0.96.3-beta</url>
       <description>
