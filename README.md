@@ -74,6 +74,14 @@ The below were captured with a mix of dark and light modes.
 
 Euphonica is still in very early development, and so far has only been tested on Arch Linux (btw).
 
+The preferred way to install Euphonica is as a Flatpak app via Flathub:
+
+<a href='https://flathub.org/apps/io.github.htkhiem.Euphonica'>
+    <img width='240' alt='Get it on Flathub' src='https://flathub.org/api/badge?locale=en'/>
+</a>
+
+Other ways to install Euphonica are listed below:
+
 <details>
   <summary><h3>Arch Linux</h3></summary>
   
