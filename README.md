@@ -117,7 +117,7 @@ Other ways to install Euphonica are listed below:
 <details>
   <summary><h3>Flatpak</h3></summary>
 
-  I'm gearing up for a Flathub release, but before that happens, Euphonica must be built from source using `flatpak-builder`.
+  Euphonic can also be built from source using `flatpak-builder`.
   
   This builds and installs Euphonica as a sandboxed Flatpak app on your system, complete with an entry in 
   Flatpak-aware app stores (like GNOME Software, KDE Discover, etc). It should also work on virtually any 
