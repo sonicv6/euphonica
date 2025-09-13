@@ -159,13 +159,6 @@ impl ArtistTag {
         res
     }
 
-    #[inline(always)]
-    pub fn setup(&self, item: &gtk::ListItem) {
-        item.property_expression("item")
-            .chain_property::<Artist>("name")
-            .bind(self, "name", gtk::Widget::NONE);
-    }
-
     fn update_artist_avatar(&self, info: &ArtistInfo) {
         self.imp().avatar.set_custom_image(
             self.imp()
@@ -173,7 +166,7 @@ impl ArtistTag {
                 .get()
                 .unwrap()
                 .clone()
-                .load_cached_artist_avatar(info, false)
+                .load_cached_artist_avatar(info, true)
                 .as_ref(),
         );
     }
