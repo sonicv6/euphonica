@@ -86,6 +86,7 @@
         <p>Fix: Repeated inits causing duplicate albums and artists after exiting background mode.</p>
         <p>Fix: Album wiki text and artist avatars not loading.</p>
         <p>Fix: Consume mode resetting on new window opens.</p>
+        <p>Fix: Sorting now prefers *sort tags before normal ones.</p>
       </description>
     </release>
     <release version="0.97.0-beta" date="2025-09-07">
