@@ -166,13 +166,12 @@ pub fn strip_filename_linux(path: &str) -> &str {
 }
 
 pub fn read_image_from_bytes(bytes: Vec<u8>) -> Option<DynamicImage> {
-    if let Ok(reader) = ImageReader::new(Cursor::new(bytes)).with_guessed_format() {
-        if let Ok(dyn_img) = reader.decode() {
-            return Some(dyn_img);
-        }
-        return None;
+    if let Some(dyn_img) = image::load_from_memory(&bytes).ok() {
+        Some(dyn_img)
+    } else {
+        println!("read_image_from_bytes: Unable to infer image format from content");
+        None
     }
-    None
 }
 
 /// Automatically resize & based on user settings, then convert to RGB8.
@@ -263,6 +262,13 @@ pub fn rebuild_artist_delim_exception_automaton() {
     }
 }
 
+
+/// There are two guard layers against full fetches.
+/// - This LazyInit trait. All heavy views must implement it. A view's populate() will then be called
+/// by the sidebar upon navigating to that view. If that view is already initialised, populate() must
+/// be a noop(). TODO: enforce noop at sidebar level instead.
+/// - Additional checks at the controller level, to prevent new windows (after surfacing from background)
+/// from mistakenly reinitialising already-fetched models.
 pub trait LazyInit {
     fn clear(&self);
     fn populate(&self);

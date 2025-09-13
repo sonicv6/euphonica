@@ -53,8 +53,6 @@ mod imp {
         pub rating_readout: TemplateChild<gtk::Label>,
 
         #[template_child]
-        pub wiki_box: TemplateChild<gtk::ScrolledWindow>,
-        #[template_child]
         pub wiki_text: TemplateChild<gtk::Label>,
         #[template_child]
         pub wiki_link: TemplateChild<gtk::LinkButton>,
@@ -111,7 +109,6 @@ mod imp {
                 infobox_spinner: TemplateChild::default(),
                 infobox_revealer: TemplateChild::default(),
                 collapse_infobox: TemplateChild::default(),
-                wiki_box: TemplateChild::default(),
                 wiki_text: TemplateChild::default(),
                 wiki_link: TemplateChild::default(),
                 wiki_attrib: TemplateChild::default(),
@@ -272,6 +269,26 @@ mod imp {
                 ))
                 .build();
 
+            let action_refetch_metadata = ActionEntry::builder("refetch-metadata")
+                .activate(clone!(
+                    #[strong]
+                    obj,
+                    move |_, _, _| {
+                        if let (Some(album), Some(library)) = (
+                            obj.imp().album.borrow().as_ref(),
+                            obj.imp().library.get()
+                        ) {
+                            let spinner = obj.imp().infobox_spinner.get();
+                            if spinner.visible_child_name().unwrap() != "spinner" {
+                                spinner.set_visible_child_name("spinner");
+                            }
+                            library.clear_cover(album.get_folder_uri());
+                            library.refetch_album_metadata(&album);
+                        }
+                    }
+                ))
+                .build();
+
             let action_insert_queue = ActionEntry::builder("insert-queue")
                 .activate(clone!(
                     #[strong]
@@ -309,6 +326,7 @@ mod imp {
             actions.add_action_entries([
                 action_clear_rating,
                 action_set_album_art,
+                action_refetch_metadata,
                 action_clear_album_art,
                 action_insert_queue,
             ]);
@@ -363,12 +381,10 @@ impl AlbumContentView {
     }
 
     fn update_meta(&self, album: &Album) {
-        let wiki_box = self.imp().wiki_box.get();
         let infobox_spinner = self.imp().infobox_spinner.get();
         // If the current album is the "untitled" one (i.e. for songs without an album tag),
         // don't attempt to update metadata.
         if album.get_title().is_empty() {
-            wiki_box.set_visible(false);
             if infobox_spinner.visible_child_name().unwrap() != "content" {
                 infobox_spinner.set_visible_child_name("content");
             }
@@ -379,7 +395,6 @@ impl AlbumContentView {
             let wiki_attrib = self.imp().wiki_attrib.get();
             if let Some(meta) = cache.load_cached_album_meta(album.get_info()) {
                 if let Some(wiki) = meta.wiki {
-                    wiki_box.set_visible(true);
                     wiki_text.set_label(&wiki.content);
                     if let Some(url) = wiki.url.as_ref() {
                         wiki_link.set_visible(true);
@@ -388,14 +403,10 @@ impl AlbumContentView {
                         wiki_link.set_visible(false);
                     }
                     wiki_attrib.set_label(&wiki.attribution);
-                } else {
-                    wiki_box.set_visible(false);
                 }
                 if infobox_spinner.visible_child_name().unwrap() != "content" {
                     infobox_spinner.set_visible_child_name("content");
                 }
-            } else {
-                wiki_box.set_visible(false);
             }
         }
     }
@@ -815,7 +826,6 @@ impl AlbumContentView {
 
         
         // Unset metadata widgets
-        self.imp().wiki_box.set_visible(false);
         self.imp().song_list.remove_all();
         let content_spinner = self.imp().content_spinner.get();
         if content_spinner.visible_child_name().unwrap() != "spinner" {

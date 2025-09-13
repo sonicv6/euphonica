@@ -35,9 +35,12 @@ mod imp {
         // 4.4. Wrapper tells Library controller to create an Album GObject with that AlbumInfo &
         // append to the list store.
         pub playlists: gio::ListStore,
+        pub playlists_initialized: Cell<bool>,
         pub albums: gio::ListStore,
+        pub albums_initialized: Cell<bool>,
         pub recent_albums: gio::ListStore,
         pub artists: gio::ListStore,
+        pub artists_initialized: Cell<bool>,
         pub recent_artists: gio::ListStore,
 
         // Folder view
@@ -45,6 +48,7 @@ mod imp {
         pub folder_history: RefCell<Vec<String>>,
         pub folder_curr_idx: Cell<u32>, // 0 means at root.
         pub folder_inodes: gio::ListStore,
+        pub folder_inodes_initialized: Cell<bool>,
 
         pub cache: OnceCell<Rc<Cache>>,
         pub player: OnceCell<Player>,
@@ -59,9 +63,12 @@ mod imp {
             Self {
                 recent_songs: gio::ListStore::new::<Song>(),
                 playlists: gio::ListStore::new::<INode>(),
+                playlists_initialized: Cell::new(false),
                 albums: gio::ListStore::new::<Album>(),
+                albums_initialized: Cell::new(false),
                 recent_albums: gio::ListStore::new::<Album>(),
                 artists: gio::ListStore::new::<Artist>(),
+                artists_initialized: Cell::new(false),
                 recent_artists: gio::ListStore::new::<Artist>(),
                 client: OnceCell::new(),
                 cache: OnceCell::new(),
@@ -70,6 +77,7 @@ mod imp {
                 folder_history: RefCell::new(Vec::new()),
                 folder_curr_idx: Cell::new(0),
                 folder_inodes: gio::ListStore::new::<INode>(),
+                folder_inodes_initialized: Cell::new(false),
             }
         }
     }
@@ -215,16 +223,20 @@ impl Library {
     pub fn clear(&self) {
         self.imp().recent_songs.remove_all();
         self.imp().albums.remove_all();
+        self.imp().albums_initialized.set(false);
         self.imp().recent_albums.remove_all();
         self.imp().artists.remove_all();
+        self.imp().artists_initialized.set(false);
         self.imp().recent_artists.remove_all();
         self.imp().playlists.remove_all();
+        self.imp().playlists_initialized.set(false);
         self.imp().folder_inodes.remove_all();
         let _ = self.imp().folder_history.replace(Vec::new());
         let _ = self.imp().folder_curr_idx.replace(0);
         self.notify("folder-path");
         self.notify("folder-his-len");
         self.notify("folder-curr-idx");
+        self.imp().folder_inodes_initialized.set(false);
     }
 
     fn client(&self) -> &Rc<MpdWrapper> {
@@ -241,15 +253,20 @@ impl Library {
 
     /// Get all the information available about an album & its contents (won't block;
     /// UI will get notified of result later if one does arrive late).
-    /// TODO: implement provider daisy-chaining on the cache side
     pub fn init_album(&self, album: &Album) {
         if let Some(cache) = self.imp().cache.get() {
-            cache.ensure_cached_album_meta(album.get_info());
+            cache.fetch_album_meta(album.get_info(), false);
         }
         self.client()
             .queue_background(BackgroundTask::FetchAlbumSongs(
                 album.get_title().to_owned(),
             ), true);
+    }
+
+    pub fn refetch_album_metadata(&self, album: &Album) {
+        if let Some(cache) = self.imp().cache.get() {
+            cache.fetch_album_meta(album.get_info(), true);
+        }
     }
 
     /// Queue specific songs
@@ -334,13 +351,18 @@ impl Library {
 
     /// Get all the information available about an artist (won't block;
     /// UI will get notified of result later via signals).
-    /// TODO: implement provider daisy-chaining on the cache side
     pub fn init_artist(&self, artist: &Artist) {
         if let Some(cache) = self.imp().cache.get() {
-            cache.ensure_cached_artist_meta(artist.get_info());
+            cache.fetch_artist_meta(artist.get_info(), false);
         }
         self.client()
             .get_artist_content(artist.get_name().to_owned());
+    }
+
+    pub fn refetch_artist_metadata(&self, artist: &Artist) {
+        if let Some(cache) = self.imp().cache.get() {
+            cache.fetch_artist_meta(artist.get_info(), true);
+        }
     }
 
     pub fn folder_inodes(&self) -> gio::ListStore {
@@ -396,6 +418,7 @@ impl Library {
             }
             history.push(name.to_owned());
         }
+        self.imp().folder_inodes_initialized.set(false);
         self.folder_forward();
     }
     
@@ -412,10 +435,13 @@ impl Library {
 
     /// Queue a playlist for playback.
     pub fn init_playlists(&self) {
-        self.imp().playlists.remove_all();
-        self.imp()
-            .playlists
-            .extend_from_slice(&self.client().get_playlists());
+        if !self.imp().playlists_initialized.get() {
+            self.imp().playlists.remove_all();
+            self.imp()
+                .playlists
+                .extend_from_slice(&self.client().get_playlists());
+            self.imp().playlists_initialized.set(true);
+        }
     }
 
     /// Get a reference to the local recent songs store
@@ -499,16 +525,21 @@ impl Library {
     }
 
     pub fn get_folder_contents(&self, uri: &str) {
-        self.client()
-            .queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()), true);
+        if !self.imp().folder_inodes_initialized.get() {
+            self.client()
+                .queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()), true);
+            self.imp().folder_inodes_initialized.set(true);
+        }
     }
 
     pub fn init_albums(&self) {
-        self.client().queue_background(BackgroundTask::FetchAlbums, false);
+        if !self.imp().albums_initialized.get() {
+            self.client().queue_background(BackgroundTask::FetchAlbums, false);
+            self.imp().albums_initialized.set(true);
+        }
     }
 
     pub fn fetch_recent_albums(&self) {
-        println!("fetch_recent_albums() called");
         // High-priority as this is lightweight (only a few will be fetched)
         // and is triggered by the user navigating to the Recent view
         self.imp().recent_albums.remove_all();
@@ -516,12 +547,14 @@ impl Library {
     }
  
     pub fn init_artists(&self, use_albumartists: bool) {
-        self.client()
-            .queue_background(BackgroundTask::FetchArtists(use_albumartists), false);
+        if !self.imp().artists_initialized.get() {
+            self.client()
+                .queue_background(BackgroundTask::FetchArtists(use_albumartists), false);
+            self.imp().artists_initialized.set(true);
+        }
     }
 
     pub fn fetch_recent_artists(&self) {
-        println!("fetch_recent_artists() called");
         // High-priority as this is lightweight (only a few will be fetched)
         // and is triggered by the user navigating to the Recent view
         self.imp().recent_artists.remove_all();
@@ -544,7 +577,8 @@ impl Library {
         self.cache().clear_artist_avatar(tag);
     }
 
-    pub fn get_recent_songs(&self) {
+    pub fn fetch_recent_songs(&self) {
+        self.imp().recent_songs.remove_all();
         let settings = settings_manager().child("library");
         self.client()
             .queue_background(BackgroundTask::FetchRecentSongs(settings.uint("n-recent-songs")), true);
