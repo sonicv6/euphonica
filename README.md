@@ -117,25 +117,26 @@ Other ways to install Euphonica are listed below:
 <details>
   <summary><h3>Flatpak</h3></summary>
 
-  Euphonic can also be built from source using `flatpak-builder`.
+  Euphonica can also be built from source using `flatpak-builder`.
   
   This builds and installs Euphonica as a sandboxed Flatpak app on your system, complete with an entry in 
   Flatpak-aware app stores (like GNOME Software, KDE Discover, etc). It should also work on virtually any 
-  distribution, and does not require root privileges.
+  distribution, and does not require root privileges. Unlike installing from Flathub, this always builds
+  the **latest** commit and as such is more suitable for development and testing purposes. Also, it might
+  **overwrite** the existing Flathub-distributed installation in case you have one.
   
   1. Add the Flathub repo in case you haven't already:
      
   ```bash
   flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
   ```
-  2. Download the latest Flatpak manifest from the [releases section](https://github.com/htkhiem/euphonica/releases) to an empty folder somewhere.
-  3. Run `flatpak-builder` as follows:
+  2. Run `flatpak-builder` as follows:
      
   ```bash
-  cd /path/to/flatpak/manifest
-  flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica.json
+  cd /path/to/where/you/cloned/euphonica
+  flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install build-flatpak io.github.htkhiem.Euphonica-dev.json
   ```
-  4. Once the above has completed, you can run Euphonica using:
+  3. Once the above has completed, you can run Euphonica using:
   
   ```bash
   flatpak run io.github.htkhiem.Euphonica
@@ -143,6 +144,7 @@ Other ways to install Euphonica are listed below:
   
   
   A desktop icon entry should also have been installed for you, although it might take a reboot to show up.
+  
 </details>
 
 <details>
