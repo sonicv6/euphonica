@@ -1,7 +1,7 @@
 ![Euphonica icon](data/icons/hicolor/scalable/apps/io.github.htkhiem.Euphonica.svg)
 # Euphonica
 
-![Flathub Downloads](https://img.shields.io/flathub/downloads/io.github.htkhiem.Euphonica?style=flat-square&logo=flathub&link=https%3A%2F%2Fflathub.org%2Fen%2Fapps%2Fio.github.htkhiem.Euphonica)
+[![Flathub Downloads](https://img.shields.io/flathub/downloads/io.github.htkhiem.Euphonica?style=flat-square&logo=flathub)](https://flathub.org/en/apps/io.github.htkhiem.Euphonica)
 
 An MPD frontend with delusions of grandeur. 
 
