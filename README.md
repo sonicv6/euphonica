@@ -1,6 +1,8 @@
 ![Euphonica icon](data/icons/hicolor/scalable/apps/io.github.htkhiem.Euphonica.svg)
 # Euphonica
 
+![Flathub Downloads](https://img.shields.io/flathub/downloads/io.github.htkhiem.Euphonica?style=flat-square&logo=flathub&link=https%3A%2F%2Fflathub.org%2Fen%2Fapps%2Fio.github.htkhiem.Euphonica)
+
 An MPD frontend with delusions of grandeur. 
 
 It exists to sate my need for something that's got the bling and the features to back that bling up.
@@ -112,6 +114,10 @@ Other ways to install Euphonica are listed below:
   ```
 </details>
 
+## Set-up
+
+Euphonica requires some preparation before it can be used, especially if you have never used an MPD client before. Please see the [wiki article](https://github.com/htkhiem/euphonica/wiki/Installation-&-basic-local-configuration) for instructions on setting up a basic local instance.
+
 ## Build
 
 <details>
@@ -182,27 +188,6 @@ Other ways to install Euphonica are listed below:
   meson install
   ```
 </details>
-
-## Setting up Euphonica with your MPD instance
-
-Euphonica works just like any other MPD client in this regard. Passwords will be saved to your default (usually login) keyring, so in case you
-have biometric login set up without also setting up TPM, you might need to manually unlock your login keyring before Euphonica can fetch its 
-password back for reconnection. 
-
-Optionally, your MPD instance should be configured with a playlist folder. If not configured, MPD will be unable to create and edit playlists.
-Euphonica's playlist management features won't be available in this case.
-
-## Using Euphonica with your music library
-
-Euphonica tries to make minimal and sensible assumptions about your library's folder structure. 
-
-- Tracks from different releases (albums) should not be put in the same folder. Preferably, all tracks of the same release should be put in the same folder.
-- In order to make your album art files available to Euphonica (and other MPD clients), name them `cover.png/jpg/webp` and put them in the same folder as the tracks themselves.
-  - From v0.95 onwards we also support embedded cover arts as fallback. The aforementioned cover image files will still take priority, so if you have an album with unique embedded art for each track _and also_ a cover file, the cover file will override all the embedded art. To show the embedded arts instead, please remove the cover image from the folder (and the cached version in Euphonica's cache folder).
-- (Optional) Use [Beets](https://beets.io/?trk=public_post-text) to tag your tracks, or follow its tag schema, for best results when fetching album arts and artist avatars.
-Euphonica is developed with Beets tagging in mind and can take advantage of its MusicBrainz ID tags for accurate metadata fetching.
-
-Most libraries, especially those that ran well with other MPD clients like [Cantata](https://github.com/CDrummond/cantata), should require no reorganisation.
 
 ## TODO
 - Support more stickers-based features:
