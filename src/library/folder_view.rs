@@ -117,7 +117,7 @@ mod imp {
                 last_search_len: Cell::new(0),
                 library: OnceCell::new(),
                 collapsed: Cell::new(false),
-                initialized: Cell::new(true)
+                initialized: Cell::new(false)
             }
         }
     }
