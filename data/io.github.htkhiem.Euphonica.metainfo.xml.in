@@ -84,6 +84,7 @@
         <p>New: in-app theme selector (follow system style, force light, force dark).</p>
         <p>Refactor: queuing is now done in the background to avoid freezing UI when adding lots of tracks.</p>
         <p>Refactor: incremental queue updates are now fully asynchronous and paged to avoid blocking UI and reduce stress on MPD server.</p>
+        <p>Fix: various folder view bugs.</p>
         <p>Fix: album wiki &amp; artist bio text still showing those of prior albums/artists when the current one does not have one.</p>
         <p>Fix: albums of the same name getting merged together.</p>
       </description>
