@@ -232,8 +232,8 @@ mod imp {
             let lib = self.library.get().unwrap();
             let curr_idx = lib.folder_curr_idx();
             let hist_len = lib.folder_history_len();
-            println!("Curr idx: {}", curr_idx);
-            println!("Hist len: {}", hist_len);
+            // println!("Curr idx: {}", curr_idx);
+            // println!("Hist len: {}", hist_len);
             if curr_idx == 0 {
                 self.back_btn.set_sensitive(false);
             } else {
@@ -283,6 +283,7 @@ impl FolderView {
             .sync_create()
             .build();
 
+        self.imp().update_nav_btn_sensitivity();
         library.connect_notify_local(
             Some("folder-curr-idx"),
             clone!(
@@ -293,7 +294,6 @@ impl FolderView {
                 }
             )
         );
-
         library.connect_notify_local(
             Some("folder-his-len"),
             clone!(
@@ -553,7 +553,6 @@ impl FolderView {
                     .item(position)
                     .and_downcast::<INode>()
                     .expect("The item has to be a `common::INode`.");
-                println!("Clicked on {:?}", &inode);
                 this.on_inode_clicked(&inode);
             }
         ));
@@ -569,9 +568,8 @@ impl LazyInit for FolderView {
         if let Some(library) = self.imp().library.get() {
             let was_populated = self.imp().initialized.replace(true);
             if !was_populated {
-                println!("Initialising inodes at root");
-                // Path is always reset to root upon new connections
-                library.get_folder_contents("");
+                println!("Initialising inodes");
+                library.get_folder_contents();
             }
         }
     }

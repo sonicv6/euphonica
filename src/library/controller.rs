@@ -423,8 +423,9 @@ impl Library {
         let curr_idx = self.imp().folder_curr_idx.get();
         if curr_idx > 0 {
             self.imp().folder_curr_idx.set(curr_idx - 1);
+            self.imp().folder_inodes_initialized.set(false);
+            self.get_folder_contents();
             self.notify("folder-curr-idx");
-            self.get_folder_contents(&self.folder_path());
             self.notify("folder-path");
         }
     }
@@ -433,8 +434,9 @@ impl Library {
         let curr_idx = self.imp().folder_curr_idx.get();
         if curr_idx < self.imp().folder_history.borrow().len() as u32 {
             self.imp().folder_curr_idx.set(curr_idx + 1);
+            self.imp().folder_inodes_initialized.set(false);
+            self.get_folder_contents();
             self.notify("folder-curr-idx");
-            self.get_folder_contents(&self.folder_path());
             self.notify("folder-path");
         }
     }
@@ -572,10 +574,10 @@ impl Library {
         self.client().edit_playlist(&edits)
     }
 
-    pub fn get_folder_contents(&self, uri: &str) {
+    pub fn get_folder_contents(&self) {
         if !self.imp().folder_inodes_initialized.get() {
             self.client()
-                .queue_background(BackgroundTask::FetchFolderContents(uri.to_owned()), true);
+                .queue_background(BackgroundTask::FetchFolderContents(self.folder_path()), true);
             self.imp().folder_inodes_initialized.set(true);
         }
     }
