@@ -403,6 +403,8 @@ impl AlbumContentView {
                         wiki_link.set_visible(false);
                     }
                     wiki_attrib.set_label(&wiki.attribution);
+                } else {
+                    wiki_text.set_label("");
                 }
                 if infobox_spinner.visible_child_name().unwrap() != "content" {
                     infobox_spinner.set_visible_child_name("content");
@@ -559,6 +561,11 @@ impl AlbumContentView {
             .build();
 
         let replace_queue_btn = self.imp().replace_queue.get();
+        client_state
+            .bind_property("is-queuing", &replace_queue_btn, "sensitive")
+            .invert_boolean()
+            .sync_create()
+            .build();
         replace_queue_btn.connect_clicked(clone!(
             #[strong(rename_to = this)]
             self,
@@ -585,6 +592,11 @@ impl AlbumContentView {
             }
         ));
         let append_queue_btn = self.imp().queue_split_button.get();
+        client_state
+            .bind_property("is-queuing", &append_queue_btn, "sensitive")
+            .invert_boolean()
+            .sync_create()
+            .build();
         append_queue_btn.connect_clicked(clone!(
             #[strong(rename_to = this)]
             self,

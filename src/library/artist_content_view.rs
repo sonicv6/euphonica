@@ -380,6 +380,8 @@ impl ArtistContentView {
                         bio_link.set_visible(false);
                     }
                     bio_attrib.set_label(&bio.attribution);
+                } else {
+                    bio_text.set_label("");
                 }
                 if stack.visible_child_name().unwrap() != "content" {
                     stack.set_visible_child_name("content");
@@ -465,6 +467,11 @@ impl ArtistContentView {
     fn setup_song_subview(&self, client_state: ClientState) {
         // Hook up buttons
         let replace_queue_btn = self.imp().replace_queue.get();
+        client_state
+            .bind_property("is-queuing", &replace_queue_btn, "sensitive")
+            .invert_boolean()
+            .sync_create()
+            .build();
         replace_queue_btn.connect_clicked(clone!(
             #[strong(rename_to = this)]
             self,
@@ -489,6 +496,11 @@ impl ArtistContentView {
             }
         ));
         let append_queue_btn = self.imp().append_queue.get();
+        client_state
+            .bind_property("is-queuing", &append_queue_btn, "sensitive")
+            .invert_boolean()
+            .sync_create()
+            .build();
         append_queue_btn.connect_clicked(clone!(
             #[strong(rename_to = this)]
             self,
