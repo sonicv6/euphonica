@@ -335,7 +335,7 @@ impl Library {
             BackgroundTask::QueueQuery(
                 query,
                 if replace && play {
-                    play_from
+                    play_from.or(Some(0))
                 } else {
                     None
                 }
