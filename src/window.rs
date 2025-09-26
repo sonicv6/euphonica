@@ -849,6 +849,42 @@ impl EuphonicaWindow {
         let client_state = app.get_client().get_client_state();
         let player = app.get_player();
 
+        // Construct all views first
+        win.restore_window_state();
+        win.imp()
+            .queue_view
+            .setup(app.get_player(), app.get_cache(), win.clone());
+        win.imp().recent_view.setup(
+            app.get_library(),
+            app.get_player(),
+            app.get_cache(),
+            &win
+        );
+        win.imp().album_view.setup(
+            app.get_library(),
+            app.get_cache(),
+            app.get_client().get_client_state(),
+            &win
+        );
+        win.imp().artist_view.setup(
+            app.get_library(),
+            app.get_client().get_client_state(),
+            app.get_cache(),
+        );
+        win.imp().folder_view.setup(
+            app.get_library(),
+            app.get_cache()
+        );
+        win.imp().playlist_view.setup(
+            app.get_library(),
+            app.get_cache(),
+            app.get_client().get_client_state(),
+            win.clone(),
+        );
+        win.imp().sidebar.setup(&win, &app);
+        win.imp().player_bar.setup(&app.get_player());
+
+        // Now that all the components are ready, we can start handling backend state changes
         win.imp()
             .fft_data
             .set(player.fft_data())
@@ -916,40 +952,6 @@ impl EuphonicaWindow {
                 }
             )
         );
-
-        win.restore_window_state();
-        win.imp()
-            .queue_view
-            .setup(app.get_player(), app.get_cache(), win.clone());
-        win.imp().recent_view.setup(
-            app.get_library(),
-            app.get_player(),
-            app.get_cache(),
-            &win
-        );
-        win.imp().album_view.setup(
-            app.get_library(),
-            app.get_cache(),
-            app.get_client().get_client_state(),
-            &win
-        );
-        win.imp().artist_view.setup(
-            app.get_library(),
-            app.get_client().get_client_state(),
-            app.get_cache(),
-        );
-        win.imp().folder_view.setup(
-            app.get_library(),
-            app.get_cache()
-        );
-        win.imp().playlist_view.setup(
-            app.get_library(),
-            app.get_cache(),
-            app.get_client().get_client_state(),
-            win.clone(),
-        );
-        win.imp().sidebar.setup(&win, &app);
-        win.imp().player_bar.setup(&app.get_player());
 
         win.imp().player_bar.connect_closure(
             "goto-pane-clicked",
