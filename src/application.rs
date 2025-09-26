@@ -325,7 +325,8 @@ impl EuphonicaApplication {
         }
     }
 
-     fn refresh(&self) {
+    fn refresh(&self) {
+        self.get_library().clear();
         self.get_client().queue_connect();
     }
 

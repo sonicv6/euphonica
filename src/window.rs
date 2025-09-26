@@ -1112,12 +1112,9 @@ impl EuphonicaWindow {
                 );
             }
             ConnectionState::Connecting => {
-                let app = self.downcast_application();
                 let imp = self.imp();
-                let library = app.get_library();
                 imp.title.set_subtitle("Connecting");
                 imp.should_populate_visible.set(false);
-                library.clear();
                 // Player clears itself
                 imp.recent_view.clear();
                 imp.album_view.clear();
